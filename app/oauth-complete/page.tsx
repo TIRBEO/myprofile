@@ -32,6 +32,12 @@ import { RandomAvatar } from "@/components/random-avatar";
 import { haptic } from "@/lib/haptics";
 
 function apiBase(): string {
+  // On a tirbeo domain, hit api.<parent> so a production sign-up never calls a
+  // localhost address; env + local default cover development and other hosts.
+  if (typeof window !== "undefined") {
+    const parent = window.location.hostname.match(/(?:^|\.)(tirbeo\.(?:com|app))$/i);
+    if (parent) return `${window.location.protocol}//api.${parent[1].toLowerCase()}`;
+  }
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 }
 

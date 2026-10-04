@@ -69,16 +69,30 @@ const probe: ProbeStore = (() => {
 export const INACTIVITY_MS = 60 * 60 * 1000; // 1 hour
 const CHECK_MS = 15_000;
 
-/** Where a signed-out reader goes. The accounts app owns login; its
-    address is the one deployment fact this client needs, so it arrives
-    as an env var and falls back to the local route in development. */
+/** Where a signed-out reader goes. The accounts app owns login.
+ *
+ * On a tirbeo.com / tirbeo.app host the accounts origin is derived from the
+ * current host (accounts.<parent>), so a production visit always lands on the
+ * matching domain and never on a localhost address that might have been baked
+ * into NEXT_PUBLIC_ACCOUNTS_URL. Off those domains it falls back to the env
+ * var, then to the same-origin /login used in development. */
 export function loginUrl(): string {
+  if (typeof window !== "undefined") {
+    const parent = window.location.hostname.match(/(?:^|\.)(tirbeo\.(?:com|app))$/i);
+    if (parent) return `${window.location.protocol}//accounts.${parent[1].toLowerCase()}/login`;
+  }
   const base = process.env.NEXT_PUBLIC_ACCOUNTS_URL;
   return base ? `${base.replace(/\/+$/, "")}/login` : "/login";
 }
 
-/** The accounts API origin — the app that owns the session cookies. */
+/** The accounts API origin — the app that owns the session cookies. Derived
+    from the current host on a tirbeo domain (api.<parent>) for the same
+    reason as loginUrl; env and the NODE_ENV default cover everything else. */
 function apiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    const parent = window.location.hostname.match(/(?:^|\.)(tirbeo\.(?:com|app))$/i);
+    if (parent) return `${window.location.protocol}//api.${parent[1].toLowerCase()}`;
+  }
   const fromEnv = process.env.NEXT_PUBLIC_API_URL;
   if (fromEnv) return fromEnv.replace(/\/+$/, "");
   return process.env.NODE_ENV === "development"
