@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 
 import { cn, Sheet, SheetActions } from "@/components/ig-ui";
 import { ActionRow, Group, Helper, PageSkeleton, PillButton, PillStack, SectionTitle, SettingsPage, StaticRow, TILE } from "@/components/settings-shell";
@@ -25,8 +24,7 @@ import { useToast } from "@/lib/use-toast";
    before it does anything.
    ═══════════════════════════════════════════════════════════════════ */
 
-export default function ConnectedAppDetailPage() {
-  const params = useParams<{ id: string }>();
+export default function ConnectedAppDetailPage({ id }: { id: string }) {
   const toast = useToast();
   const [app, setApp] = useState<ConnectedApp | null | undefined>(undefined);
   const [failed, setFailed] = useState(false);
@@ -39,13 +37,13 @@ export default function ConnectedAppDetailPage() {
     let live = true;
     setApp(undefined);
     setFailed(false);
-    findConnected(params.id)
+    findConnected(id)
       .then((next) => live && setApp(next))
       .catch(() => live && setFailed(true));
     return () => {
       live = false;
     };
-  }, [params.id, nonce]);
+  }, [id, nonce]);
 
   if (failed) {
     return (

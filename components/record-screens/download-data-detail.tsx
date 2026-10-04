@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import {
   Group,
   Helper,
@@ -18,7 +17,7 @@ import { ago, formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { usePageRefresh } from "@/lib/page-refresh";
-import { FormatSheet } from "../format-sheet";
+import { FormatSheet } from "@/app/settings/download-data/format-sheet";
 import {
   formatName,
   isStalePending,
@@ -31,7 +30,7 @@ import {
   type ExportFormat,
   type ExportRequestRow,
   type SavedArchive,
-} from "../export-format";
+} from "@/app/settings/download-data/export-format";
 
 /* ═══════════════════════════════════════════════════════════════════
    One request, in full
@@ -47,8 +46,7 @@ import {
    make the list look tidy, and it is not hidden; the button writes it now.
    ═══════════════════════════════════════════════════════════════════ */
 
-export default function DownloadDataDetailPage() {
-  const params = useParams<{ id: string }>();
+export default function DownloadDataDetailPage({ id }: { id: string }) {
   const toast = useToast();
   /* undefined: still reading. null: the account wouldn't answer. */
   const [summary, setSummary] = useState<DownloadPage | null | undefined>(undefined);
@@ -108,7 +106,7 @@ export default function DownloadDataDetailPage() {
     );
   }
 
-  const record: ExportRequestRow | undefined = summary.recent.find((row) => row.id === params.id);
+  const record: ExportRequestRow | undefined = summary.recent.find((row) => row.id === id);
 
   if (!record) {
     return (

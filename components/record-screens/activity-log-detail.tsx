@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import { Sheet } from "@/components/ig-ui";
 import { changeIcon } from "@/components/activity-icons";
 import { MapCard } from "@/components/map-card";
@@ -35,8 +34,7 @@ import { LoadFailed } from "@/components/page-loading";
    else here.
    ═══════════════════════════════════════════════════════════════════ */
 
-export default function ChangeDetailPage() {
-  const params = useParams<{ id: string }>();
+export default function ChangeDetailPage({ id }: { id: string }) {
   const [entry, setEntry] = useState<ChangeEntry | null | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -48,17 +46,17 @@ export default function ChangeDetailPage() {
   useEffect(() => {
     let live = true;
     setFailed(false);
-    findChange(params.id)
+    findChange(id)
       .then((found) => live && setEntry(found))
       .catch(() => live && setFailed(true));
     return () => {
       live = false;
     };
-  }, [params.id]);
+  }, [id]);
 
   const load = () => {
     setFailed(false);
-    findChange(params.id).then(setEntry).catch(() => setFailed(true));
+    findChange(id).then(setEntry).catch(() => setFailed(true));
   };
 
   usePageRefresh(load);

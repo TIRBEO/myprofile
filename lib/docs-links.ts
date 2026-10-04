@@ -104,7 +104,7 @@ const GUIDES: Record<string, GuideLink[]> = {
   ],
 };
 
-const TOP_LEVEL = new Set(["login", "settings", "chatbot", "api"]);
+const TOP_LEVEL = new Set(["login", "settings", "api"]);
 
 export function guidesFor(pathname: string | null): GuideLink[] {
   if (!pathname) return [];

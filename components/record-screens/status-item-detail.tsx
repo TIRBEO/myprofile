@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import { Field, Sheet, SheetActions, Textarea, cn } from "@/components/ig-ui";
 import { Group, Helper, PageSkeleton, PillButton, PillStack, SectionTitle, SettingsPage, StaticRow } from "@/components/settings-shell";
 import { LoadFailed } from "@/components/page-loading";
@@ -48,8 +47,7 @@ const TONE_TILE = {
   muted: "bg-surface-2 text-muted",
 };
 
-export default function AccountStatusDetailPage() {
-  const params = useParams<{ section: string; item: string }>();
+export default function AccountStatusDetailPage({ section, item }: { section: string; item: string }) {
   const toast = useToast();
   const [found, setFound] = useState<ReturnType<typeof findItem> | null | undefined>(undefined);
   const [appealRow, setAppealRow] = useState<Appeal | null>(null);
@@ -62,7 +60,7 @@ export default function AccountStatusDetailPage() {
     setLoadError(null);
     Promise.all([loadAccountChecks(), loadAppeals().catch(() => [] as Appeal[])])
       .then(() => {
-        const hit = findItem(params.section, params.item);
+        const hit = findItem(section, item);
         setFound(hit);
         setAppealRow(hit ? appealFor(hit.item.id) : null);
       })
@@ -73,7 +71,7 @@ export default function AccountStatusDetailPage() {
             : "This decision couldn't be read.",
         );
       });
-  }, [params.section, params.item]);
+  }, [section, item]);
 
   useEffect(() => {
     refresh();
@@ -98,13 +96,13 @@ export default function AccountStatusDetailPage() {
     );
   }
 
-  const { section, item } = found;
-  const status = decisionStatus(item, appealRow);
+  const { section: record, item: decision } = found;
+  const status = decisionStatus(decision, appealRow);
 
   async function send(note: string) {
     setFiling(true);
     try {
-      const filed = await appeal(item.id, note);
+      const filed = await appeal(decision.id, note);
       setAppealRow(filed);
       setSheetOpen(false);
       haptic("success");
@@ -123,7 +121,7 @@ export default function AccountStatusDetailPage() {
   }
 
   return (
-    <SettingsPage title={section.title}>
+    <SettingsPage title={record.title}>
       {/* ── The decision, left-aligned ── */}
       <section className="mt-6 flex items-start gap-3.5">
         <span
@@ -142,9 +140,9 @@ export default function AccountStatusDetailPage() {
           )}
         </span>
         <div className="min-w-0">
-          <h2 className="text-[17px] leading-snug font-bold tracking-tight">{item.title}</h2>
+          <h2 className="text-[17px] leading-snug font-bold tracking-tight">{decision.title}</h2>
           <p className="mt-1 text-[13px] leading-snug text-muted">
-            {formatDate(item.at)} · {ago(item.at)}
+            {formatDate(decision.at)} · {ago(decision.at)}
           </p>
           <p className={cn("mt-0.5 text-[13px] leading-snug font-medium", STATUS_TONE[status.tone])}>
             {status.word}
@@ -153,16 +151,16 @@ export default function AccountStatusDetailPage() {
       </section>
 
       {/* ── What happened, in one readable column ── */}
-      <p className="mt-7 max-w-[58ch] text-[15px] leading-[1.7] text-fg/90">{item.sub}</p>
-      {item.appealable && !appealRow ? (
-        <p className="mt-4 max-w-[58ch] text-[14px] leading-relaxed text-muted">{item.ask}</p>
+      <p className="mt-7 max-w-[58ch] text-[15px] leading-[1.7] text-fg/90">{decision.sub}</p>
+      {decision.appealable && !appealRow ? (
+        <p className="mt-4 max-w-[58ch] text-[14px] leading-relaxed text-muted">{decision.ask}</p>
       ) : null}
 
       {/* ── Every fact about it ── */}
       <SectionTitle>The record</SectionTitle>
       <Group>
-        <StaticRow title="Rule applied" sub={item.guideline} />
-        <StaticRow title="Decision made" right={formatDate(item.at)} />
+        <StaticRow title="Rule applied" sub={decision.guideline} />
+        <StaticRow title="Decision made" right={formatDate(decision.at)} />
         <StaticRow
           title="Review status"
           right={<span className={STATUS_TONE[status.tone]}>{status.word}</span>}
@@ -203,7 +201,7 @@ export default function AccountStatusDetailPage() {
             <Step
               n={2}
               title="They look at the rule again"
-              sub={item.guideline}
+              sub={decision.guideline}
             />
             <Step
               n={3}
@@ -215,7 +213,7 @@ export default function AccountStatusDetailPage() {
           <PillStack>
             <PillButton
               label="Back to account status"
-              href={`/settings/account-status/${section.id}`}
+              href={`/settings/account-status/${record.id}`}
               tone="primary"
             />
             <PillButton label="Back to documentation" href="/settings/help" tone="outline" />
@@ -227,7 +225,7 @@ export default function AccountStatusDetailPage() {
             quote the decision — a person can read both together.
           </Helper>
         </>
-      ) : item.appealable ? (
+      ) : decision.appealable ? (
         <>
           <PillStack>
             <PillButton label="Request a review" tone="primary" onClick={() => setSheetOpen(true)} />
@@ -244,7 +242,7 @@ export default function AccountStatusDetailPage() {
       )}
 
       {sheetOpen ? (
-        <ReviewSheet ask={item.ask} busy={filing} onClose={() => setSheetOpen(false)} onFiled={send} />
+        <ReviewSheet ask={decision.ask} busy={filing} onClose={() => setSheetOpen(false)} onFiled={send} />
       ) : null}
     </SettingsPage>
   );

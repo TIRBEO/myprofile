@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Sheet, SheetActions } from "@/components/ig-ui";
 import { DeviceGlyph } from "@/components/device-tile";
 import { MapCard } from "@/components/map-card";
@@ -43,8 +43,7 @@ import { ExternalLink } from "lucide-react";
    the session has a place. Ending a session still asks in a sheet.
    ═══════════════════════════════════════════════════════════════════ */
 
-export default function DeviceDetailPage() {
-  const params = useParams<{ id: string }>();
+export default function DeviceDetailPage({ id }: { id: string }) {
   const router = useRouter();
   const toast = useToast();
   const [device, setDevice] = useState<Device | null | undefined>(undefined);
@@ -56,7 +55,7 @@ export default function DeviceDetailPage() {
 
   const load = () => {
     setFailed(false);
-    findDevice(params.id).then(setDevice).catch(() => setFailed(true));
+    findDevice(id).then(setDevice).catch(() => setFailed(true));
   };
 
   usePageRefresh(load);
@@ -64,7 +63,7 @@ export default function DeviceDetailPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.id]);
+  }, [id]);
 
   if (failed)
     return (

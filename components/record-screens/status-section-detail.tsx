@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import {
   Group,
   Helper,
@@ -39,14 +38,13 @@ import { formatDate } from "@/lib/dates";
 
 type State = { section: StatusSection | null; appeals: Appeal[] };
 
-export default function StatusSectionPage() {
-  const params = useParams<{ section: string }>();
+export default function StatusSectionPage({ section }: { section: string }) {
   const [state, setState] = useState<State | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const look = useCallback(() => {
-    setState({ section: findSection(params.section), appeals: readAppeals() });
-  }, [params.section]);
+    setState({ section: findSection(section), appeals: readAppeals() });
+  }, [section]);
 
   const refresh = useCallback(() => {
     setState(null);
@@ -84,13 +82,13 @@ export default function StatusSectionPage() {
     );
   }
 
-  const section = state.section;
-  const clean = section.severity === "ok";
+  const detail = state.section;
+  const clean = detail.severity === "ok";
 
   return (
-    <SettingsPage title={section.title}>
+    <SettingsPage title={detail.title}>
       <p className="mt-1 mb-2 max-w-[58ch] text-[14px] leading-relaxed text-muted">
-        {section.summary}
+        {detail.summary}
       </p>
 
       {clean ? (
@@ -101,10 +99,10 @@ export default function StatusSectionPage() {
         <>
           <SectionTitle>Decisions</SectionTitle>
           <Group>
-            {section.items.map((item) => (
+            {detail.items.map((item) => (
               <LinkRow
                 key={item.id}
-                href={`/settings/account-status/${section.id}/${item.id}`}
+                href={`/settings/account-status/${detail.id}/${item.id}`}
                 title={item.title}
                 sub={`${formatDate(item.at)} · ${item.guideline}`}
                 right={

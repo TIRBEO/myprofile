@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Sheet, SheetActions } from "@/components/ig-ui";
 import { trayGlyph } from "@/components/tray-icons";
 import { StatementHead, StatementMark } from "@/components/statement";
@@ -33,16 +33,15 @@ import { haptic } from "@/lib/haptics";
    finishes. The countdown is the only thing here that changes on its own.
    ═══════════════════════════════════════════════════════════════════ */
 
-export default function DeletedItemPage() {
-  const params = useParams<{ id: string }>();
+export default function DeletedItemPage({ id }: { id: string }) {
   const router = useRouter();
   const toast = useToast();
   const [item, setItem] = useState<DeletedItem | null | undefined>(undefined);
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
-    setItem(findDeleted(params.id));
-  }, [params.id]);
+    setItem(findDeleted(id));
+  }, [id]);
 
   if (item === undefined) return <PageSkeleton title="Recently deleted" sections={2} />;
 

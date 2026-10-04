@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import { Sheet } from "@/components/ig-ui";
 import { EVENT_ICONS } from "@/components/event-icons";
 import { MapCard } from "@/components/map-card";
@@ -50,8 +49,7 @@ import { LoadFailed } from "@/components/page-loading";
    it's you. All behaviour is unchanged from the long-form version.
    ═══════════════════════════════════════════════════════════════════ */
 
-export default function LoginEventDetailPage() {
-  const params = useParams<{ id: string }>();
+export default function LoginEventDetailPage({ id }: { id: string }) {
   const [event, setEvent] = useState<ActivityEvent | null | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const [confirmNotMe, setConfirmNotMe] = useState(false);
@@ -62,7 +60,7 @@ export default function LoginEventDetailPage() {
 
   const load = () => {
     setFailed(false);
-    findEvent(params.id).then(setEvent).catch(() => setFailed(true));
+    findEvent(id).then(setEvent).catch(() => setFailed(true));
   };
 
   usePageRefresh(load);
@@ -70,7 +68,7 @@ export default function LoginEventDetailPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.id]);
+  }, [id]);
 
   if (failed)
     return (
