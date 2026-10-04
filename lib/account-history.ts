@@ -117,7 +117,12 @@ export function requestFor(id: string): AccountRequest | null {
 
 export function countRequests(): { total: number; open: number } {
   const list = read();
-  return { total: list.length, open: list.filter((row) => row.closedAt === null).length };
+  // "Open" here means a pause or a close still in force — the same thing the
+  // history page counts. Appeals are listed on their own, so they must not
+  // inflate this badge; otherwise an open appeal reads as "1 open" on a page
+  // that correctly says nothing of yours is open.
+  const open = list.filter((row) => row.closedAt === null && row.kind !== "appeal").length;
+  return { total: list.length, open };
 }
 
 /** The log, newest first, re-read whenever a request is filed or closed —

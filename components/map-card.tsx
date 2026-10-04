@@ -15,11 +15,11 @@ import "mapbox-gl/dist/mapbox-gl.css";
    and a record whose place nobody knows never renders this at all.
    ═══════════════════════════════════════════════════════════════════ */
 
-/* A public (pk.) token is safe to ship to the browser; set NEXT_PUBLIC_MAPBOX_TOKEN
-   to override it without a code change. */
-const MAPBOX_TOKEN =
-  process.env.NEXT_PUBLIC_MAPBOX_TOKEN ||
-  "pk.eyJ1IjoiYmlzaG51ZXA0bmUiLCJhIjoiY211ZWZxejB3MDRiZjMwcXlyOHBsaTlnMyJ9.aD7mPt56FH-9KDSUC6TxQQ";
+/* Read from the environment only — no token is baked into the source. A
+   public (pk.) token is browser-safe, but it still belongs in config, not code.
+   Unset means Mapbox is simply not configured, so the map drops to the keyless
+   OpenStreetMap embed below instead of shipping a credential in the bundle. */
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
 const STYLE = "mapbox://styles/mapbox/dark-v11";
 
@@ -34,6 +34,11 @@ export function MapCard({ coords, label }: { coords: [number, number]; label: st
 
   useEffect(() => {
     if (fallback || !host.current) return;
+    // No token configured: don't load Mapbox at all, render the keyless map.
+    if (!MAPBOX_TOKEN) {
+      setFallback(true);
+      return;
+    }
     let map: import("mapbox-gl").Map | undefined;
     let marker: import("mapbox-gl").Marker | undefined;
     let cancelled = false;
