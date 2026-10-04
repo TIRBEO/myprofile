@@ -59,7 +59,12 @@ export function loadConfig(): ApiConfig {
     );
   }
   return {
-    mainApiBaseUrl: (process.env.API_INTERNAL_BASE_URL || "http://localhost:3000").replace(/\/+$/, ""),
+    mainApiBaseUrl: (
+      process.env.API_INTERNAL_BASE_URL ||
+      (process.env.NODE_ENV === "development"
+        ? "http://localhost:3000"
+        : "https://api.tirbeo.com")
+    ).replace(/\/+$/, ""),
     internalToken,
     readCacheTtlMs: int("PROFILE_CACHE_TTL_MS", 15_000),
     timeoutMs: int("PROFILE_TIMEOUT_MS", 10_000),

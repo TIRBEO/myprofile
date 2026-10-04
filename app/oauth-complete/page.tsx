@@ -23,12 +23,13 @@
    make the tick mean nothing.
    ═══════════════════════════════════════════════════════════════════ */
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Check } from "lucide-react";
-import { Button, Field, Input, PasswordField, Sheet, cn } from "@/components/ig-ui";
+import { Camera, Check, Loader2, X } from "lucide-react";
+import { Button, Field, IconButton, Input, PasswordField, Sheet, cn } from "@/components/ig-ui";
 import { Group, Helper, SectionTitle, ToggleRow } from "@/components/settings-shell";
-import { RandomAvatar } from "@/components/random-avatar";
+import { ProfilePicture } from "@/components/profile-picture";
+import { AvatarEditor } from "@/components/avatar-editor";
 import { haptic } from "@/lib/haptics";
 
 function apiBase(): string {
@@ -38,8 +39,15 @@ function apiBase(): string {
     const parent = window.location.hostname.match(/(?:^|\.)(tirbeo\.(?:com|app))$/i);
     if (parent) return `${window.location.protocol}//api.${parent[1].toLowerCase()}`;
   }
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  return process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.NODE_ENV === "development"
+      ? "http://localhost:3000"
+      : "https://api.tirbeo.com");
 }
+
+/** The picked file has to survive the same round trip the account does — a
+    5 MB cap keeps a phone's full-resolution export from bloating the row. */
+const PHOTO_LIMIT = 5 * 1024 * 1024;
 
 type Pending = {
   email: string;
@@ -159,7 +167,7 @@ function PanelSkeleton() {
   return (
     <div className="space-y-4" aria-busy="true">
       <div className="flex flex-col items-center gap-3">
-        <span className="size-16 animate-pulse rounded-full bg-surface-2" />
+        <span className="size-24 animate-pulse rounded-full bg-surface-2" />
         <span className="block h-[18px] w-[60%] animate-pulse rounded-full bg-surface-2" />
         <span className="block h-[13px] w-[80%] animate-pulse rounded-full bg-surface-2/70" />
       </div>
@@ -167,6 +175,36 @@ function PanelSkeleton() {
       <span className="block h-[64px] animate-pulse rounded-2xl bg-surface-2/70" />
       <span className="block h-[76px] animate-pulse rounded-2xl bg-surface-2/50" />
     </div>
+  );
+}
+
+/** The line under the username box — the same words the account would answer
+    with on submit, shown while there is still time to change the name. */
+function UsernameStatus({
+  state,
+  message,
+}: {
+  state: "idle" | "checking" | "available" | "taken" | "reserved" | "invalid";
+  message: string;
+}) {
+  if (state === "idle" || !message) return null;
+  const tone =
+    state === "available"
+      ? "text-success-text"
+      : state === "checking"
+        ? "text-muted"
+        : "text-danger-text";
+  return (
+    <p className={cn("flex items-center gap-1.5 px-4 pb-3 text-[12.5px] font-medium sm:px-5", tone)}>
+      {state === "checking" ? (
+        <Loader2 className="size-[13px] animate-spin" />
+      ) : state === "available" ? (
+        <Check className="size-[14px]" strokeWidth={2.6} />
+      ) : (
+        <X className="size-[14px]" strokeWidth={2.6} />
+      )}
+      {message}
+    </p>
   );
 }
 
@@ -182,12 +220,22 @@ function Complete() {
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [editorSrc, setEditorSrc] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [staffAccess, setStaffAccess] = useState(false);
   const [legal, setLegal] = useState<LegalKind | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [photoBroken, setPhotoBroken] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
+
+  /* The handle is checked against the live account table the moment the typing
+     stops, so a taken name is caught here rather than after the person has
+     filled the whole form and pressed the one button. */
+  const [usernameState, setUsernameState] = useState<
+    "idle" | "checking" | "available" | "taken" | "reserved" | "invalid"
+  >("idle");
+  const [usernameMsg, setUsernameMsg] = useState("");
 
   /* The token is signed and short-lived; this only asks the account service to
      read it back, so the provider's own words (which address, which name) are
@@ -205,6 +253,7 @@ function Complete() {
         else {
           setPending(d as Pending);
           setName(d.name || "");
+          setPhoto(d.photoUrl || null);
         }
       })
       .catch(() => !dead && setLoadError("Tirbeo couldn’t be reached. Check your connection and try again."));
@@ -213,10 +262,86 @@ function Complete() {
     };
   }, [signupToken]);
 
+  /* Debounced availability probe. A name shorter than 3 characters or one that
+     fails the shape rule is answered locally — the endpoint is only worth a
+     round trip for something that could actually be taken. */
+  useEffect(() => {
+    if (!signupToken) return;
+    const handle = username.trim().toLowerCase();
+    if (!handle) {
+      setUsernameState("idle");
+      setUsernameMsg("");
+      return;
+    }
+    if (handle.length < 3 || handle.length > 30 || !/^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/.test(handle)) {
+      setUsernameState("invalid");
+      setUsernameMsg("3–30 characters: letters, numbers, - or _.");
+      return;
+    }
+    setUsernameState("checking");
+    setUsernameMsg("Checking…");
+    let dead = false;
+    const timer = setTimeout(() => {
+      fetch(`${apiBase()}/api/auth/username-exists`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: handle }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (dead) return;
+          if (d?.reserved) {
+            setUsernameState("reserved");
+            setUsernameMsg("That name is reserved.");
+          } else if (d?.taken || d?.exists) {
+            setUsernameState("taken");
+            setUsernameMsg("That username is already taken.");
+          } else if (d?.available) {
+            setUsernameState("available");
+            setUsernameMsg(`${handle} is available.`);
+          } else {
+            setUsernameState("invalid");
+            setUsernameMsg("3–30 characters: letters, numbers, - or _.");
+          }
+        })
+        .catch(() => {
+          if (!dead) {
+            setUsernameState("idle");
+            setUsernameMsg("");
+          }
+        });
+    }, 500);
+    return () => {
+      dead = true;
+      clearTimeout(timer);
+    };
+  }, [signupToken, username]);
+
   const finishTarget = redirectTo || "/";
   const providerName = pending?.provider
     ? pending.provider.charAt(0).toUpperCase() + pending.provider.slice(1)
     : "your provider";
+
+  function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      haptic("error");
+      setError("That file isn’t a photo.");
+      return;
+    }
+    if (file.size > PHOTO_LIMIT) {
+      haptic("error");
+      setError("That image is larger than 5 MB — pick a smaller one.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setEditorSrc(String(reader.result));
+    reader.onerror = () => setError("Your browser couldn’t open that photo.");
+    reader.readAsDataURL(file);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -237,6 +362,7 @@ function Complete() {
                 username,
                 name: name || undefined,
                 password: password || undefined,
+                photoUrl: photo || undefined,
                 policyAccepted: accepted,
                 adminDataAccess: staffAccess,
               }
@@ -275,6 +401,25 @@ function Complete() {
         </div>
       </div>
       {legal ? <LegalSheet kind={legal} onClose={() => setLegal(null)} /> : null}
+      {editorSrc ? (
+        <AvatarEditor
+          src={editorSrc}
+          onCancel={() => setEditorSrc(null)}
+          onApply={(dataUrl) => {
+            setPhoto(dataUrl);
+            setEditorSrc(null);
+            haptic("success");
+          }}
+        />
+      ) : null}
+      <input
+        ref={photoRef}
+        type="file"
+        accept="image/*"
+        aria-label="Choose a profile photo"
+        className="sr-only"
+        onChange={pickPhoto}
+      />
     </main>
   );
 
@@ -312,105 +457,127 @@ function Complete() {
 
   return shell(
     <>
-      {pending?.photoUrl && !photoBroken ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={pending.photoUrl}
-          alt=""
-          referrerPolicy="no-referrer"
-          className="mx-auto size-16 rounded-full border border-border object-cover"
-          onError={() => setPhotoBroken(true)}
+      {/* The face, editable — the provider's thumbnail is a starting point, not
+          a verdict. The camera badge opens the file picker; the crop happens in
+          the sheet the editor draws. */}
+      <div className="relative mx-auto w-fit">
+        <ProfilePicture
+          photo={photo}
+          seed={pending?.email || name || "tirbeo"}
+          name={name || undefined}
+          size={104}
+          ring
         />
-      ) : (
-        <span className="mx-auto grid size-16 place-items-center overflow-hidden rounded-full border border-border bg-surface-3">
-          <RandomAvatar seed={pending?.email || "tirbeo"} className="size-full" />
-        </span>
-      )}
-      <h1 className="mt-3 text-center text-[20px] font-bold tracking-[-0.02em]">
+        <IconButton
+          label="Change profile photo"
+          onClick={() => { haptic("light"); photoRef.current?.click(); }}
+          icon={<Camera className="size-[16px]" strokeWidth={2.25} />}
+          className="absolute -right-0.5 -bottom-0.5 size-9 border-[3px] border-surface bg-accent text-accent-fg shadow-sm hover:bg-accent-hover"
+        />
+      </div>
+      <h1 className="mt-4 text-center text-[22px] font-bold tracking-[-0.025em]">
         {signupToken ? "Create your Tirbeo account" : "One thing left"}
       </h1>
-      <p className="mt-1.5 text-center text-[14px] leading-relaxed text-muted">
+      <p className="mx-auto mt-1.5 max-w-[36ch] text-center text-[14px] leading-relaxed text-muted">
         {signupToken ? (
           <>
-            Signed in with {providerName} as <span className="text-fg">{pending?.email}</span>
+            Signed in with {providerName} as <span className="font-medium text-fg">{pending?.email}</span>
+            {" · "}
+            <button type="button" onClick={() => { haptic("light"); photoRef.current?.click(); }} className="text-accent-text hover:underline">
+              change photo
+            </button>
           </>
         ) : (
           "Tirbeo hasn't got your agreement on record yet. Tick it below to keep going."
         )}
       </p>
 
-      <form onSubmit={submit} className="mt-6">
+      <form onSubmit={submit} className="mt-7">
         {signupToken ? (
-          <>
+          <section>
             <SectionTitle>Your profile</SectionTitle>
+            <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+              <Group>
+                <Field
+                  label="Username"
+                  hint={username ? undefined : "This is your profile address — 3–30 characters: letters, numbers, - or _."}
+                >
+                  <Input
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="yourname"
+                    autoComplete="username"
+                    spellCheck={false}
+                    required
+                    invalid={usernameState === "taken" || usernameState === "reserved" || usernameState === "invalid"}
+                  />
+                </Field>
+                {username ? <UsernameStatus state={usernameState} message={usernameMsg} /> : null}
+                <Field label="Display name" hint="How your name appears. You can change it later.">
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your name"
+                    autoComplete="name"
+                  />
+                </Field>
+                <Field
+                  label="Password"
+                  hint={`Optional — ${providerName} already gets you in. Adding a password gives the account a second way in, and lets you change it later without going back through ${providerName}.`}
+                >
+                  <PasswordField
+                    value={password}
+                    onChange={setPassword}
+                    placeholder="At least 8 characters"
+                    autoComplete="new-password"
+                  />
+                </Field>
+              </Group>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="mt-9">
+          <SectionTitle>Agreement</SectionTitle>
+          <div className="overflow-hidden rounded-2xl border border-border bg-surface">
             <Group>
-              <Field label="Username" hint="3–30 characters: letters, numbers, - or _.">
-                <Input
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="yourname"
-                  autoComplete="username"
-                  required
-                />
-              </Field>
-              <Field label="Display name" hint="How your name appears. You can change it later.">
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your name"
-                  autoComplete="name"
-                />
-              </Field>
-              <Field
-                label="Password"
-                hint={`Optional — ${providerName} already gets you in. Adding a password gives the account a second way in, and lets you change it later without going back through ${providerName}.`}
-              >
-                <PasswordField
-                  value={password}
-                  onChange={setPassword}
-                  placeholder="At least 8 characters"
-                  autoComplete="new-password"
-                />
-              </Field>
+              <AgreeRow checked={accepted} onChange={setAccepted}>
+                I agree to the <span className="font-semibold">Terms of Service</span> and the{" "}
+                <span className="font-semibold">Privacy Policy</span>, and confirm the details above are
+                mine.
+              </AgreeRow>
+              <ToggleRow
+                title="Let Tirbeo support see my account"
+                sub="For troubleshooting when you ask for help. Optional."
+                on={staffAccess}
+                onChange={setStaffAccess}
+              />
             </Group>
-          </>
-        ) : null}
+          </div>
+          <div className="mt-2.5 flex items-center gap-1 pl-1">
+            <Button variant="link" onClick={() => { haptic("light"); setLegal("terms"); }}>
+              Read the terms
+            </Button>
+            <span aria-hidden className="text-muted">·</span>
+            <Button variant="link" onClick={() => { haptic("light"); setLegal("privacy"); }}>
+              Read the privacy policy
+            </Button>
+          </div>
+        </section>
 
-        <SectionTitle>Agreement</SectionTitle>
-        <Group>
-          <AgreeRow checked={accepted} onChange={setAccepted}>
-            I agree to the <span className="font-semibold">Terms of Service</span> and the{" "}
-            <span className="font-semibold">Privacy Policy</span>, and confirm the details above are
-            mine.
-          </AgreeRow>
-          <ToggleRow
-            title="Let Tirbeo support see my account"
-            sub="For troubleshooting when you ask for help. Optional."
-            on={staffAccess}
-            onChange={setStaffAccess}
-          />
-        </Group>
-        <div className="mt-2 flex items-center gap-1">
-          <Button variant="link" onClick={() => { haptic("light"); setLegal("terms"); }}>
-            Read the terms
-          </Button>
-          <span aria-hidden className="text-muted">·</span>
-          <Button variant="link" onClick={() => { haptic("light"); setLegal("privacy"); }}>
-            Read the privacy policy
-          </Button>
+        <div className="mt-4">
+          {error ? (
+            <Helper tone="danger">{error}</Helper>
+          ) : !accepted ? (
+            <Helper>Tick that line to finish.</Helper>
+          ) : null}
         </div>
-
-        {error ? (
-          <Helper tone="danger">{error}</Helper>
-        ) : !accepted ? (
-          <Helper>Tick that line to finish.</Helper>
-        ) : null}
 
         <Button
           type="submit"
           variant="primary"
-          className="mt-5 w-full"
-          disabled={!accepted || busy || (signupToken ? !username.trim() : false)}
+          className="mt-2 w-full"
+          disabled={!accepted || busy || (signupToken ? usernameState !== "available" : false)}
         >
           {busy ? "Working…" : signupToken ? "Create account" : "Continue"}
         </Button>
