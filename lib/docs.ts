@@ -1,5 +1,3 @@
-"use client";
-
 /* ═══════════════════════════════════════════════════════════════════
    The documentation
 
@@ -654,6 +652,15 @@ export function findArticle(slug: string | undefined): DocArticle | null {
 
 export function articleHref(slug: string): string {
   return `/settings/help/${slug}`;
+}
+
+/** Every address the article route answers on: an article's own slug, and the
+    aliases above that old links and muscle memory still use. The route
+    prerenders this list and refuses any slug not in it, so an alias left out
+    here would stop redirecting and start 404ing — which is the one thing the
+    alias is there to prevent. */
+export function articleSlugs(): string[] {
+  return [...ARTICLES.map((article) => article.slug), ...Object.keys(ALIASES)];
 }
 
 /** Articles that are done with the same pages, or that sit in the same
