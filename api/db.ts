@@ -21,13 +21,12 @@
  *     answer of record when the direct line is down.
  */
 
-import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
 type Client = any;
 
-const g = globalThis as unknown as { __myprofilePrisma?: PrismaClient; __myprofilePool?: Pool };
+const g = globalThis as unknown as { __myprofilePrisma?: Client; __myprofilePool?: Pool };
 
 /** The columns a profile is. Reads the same tables the main API's internal
     handler reads — users (handle) + user_profile (everything else) — and
@@ -78,9 +77,15 @@ function createPool(): Pool {
   });
 }
 
-export function getDb(): PrismaClient {
+export async function getDb(): Promise<Client> {
   if (g.__myprofilePrisma && g.__myprofilePool) return g.__myprofilePrisma;
   const pool = createPool();
+  // Loaded lazily and cast to any on purpose: this deployable has no Prisma
+  // schema of its own, so the client is only generated in the monorepo. The
+  // build must not depend on those generated types, and this path is gated at
+  // runtime by isDirectReadConfigured() — if the client can't load, the read
+  // degrades to the HTTP path exactly like any other direct-read failure.
+  const { PrismaClient } = (await import("@prisma/client")) as any;
   const prisma = new PrismaClient({ adapter: new PrismaPg(pool) as any, log: ["error"] });
   g.__myprofilePrisma = prisma;
   g.__myprofilePool = pool;
@@ -132,7 +137,7 @@ export async function readProfileRow(userId: string): Promise<DirectReadResult> 
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const row = await getDb().user.findUnique({
+      const row = await (await getDb()).user.findUnique({
         where: { id: userId },
         select: PROFILE_SELECT,
       });
