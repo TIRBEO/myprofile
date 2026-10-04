@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -9,8 +9,10 @@ import "mapbox-gl/dist/mapbox-gl.css";
    One container, one picture, no words. Everything that explains the
    pin — the place, the numbers, how it was found — is text on the page
    above, so the map itself is only ever a map. Tiles come from Mapbox
-   GL, and the pin is a plain coordinate: a record whose place nobody
-   knows never renders this at all.
+   GL; if the token can't serve (unset, wrong, or billing not yet active)
+   the same coordinates drop to the keyless OpenStreetMap embed rather
+   than showing an empty plate. Either way the pin is a plain coordinate,
+   and a record whose place nobody knows never renders this at all.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* A public (pk.) token is safe to ship to the browser; set NEXT_PUBLIC_MAPBOX_TOKEN
@@ -21,12 +23,17 @@ const MAPBOX_TOKEN =
 
 const STYLE = "mapbox://styles/mapbox/dark-v11";
 
+/** Half-width of the OSM fallback box in degrees — wide enough to place a
+    city, which is all an address-derived pin can honestly claim. */
+const SPAN = 0.01;
+
 export function MapCard({ coords, label }: { coords: [number, number]; label: string }) {
   const [lat, lng] = coords;
   const host = useRef<HTMLDivElement>(null);
+  const [fallback, setFallback] = useState(false);
 
   useEffect(() => {
-    if (!host.current) return;
+    if (fallback || !host.current) return;
     let map: import("mapbox-gl").Map | undefined;
     let marker: import("mapbox-gl").Marker | undefined;
     let cancelled = false;
@@ -51,17 +58,40 @@ export function MapCard({ coords, label }: { coords: [number, number]; label: st
         marker = new mapboxgl.Marker({ color: "#0a84ff" })
           .setLngLat([lng, lat])
           .addTo(map);
+        // A bad or unbilled token fails here, once the style request comes back.
+        map.on("error", () => {
+          if (!cancelled) setFallback(true);
+        });
       })
-      .catch(() => {
-        /* token/billing/network missing — leave the plate empty rather than crash the page */
-      });
+      .catch(() => setFallback(true));
 
     return () => {
       cancelled = true;
       marker?.remove();
       map?.remove();
     };
-  }, [lat, lng]);
+  }, [lat, lng, fallback]);
+
+  if (fallback) {
+    const bbox = encodeURIComponent(
+      `${lng - SPAN},${lat - SPAN * 0.6},${lng + SPAN},${lat + SPAN * 0.6}`,
+    );
+    const tiles = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
+    return (
+      <figure className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_14px_36px_-24px_rgb(0_0_0/0.4)]">
+        <div className="relative h-[220px] overflow-hidden sm:h-[260px]">
+          <iframe
+            src={tiles}
+            title={`Map showing ${label}`}
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            className="map-tiles absolute inset-x-0 top-0 block w-full border-0"
+            style={{ height: "calc(100% + 44px)" }}
+          />
+        </div>
+      </figure>
+    );
+  }
 
   return (
     <figure className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_14px_36px_-24px_rgb(0_0_0/0.4)]">

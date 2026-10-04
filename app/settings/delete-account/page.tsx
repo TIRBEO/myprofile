@@ -55,7 +55,7 @@ export default function DeleteAccountPage() {
             title={over ? "This close has become final" : `Your account closes on ${formatDate(finalAt)}`}
             sub={
               over
-                ? "The window has run out. Sign in to start again, or contact support@tirbeo.app if you believe this is wrong."
+                ? "The window has run out. Sign in to start again, or contact support@tirbeo.com if you believe this is wrong."
                 : `You can cancel any time before that — ${countdownLabel(finalAt)} left on the window. Nothing has been deleted yet.`
             }
           />

@@ -132,15 +132,18 @@ export async function confirmSetup(code: string): Promise<RevealedCodes> {
 }
 
 /**
- * Turning it off retires every set, so it asks twice: the live code, because
- * the code proves the app is in your hand, and whatever the shared sheet
- * offers, because the account service refuses a bare session cookie.
+ * Turning it off retires every set, so it asks twice: the live code (or a
+ * backup code, for someone who's lost the app), because the code proves a
+ * second factor is in your hand, and whatever the shared sheet offers, because
+ * the account service refuses a bare session cookie.
  */
-export async function disableAuthenticator(code: string, proof: ReauthProof = {}): Promise<void> {
+export type DisableFactor = { code?: string; backupCode?: string };
+
+export async function disableAuthenticator(factor: DisableFactor, proof: ReauthProof = {}): Promise<void> {
   await apiSend("/api/security/totp/disable", {
     method: "DELETE",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ...proof, code }),
+    body: JSON.stringify({ ...proof, ...factor }),
   });
 }
 

@@ -62,7 +62,7 @@ export default function DeletionPendingPage() {
           </div>
         ) : (
           <p className="mt-6 text-[13px] leading-relaxed text-muted">
-            If you believe this is wrong, contact support@tirbeo.app.
+            If you believe this is wrong, contact support@tirbeo.com.
           </p>
         )}
       </div>

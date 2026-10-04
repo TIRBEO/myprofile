@@ -25,7 +25,7 @@ const BELOW = 20;
 /** How much of the column a picture of "the page itself" holds: the title and
     the first few rows, which is what tells you that you're on the right page. */
 const TOP_SHOT = 430;
-const PUBLIC_ORIGIN = "https://tirbeo.app";
+const PUBLIC_ORIGIN = "https://tirbeo.com";
 
 /* A figure can name a state its page has to be in first, because two steps
    can need opposite ones — the button that files an appeal and the page that

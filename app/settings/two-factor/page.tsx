@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Sheet, SheetActions, cn } from "@/components/ig-ui";
+import { Button, Input, Sheet, SheetActions, cn } from "@/components/ig-ui";
 import { OtpInput } from "@/components/otp-input";
 import {
   Group,
@@ -222,17 +222,21 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
   const [stage, setStage] = useState<"warn" | "proof">("warn");
   const [code, setCode] = useState(["", "", "", "", "", ""]);
+  const [useBackup, setUseBackup] = useState(false);
+  const [backup, setBackup] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { guard, reauthDialog } = useReauthGuard();
-  const ready = code.every((d) => d !== "");
+  const ready = useBackup ? backup.trim().length > 0 : code.every((d) => d !== "");
 
   async function confirm() {
     if (!ready || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await guard((proof) => disableAuthenticator(code.join(""), proof));
+      await guard((proof) =>
+        disableAuthenticator(useBackup ? { backupCode: backup.trim() } : { code: code.join("") }, proof),
+      );
       onConfirm();
     } catch (err) {
       haptic("error");
@@ -240,6 +244,7 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
       // up with the code already typed.
       if (!wasDeclined(err)) setError(err instanceof Error ? err.message : "Couldn’t reach the account service");
       setCode(["", "", "", "", "", ""]);
+      setBackup("");
     } finally {
       setBusy(false);
     }
@@ -273,7 +278,7 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
     <>
       <Sheet
         title="Confirm it’s you"
-        description="Turning the authenticator off is a change an intruder would want to make, so it wants a code from the app you’re about to switch off."
+        description="Turning the authenticator off is a change an intruder would want to make, so it wants a code from the app you’re about to switch off — or one of your backup codes."
         onClose={onClose}
         footer={
           <SheetActions
@@ -289,8 +294,35 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
       >
         <div className="-mx-4 space-y-5 px-5 pb-2 pt-1 sm:-mx-5">
           <div>
-            <FieldLabel>Code from your app</FieldLabel>
-            <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} />
+            <div className="mb-2 flex items-center justify-between">
+              <FieldLabel>{useBackup ? "Backup code" : "Code from your app"}</FieldLabel>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setUseBackup((v) => !v);
+                }}
+                className="text-[12.5px] font-medium text-accent"
+              >
+                {useBackup ? "Use app code" : "Use a backup code"}
+              </button>
+            </div>
+            {useBackup ? (
+              <Input
+                value={backup}
+                onChange={(e) => {
+                  setError(null);
+                  setBackup(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+                }}
+                onKeyDown={(e) => e.key === "Enter" && confirm()}
+                placeholder="8-character backup code"
+                autoComplete="one-time-code"
+                maxLength={8}
+                className="font-mono tracking-[0.15em]"
+              />
+            ) : (
+              <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} />
+            )}
           </div>
           {error ? <p className="text-[13px] leading-relaxed text-danger-text">{error}</p> : null}
         </div>

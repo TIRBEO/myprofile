@@ -83,7 +83,7 @@ function apiBaseUrl(): string {
   if (fromEnv) return fromEnv.replace(/\/+$/, "");
   return process.env.NODE_ENV === "development"
     ? "http://localhost:3000"
-    : "https://api.tirbeo.app";
+    : "https://api.tirbeo.com";
 }
 
 /**
