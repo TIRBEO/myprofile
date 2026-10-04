@@ -1,61 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OtpInput } from "@/components/otp-input";
-import { Sheet, SheetActions, cn } from "@/components/ig-ui";
-import {
-  Group,
-  Helper,
-  PillButton,
-  PillStack,
-  SectionTitle,
-  SettingsPage,
-  SheetGroup,
-  StaticRow,
-} from "@/components/settings-shell";
-import { GRACE_DAYS, finalAt, schedule } from "@/lib/delete-account";
+import { Button } from "@/components/ig-ui";
+import { Helper, PageSkeleton, PillButton, PillStack, SettingsPage } from "@/components/settings-shell";
+import { GRACE_DAYS, finalAt } from "@/lib/delete-account";
+import { apiRequestDeletionCode, apiVerifyDeletion } from "@/lib/account-lifecycle";
 import { LOCK_HREF } from "@/lib/account-state";
 import { formatDate } from "@/lib/dates";
+import { useProfile } from "@/lib/profile";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
-import { Check } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
    Confirm permanent account deletion
 
-   The last screen, and deliberately not a popup — a dialog you can tap
-   past by accident is the wrong shape for something that can't be
-   undone. Two gates stand between here and the schedule: reading what
-   goes, then the code sent to the sign-in email. Only the final red
-   button acts, and it asks once more in a sheet first. Neither the
-   agreement nor the code is stored; the resulting schedule is, and the
-   page you land back on runs the countdown.
+   The last gate, kept to one thing: the code. Two short sentences say what
+   happens, the code proves it's really you, and one button schedules the
+   close. There is no tick box before this and no sheet after it — the
+   delete page already said everything, and this page only asks the one
+   question a deletion still needs answered.
+
+   The code is the account's, not this browser's: asking for it sends real
+   mail, entering it wrong leaves the account open, and only a code the
+   brain spends schedules anything. The schedule comes back from the
+   account, and the page you land on runs the clock from that.
    ═══════════════════════════════════════════════════════════════════ */
 
-/** Where the delete code goes: the full address on file, unmasked. */
-const SIGN_IN_EMAIL = "a.shrestha97@gmail.com";
+/** The gap the account enforces between two codes, and the wait this page
+    counts while it holds the one it already sent. */
 const CODE_SECONDS = 30;
 
-const AGREES = [
-  {
-    title: "Your profile and everything on it goes",
-    sub: "Your profile, your saved choices, every device session and the account itself.",
-  },
-  {
-    title: "You get the time before it happens",
-    sub: `Nothing is deleted for the first ${GRACE_DAYS} days. Signing in cancels it.`,
-  },
-];
+const BLANK_CODE = ["", "", "", "", "", ""];
 
 export default function ConfirmDeletionPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"agree" | "code">("agree");
-  const [agreed, setAgreed] = useState(false);
-  const [code, setCode] = useState<string[]>(["", "", "", "", "", ""]);
+  const [code, setCode] = useState<string[]>(BLANK_CODE);
   const [againIn, setAgainIn] = useState(0);
-  const [confirm, setConfirm] = useState(false);
+  /** The masked address the account said it mailed, once it has mailed one.
+      Nothing here names an inbox before that. */
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  /** A code request or a verify in flight — the buttons that start one are
+      disabled until it answers, so nobody presses "delete" twice. */
+  const [busy, setBusy] = useState(false);
+  /** The account's own words for why nothing happened: no address to mail,
+      a code asked for too soon, a code that isn't right. */
+  const [error, setError] = useState<string | null>(null);
   const toast = useToast();
+  const profile = useProfile();
+  /** Kept so the timers a page unmounts mid-countdown can't fire into it. */
+  const live = useRef(true);
+  useEffect(() => () => { live.current = false; }, []);
 
   useEffect(() => {
     if (!againIn) return;
@@ -64,180 +60,132 @@ export default function ConfirmDeletionPage() {
   }, [againIn]);
 
   const codeFull = code.every((d) => d);
-  const closeDay = finalAt();
 
-  function next() {
-    if (!agreed) {
+  if (!profile) return <PageSkeleton title="Confirm deletion" sections={1} />;
+
+  /** Ask the account for a code. This is the only thing that puts mail on its
+      way, so it answers with the address that got it. */
+  async function request(): Promise<boolean> {
+    if (busy) return false;
+    setBusy(true);
+    setError(null);
+    setCode(BLANK_CODE);
+    try {
+      const reply = await apiRequestDeletionCode();
+      if (!live.current) return false;
+      setSentTo(reply.email || null);
+      setAgainIn(CODE_SECONDS);
+      toast.info(reply.message);
+      return true;
+    } catch (err) {
+      if (!live.current) return false;
       haptic("error");
-      return;
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "The account couldn’t send the code right now. Nothing was deleted.",
+      );
+      return false;
+    } finally {
+      if (live.current) setBusy(false);
     }
-    haptic("medium");
-    setAgainIn(CODE_SECONDS);
-    setStep("code");
-    window.scrollTo({ top: 0 });
   }
 
-  function send() {
-    setCode(["", "", "", "", "", ""]);
-    setAgainIn(CODE_SECONDS);
-    toast.info(`A fresh code is on its way to ${SIGN_IN_EMAIL}`);
-  }
-
-  function verify() {
-    if (!codeFull) {
+  /** Hand the code to the account. Only a code it recognises schedules
+      anything; anything else leaves the account exactly as it is, with the
+      reason on screen. */
+  async function verify() {
+    if (!codeFull || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiVerifyDeletion(code.join(""), null);
+      if (!live.current) return;
+      haptic("heavy");
+      toast.info("Deletion scheduled");
+      /* The account closes to that one screen the moment this is asked for, so
+         that's where this goes — not back to the page it was started from. */
+      router.replace(LOCK_HREF.deletion);
+    } catch (err) {
+      if (!live.current) return;
       haptic("error");
-      return;
+      setCode(BLANK_CODE);
+      setError(
+        err instanceof Error && err.message ? err.message : "That code couldn’t be checked",
+      );
+    } finally {
+      if (live.current) setBusy(false);
     }
-    setConfirm(false);
-    haptic("heavy");
-    schedule();
-    toast.error("Deletion scheduled");
-    /* The account closes to that one screen the moment this is asked for, so
-       that's where this goes — not back to the page it was started from. */
-    router.replace(LOCK_HREF.deletion);
   }
 
   return (
-    <SettingsPage title="Confirm permanent account deletion">
-      {step === "agree" ? (
-        <>
-          <p className="mt-3 px-1 text-[13px] leading-relaxed text-muted">
-            This can&apos;t be undone — deleting removes your account, your profile and everything
-            saved to it. Read each line below, then agree to continue.
-          </p>
+    <SettingsPage title="Confirm deletion">
+      <Helper lead>
+        This schedules the deletion — it doesn&apos;t run it. Your account closes for good on{" "}
+        {formatDate(finalAt())}, and you can cancel any time before that. Enter the 6-digit code we
+        email to your sign-in address to prove it&apos;s really you.
+      </Helper>
 
-          <SectionTitle>What you&apos;re agreeing to</SectionTitle>
-          <Group>
-            {AGREES.map((line) => (
-              <StaticRow key={line.title} title={line.title} sub={line.sub} />
-            ))}
-            <StaticRow
-              title="Final date"
-              sub="When the account stops existing rather than just hiding."
-              right={formatDate(closeDay)}
-            />
-          </Group>
-
-          <button
-            type="button"
-            role="checkbox"
-            aria-checked={agreed}
-            onClick={() => {
-              haptic("selection");
-              setAgreed((v) => !v);
-            }}
-            className={cn(
- "mt-6 flex w-full items-center gap-3.5 rounded-2xl border px-4 py-3.5 text-left outline-none transition-colors sm:px-5",
-              agreed ? "border-danger bg-danger/8" : "border-border bg-surface",
-            )}
-          >
-            <span
-              aria-hidden
-              className={cn(
-                "flex size-[22px] shrink-0 items-center justify-center rounded-md border transition-colors",
-                agreed ? "border-danger bg-danger text-white" : "border-border",
-              )}
-            >
-              {agreed ? <Check className="size-[14px]" strokeWidth={3} /> : null}
-            </span>
-            <span className="text-[14.5px] font-semibold">Yes, I agree. Delete my account.</span>
-          </button>
-          {!agreed ? (
-            <Helper>You have to tick that line before the next step opens.</Helper>
-          ) : null}
-
-          <PillStack>
-            <PillButton
-              tone="primary"
-              disabled={!agreed}
-              onClick={next}
-              label="Continue to the code"
-            />
-            <PillButton
-              tone="outline"
-              onClick={() => router.push("/settings/delete-account")}
-              label="Cancel and keep my account"
-            />
-          </PillStack>
-        </>
+      {sentTo === null ? (
+        <PillStack>
+          <PillButton
+            tone="primary"
+            label={busy ? "Sending the code…" : "Email me the code"}
+            onClick={() => void request()}
+            disabled={busy}
+          />
+          <PillButton
+            tone="outline"
+            label="Keep my account"
+            onClick={() => router.push("/settings/delete-account")}
+          />
+        </PillStack>
       ) : (
         <>
-          <SectionTitle
-            desc={`We sent a 6-digit code to ${SIGN_IN_EMAIL}. Entering it proves this is really your account.`}
-          >
-            Enter the code
-          </SectionTitle>
-          <div className="flex flex-col items-center">
+          <Helper className="mt-6" lead>
+            We sent a code to <span className="font-semibold text-fg">{sentTo}</span>. It works once
+            — nothing happens until you enter it below.
+          </Helper>
+
+          <div className="mt-6 flex flex-col items-center">
             {/* Six fixed boxes are wider than a 320px column, so they share the
                 room evenly and stop at their full size once there is space. */}
             <div className="w-full [&>div]:w-full [&_input]:min-w-0 [&_input]:max-w-12 [&_input]:flex-1">
               <OtpInput value={code} onChange={setCode} />
             </div>
-            <button
-              type="button"
-              onClick={send}
-              disabled={againIn > 0}
-              className="mt-6 text-[13px] font-medium text-accent-text transition-opacity hover:opacity-80 disabled:text-muted"
+            <Button
+              variant="link"
+              className="mt-4"
+              onClick={() => void request()}
+              disabled={againIn > 0 || busy}
             >
-              {againIn > 0 ? `Resend code in ${againIn}s` : "Didn't get it? Resend code"}
-            </button>
+              {busy
+                ? "Sending…"
+                : againIn > 0
+                  ? `Resend code in ${againIn}s`
+                  : "Didn't get it? Resend code"}
+            </Button>
           </div>
+
+          {error ? <Helper tone="danger">{error}</Helper> : null}
 
           <PillStack>
             <PillButton
               tone="danger"
-              disabled={!codeFull}
-              onClick={() => {
-                haptic("heavy");
-                setConfirm(true);
-              }}
-              label="Delete my account"
-              sub="Your account, your profile and everything saved to it."
+              disabled={!codeFull || busy}
+              onClick={verify}
+              label={busy ? "Checking the code…" : "Yes, delete my account"}
+              sub={`The account is then on a ${GRACE_DAYS}-day clock you can cancel from the delete page.`}
             />
             <PillButton
               tone="outline"
-              onClick={() => setStep("agree")}
-              label="Back"
+              onClick={() => {
+                setError(null);
+                setSentTo(null);
+              }}
+              label="Keep my account"
             />
           </PillStack>
-          <Helper>
-            Nothing is deleted yet. Scheduling puts the account on a {GRACE_DAYS}-day clock you can
-            stop from the delete page.
-          </Helper>
-
-          {confirm ? (
-            <Sheet
-              title="Delete your account for good?"
-              description={`This is the last step. The account stops existing on ${formatDate(closeDay)}.`}
-              onClose={() => setConfirm(false)}
-              footer={
-                <SheetActions
-                  cancelLabel="Not now"
-                  onCancel={() => setConfirm(false)}
-                  confirmLabel="Delete my account"
-                  confirmVariant="danger"
-                  onConfirm={verify}
-                />
-              }
-            >
-              <SheetGroup>
-                <StaticRow
-                  title="You stop being able to sign in"
-                  sub="Your sessions end and the app locks you out."
-                  right="Right away"
-                />
-                <StaticRow
-                  title="Your username is freed"
-                  sub="Anyone can claim the handle after this."
-                  right={formatDate(closeDay)}
-                />
-                <StaticRow
-                  title="Everything is deleted for good"
-                  sub={`Past ${formatDate(closeDay)} nothing can be restored.`}
-                />
-              </SheetGroup>
-            </Sheet>
-          ) : null}
         </>
       )}
     </SettingsPage>

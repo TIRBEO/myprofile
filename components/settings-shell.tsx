@@ -4,8 +4,8 @@
    Settings shell
 
    The single vocabulary every settings page is built from: a titled
-   column, a status card, bold section headings over one rounded card
-   each, and rows where the whole line is the tap target — never the
+   column, a status card, bold section headings over plain unboxed lists,
+   and rows where the whole line is the tap target — never the
    control at the end of it alone.
 
    Pages import these rather than restating them, so a change here lands
@@ -42,7 +42,7 @@ export const SUB = "mt-[3px] block text-[13.5px] leading-[1.45] text-muted";
     A clean raised surface with a strong glyph, not a tinted slab: the colour
     belongs to the record's state, which the heading and the flags carry. */
 export const TILE =
-  "flex size-[62px] shrink-0 items-center justify-center rounded-[22px] bg-surface-3 text-fg [&_svg]:size-[26px]";
+  "flex size-[62px] shrink-0 items-center justify-center rounded-2xl bg-surface-3 text-fg [&_svg]:size-[26px]";
 
 export function SettingsPage({
   title,
@@ -70,6 +70,12 @@ export function SettingsPage({
      wide screen it drops the back row and keeps the heading. A narrow screen
      always keeps it, and a page outside the rail keeps it at every width. */
   const inRail = !!navItem(pathname);
+  /* Instagram's arrangement: on a phone the heading lives in a sticky
+     app bar with the back chevron beside it, and the page itself starts
+     on the rows. On desktop the bar is gone and the big left-aligned
+     title is back. A page that brings its own crumb keeps the old
+     arrangement at every width. */
+  const inBar = Boolean(title) && !crumb;
 
   return (
     <div
@@ -78,12 +84,44 @@ export function SettingsPage({
         wide ? "max-w-[980px]" : "max-w-[680px]",
       )}
     >
-      {crumb ? crumb : back ? <BackLink href={back} hiddenOnRail={inRail} /> : null}
+      {crumb ? crumb : null}
+
+      {back && !inRail ? (
+        <div className={inBar ? "hidden lg:block" : undefined}>
+          <BackLink href={back} />
+        </div>
+      ) : back && inRail && !inBar ? (
+        <div className="lg:hidden">
+          <BackLink href={back} />
+        </div>
+      ) : null}
+
+      {inBar ? (
+        <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-3 flex items-center gap-1 border-b border-divider bg-bg/85 px-1.5 py-1.5 backdrop-blur-xl sm:-mx-6 sm:-mt-9 lg:hidden">
+          {back ? (
+            <Link
+              href={back}
+              aria-label={`Back to ${titleFor(back)}`}
+              onClick={() => haptic("light")}
+              className="flex size-10 shrink-0 items-center justify-center rounded-full text-fg outline-none transition-colors hover:bg-surface-2 active:bg-surface-3"
+            >
+              <ChevronLeft className="size-[22px]" strokeWidth={2.2} />
+            </Link>
+          ) : (
+            <span aria-hidden className="size-10 shrink-0" />
+          )}
+          <h1 className="min-w-0 flex-1 truncate text-center text-[16px] font-semibold tracking-[-0.01em]">
+            {t(title!)}
+          </h1>
+          <span aria-hidden className="size-10 shrink-0" />
+        </div>
+      ) : null}
 
       {title ? (
         <h1
           className={cn(
             "mb-4 text-[24px] leading-tight font-bold tracking-[-0.025em] sm:mb-5 sm:text-[30px]",
+            inBar && "hidden lg:block",
             !crumb && back && "mt-1.5",
           )}
         >
@@ -109,7 +147,7 @@ function Guides({ pathname }: { pathname: string }) {
   if (!guides.length) return null;
   return (
     <nav aria-label="Guides about this page" className="mt-12">
-      <p className="mb-3 px-1 text-[11.5px] font-semibold tracking-[0.06em] text-muted uppercase">
+      <p className="mb-3 px-1 text-[13px] font-semibold text-muted">
         {t("Read about this page")}
       </p>
       {/* Rows, not chips: a guide is a page you go to, and the app already has
@@ -165,11 +203,10 @@ export function Breadcrumb({ items }: { items: { label: string; href?: string }[
   );
 }
 
-/* The way back is a plain link, not a bar: no fill, no rule, nothing sticking
-   out of the column. The chevron nudges aside when you hover it, which is the
-   only decoration it gets. It is the one control on every page, so it is sized
-   for a thumb rather than a cursor — the empty pill is what carries the height. */
-function BackLink({ href, hiddenOnRail }: { href: string; hiddenOnRail: boolean }) {
+/* The way back: a chevron and the name of the place you're leaving, the
+   way Instagram draws a push back — no bar, no fill, just a thumb-sized
+   target with the arrow nudging left when you hover it. */
+function BackLink({ href }: { href: string }) {
   const t = useT();
   const label = t(titleFor(href));
   return (
@@ -178,13 +215,12 @@ function BackLink({ href, hiddenOnRail }: { href: string; hiddenOnRail: boolean 
       aria-label={`Back to ${label}`}
       onClick={() => haptic("light")}
       className={cn(
-        "group -ml-2 inline-flex min-h-11 max-w-full items-center gap-[3px] rounded-full py-2 pr-3.5 pl-2 text-[14.5px] font-semibold text-muted outline-none transition-colors hover:bg-surface-2/70 hover:text-fg active:bg-surface-2",
-        hiddenOnRail && "lg:hidden",
+        "group -ml-2.5 inline-flex min-h-11 max-w-full items-center gap-1 rounded-lg py-2 pr-3 pl-2 text-[15px] font-semibold text-fg outline-none transition-colors hover:bg-surface-2 active:bg-surface-3",
       )}
     >
       <ChevronLeft
-        className="size-[19px] shrink-0 transition-transform duration-200 group-hover:-translate-x-[2px]"
-        strokeWidth={2.4}
+        className="size-[21px] shrink-0 transition-transform duration-200 group-hover:-translate-x-[2px]"
+        strokeWidth={2.2}
       />
       <span className="truncate">{titleFor(href)}</span>
     </Link>
@@ -194,11 +230,14 @@ function BackLink({ href, hiddenOnRail }: { href: string; hiddenOnRail: boolean 
 export function PageSkeleton({ title, sections = 1 }: { title: string; sections?: number }) {
   return (
     <SettingsPage title={title}>
-      <div className="mb-3 h-[68px] animate-pulse rounded-[20px] bg-fg/[0.045] sm:h-[76px]" />
+      <div className="mb-3 h-[68px] animate-pulse rounded-2xl bg-fg/[0.045] sm:h-[76px]" />
       {Array.from({ length: sections }, (_, i) => (
         <div key={i}>
           <div className="mt-10 mb-3 h-[17px] w-[140px] animate-pulse rounded-full bg-fg/[0.06]" />
-          <div className="h-[92px] animate-pulse rounded-[20px] border border-border" />
+          <div className="list-divide">
+            <div className="h-[52px] animate-pulse bg-fg/[0.04]" />
+            <div className="h-[52px] animate-pulse bg-fg/[0.03]" />
+          </div>
         </div>
       ))}
     </SettingsPage>
@@ -216,13 +255,13 @@ export function SectionTitle({
       details — put beside the heading instead of faking a row inside it. */
   action?: ReactNode;
 }) {
-  /* A heading, its explanation, then the box it belongs to — with enough air
-     above that a page reads as a few separate decisions rather than one long
-     list, and enough below that the box's own edge isn't crowding the words. */
+  /* A heading, its explanation, then the plain list it belongs to — with enough
+     air above that a page reads as a few separate decisions rather than one
+     long list, and enough below that the first line isn't crowding the words. */
   return (
-    <div className="mt-10 mb-3 first:mt-0">
+    <div className="mt-9 mb-3 first:mt-0">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[17px] font-bold tracking-[-0.01em] text-fg">{children}</h2>
+        <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-fg">{children}</h2>
         {action}
       </div>
       {desc ? <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-muted">{desc}</p> : null}
@@ -230,10 +269,11 @@ export function SectionTitle({
   );
 }
 
-/** A section of rows, contained: one rounded panel with a hairline edge, the
-    rows inside it divided the whole width. Framing the group rather than each
-    row is what lets a page of decisions read as a few blocks — and it's the
-    same box the documentation index uses, so one look runs through the app. */
+/** A section of rows, unboxed: a plain list on the page, the rows divided by
+    one full-width hairline each. No frame, no fill, no shadow — the heading
+    above says what the block is, and the hairlines say what belongs to it.
+    The same container serves nav rows and read-only detail rows, so one look
+    runs through the app. */
 export function Group({
   children,
   dimmed,
@@ -248,10 +288,7 @@ export function Group({
       role={label ? "radiogroup" : undefined}
       aria-label={label}
       aria-disabled={dimmed || undefined}
-      className={cn(
-        "grouped list-divide transition-opacity duration-200",
-        dimmed && "pointer-events-none opacity-45",
-      )}
+      className={cn("list-divide transition-opacity duration-200", dimmed && "pointer-events-none opacity-45")}
     >
       {children}
     </div>
@@ -380,9 +417,9 @@ export function ToggleRow({
   );
 }
 
-/** A name, its one-line description, and the rows under it inside a rounded
-    panel — the box the whole app is made of. The name sits outside it so the
-    panel stays a list rather than a form with a label welded to it. */
+/** A name, its one-line description, and the plain list of rows under it —
+    no frame, just hairlines between the lines. The name sits above the list
+    so the block reads as one decision with its explanation, not a form. */
 export function Panel({
   title,
   sub,
@@ -404,12 +441,17 @@ export function Panel({
   return (
     <section id={id} className={cn(id && "scroll-mt-20", className)}>
       <div className="mb-3 px-1">
-        <h2 className="text-[17px] font-bold tracking-[-0.01em] text-fg">{title}</h2>
+        <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
         {sub ? (
           <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-muted">{sub}</p>
         ) : null}
       </div>
-      <div className={cn("grouped list-divide", compact && "[&_a]:py-[11px] [&_button]:py-[11px]")}>
+      <div
+        className={cn(
+          "list-divide",
+          compact && "[&_a]:py-[11px] [&_button]:py-[11px]",
+        )}
+      >
         {children}
       </div>
     </section>
@@ -451,7 +493,7 @@ export function LinkRow({
         <span className={cn(CHIP, danger && "text-danger-text", accent && !danger && "text-accent-text")}>{icon}</span>
       ) : null}
       <span className="min-w-0 flex-1">
-        <span className={cn(TITLE, compact && "text-[16px] font-semibold sm:text-[15px] sm:font-medium", danger && "text-danger-text", accent && !danger && "text-accent-text")}>{title}</span>
+        <span className={cn(TITLE, compact && "text-[16px] font-medium sm:text-[15px]", danger && "text-danger-text", accent && !danger && "text-accent-text")}>{title}</span>
         {sub ? <span className={cn(SUB, compact && "hidden sm:block")}>{sub}</span> : null}
       </span>
       <Trailing right={right} chevron={accent && !danger ? "text-accent-text" : undefined} />
@@ -579,11 +621,11 @@ export function OptionRow({
       </span>
       <span
         className={cn(
-          "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
-          selected ? "border-fg" : "border-border",
+          "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+          selected ? "border-accent" : "border-track",
         )}
       >
-        {selected ? <span className="size-2.5 rounded-full bg-fg" /> : null}
+        {selected ? <span className="size-2.5 rounded-full bg-accent" /> : null}
       </span>
     </button>
   );

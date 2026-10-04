@@ -1,74 +1,25 @@
 "use client";
 
-import { closeRequest, openRequest } from "@/lib/account-history";
-
 /* ═══════════════════════════════════════════════════════════════════
-   Account deletion
+   Counting down a scheduled close
 
-   There's no server here, so "deleting" is recorded as a scheduled
-   close: the moment you asked, and the date it becomes final once the
-   grace window runs out. That pair is the only thing written to
-   storage — enough for the page to reload into the same state and for
-   the countdown to keep running. The agreement tick and the one-time
-   code are checked in the sheet and never stored.
+   The schedule itself is the account's: it is opened by the brain when a
+   mailed code is spent, read back from `/api/user/account-state`, and the
+   permanent-deletion job is what finally ends the account. What's left here
+   is the arithmetic the screens share — the window they were told to expect,
+   and a clock rendered from a date the server gave.
    ═══════════════════════════════════════════════════════════════════ */
-
-const STORE = "tirbeo:account-deletion";
 
 /** About a month, which is what the page tells the user to expect. */
 export const GRACE_DAYS = 30;
 
 const DAY = 86_400_000;
 
-export type DeletionPlan = {
-  /** When the close was requested. */
-  scheduledAt: number;
-  /** When the account becomes permanently gone. */
-  finalAt: number;
-};
-
-export function readPlan(): DeletionPlan | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(STORE);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<DeletionPlan>;
-    if (typeof parsed?.scheduledAt !== "number" || typeof parsed?.finalAt !== "number") {
-      return null;
-    }
-    return { scheduledAt: parsed.scheduledAt, finalAt: parsed.finalAt };
-  } catch {
-    return null;
-  }
-}
-
-/** When a close requested at `from` becomes final. */
+/** When a close requested at `from` would become final. A promise the screen
+    makes before the request exists, so it is only ever an estimate — the real
+    date is the one the account hands back once the code is spent. */
 export function finalAt(from = Date.now()): number {
   return from + GRACE_DAYS * DAY;
-}
-
-/** Records the request and returns the resulting plan. */
-export function schedule(): DeletionPlan {
-  const now = Date.now();
-  const plan: DeletionPlan = { scheduledAt: now, finalAt: finalAt(now) };
-  try {
-    localStorage.setItem(STORE, JSON.stringify(plan));
-  } catch {
-    /* private mode — the schedule still holds for this session */
-  }
-  openRequest("deletion", "deletion");
-  return plan;
-}
-
-/** Clears a scheduled close and returns the account to normal. */
-export function cancel(): null {
-  try {
-    localStorage.removeItem(STORE);
-  } catch {
-    /* private mode — nothing to clear */
-  }
-  closeRequest("deletion", "reversed");
-  return null;
 }
 
 export type Remaining = {

@@ -1,16 +1,19 @@
 "use client";
 
 import type { ChangeEvent, KeyboardEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Button,
+  Chip,
   cn,
   Input,
   Sheet,
   SheetActions,
 } from "@/components/ig-ui";
 import {
+  Group,
   Helper,
+  PageSkeleton,
   ROW,
   SectionTitle,
   SettingsPage,
@@ -20,6 +23,16 @@ import {
 } from "@/components/settings-shell";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import {
+  DEFAULT_PROFILE,
+  PROFILE_SYNCED_EVENT,
+  persistProfile,
+  readProfile,
+  sharedSyncForDetails,
+  syncProfile,
+  type Profile,
+} from "@/lib/profile";
+import { usePageRefresh } from "@/lib/page-refresh";
 
 /* ═══════════════════════════════════════════════════════════════════
    Personal details.
@@ -29,10 +42,14 @@ import { haptic } from "@/lib/haptics";
    row-level chevron competing with a heading-level Edit. Phone and
    website share one sheet, so there is one edit gesture for contact and
    one for work. Skills are plain pills; tapping one asks before it goes.
-   Everything saves to localStorage as it changes.
+
+   The store is the server: email arrives read-only off the account row,
+   website and the job fields save through the profile endpoint, and the
+   local copy is only the cache that paints first. Phone is a recovery
+   number owned by the security flow — shown, never edited here. Skills
+   have no column yet, so they stay local-only and say so on save.
    ═══════════════════════════════════════════════════════════════════ */
 
-const STORE = "tirbeo:personal-details";
 const MAX_SKILLS = 8;
 
 type JobKey = "role" | "company" | "place" | "start";
@@ -46,13 +63,20 @@ type Details = {
 };
 
 const EMPTY: Details = {
-  email: "a.shrestha97@gmail.com",
+  email: "",
   phone: "",
-  website: "tirbeo.app",
-  job: { role: "Product engineer", company: "Tirbeo", place: "Kathmandu, Nepal", start: "2022" },
-  skills: ["TypeScript", "React", "Design systems"],
+  website: "",
+  job: { role: "", company: "", place: "", start: "" },
+  skills: [],
 };
 
+/** The Work answers, in the words the signup wizard uses too.
+    `apps/accounts/src/lib/profile-fields.ts` mirrors these four label/placeholder
+    pairs byte-for-byte — there is no package both apps import, so the two lists
+    are kept identical by hand and `apps/api/tests/work-fields.test.ts` fails if
+    they ever drift. The answers land on the account row's
+    `jobRole`/`jobCompany`/`jobPlace`/`jobStarted` columns, which is also where
+    signup writes them. */
 const JOB_FIELDS: Record<JobKey, { label: string; placeholder: string }> = {
   role: { label: "Job title", placeholder: "Product engineer" },
   company: { label: "Company", placeholder: "Tirbeo" },
@@ -81,6 +105,23 @@ const CONTACT_FIELDS = [
   },
 ];
 
+function detailsOf(profile: Profile): Details {
+  return {
+    email: profile.email ?? "",
+    phone: profile.phone ?? "",
+    website: profile.website ?? "",
+    job: {
+      role: profile.jobRole ?? "",
+      company: profile.jobCompany ?? "",
+      // All four are real columns on the account row (`job_role`, `job_company`,
+      // `job_place`, `job_started`), so what signup asked for shows up here.
+      place: profile.jobPlace ?? "",
+      start: profile.jobStartedOn ?? "",
+    },
+    skills: profile.skills ?? [],
+  };
+}
+
 export default function PersonalDetailsPage() {
   const [form, setForm] = useState<Details>(EMPTY);
   const [sheet, setSheet] = useState<SheetId | null>(null);
@@ -88,42 +129,91 @@ export default function PersonalDetailsPage() {
   const [skillSheet, setSkillSheet] = useState(false);
   const [draftSkill, setDraftSkill] = useState("");
   const [removingSkill, setRemovingSkill] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const toast = useToast();
+  /** False while neither the cache nor the account has produced a profile. */
+  const [loaded, setLoaded] = useState(false);
+  /** The last synced server copy — a save only sends what moved since it. */
+  const baselineRef = useRef<Profile>(DEFAULT_PROFILE);
 
+  /* Paint the cache first, then reconcile with the server once. The shared
+     sync means a page that also mounts useProfile() costs no extra fetch.
+     With no local copy, an all-blank form is not the account's answer, so
+     the page keeps its skeleton until the sync settles. */
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORE);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Record<string, unknown>;
-      const contact = (saved.contact ?? {}) as Record<string, string | undefined>;
-      const job = (saved.job ?? firstEntry(saved.work)) as Record<string, string | undefined>;
-      setForm({
-        email: str(saved.email ?? contact.email),
-        phone: str(saved.phone ?? contact.phone),
-        website: str(saved.website ?? contact.website),
-        job: {
-          role: str(job.role),
-          company: str(job.company),
-          place: str(job.place),
-          start: str(job.start),
-        },
-        skills: Array.isArray(saved.skills)
-          ? saved.skills
-              .map((s) => (typeof s === "string" ? s : str((s as { name?: string }).name)))
-              .filter(Boolean)
-          : [],
-      });
-    } catch {
-      /* unreadable draft — keep the defaults */
-    }
+    let alive = true;
+    const paint = (profile: Profile) => {
+      if (!alive) return;
+      baselineRef.current = profile;
+      setForm(detailsOf(profile));
+      setLoaded(true);
+    };
+    const cached = readProfile();
+    if (cached.name || cached.email || cached.website || cached.jobRole) paint(cached);
+    void sharedSyncForDetails().then((merged) => {
+      if (!alive) return;
+      if (merged) paint(readProfile());
+      else setLoaded(true);
+    });
+    const onSynced = () => paint(readProfile());
+    window.addEventListener(PROFILE_SYNCED_EVENT, onSynced);
+    return () => {
+      alive = false;
+      window.removeEventListener(PROFILE_SYNCED_EVENT, onSynced);
+    };
   }, []);
 
-  function commit(next: Details) {
+  usePageRefresh(() => {
+    void syncProfile().then((merged) => {
+      if (!merged) return;
+      baselineRef.current = merged;
+      setForm(detailsOf(merged));
+      setLoaded(true);
+    });
+  });
+
+  /** Saves the whole Details shape through the profile endpoint. The fields
+      the row cannot hold are merged into the local copy before the write so
+      they survive the server answer overwriting it — today that is only the
+      follower counts, so every work answer goes up. */
+  async function commit(next: Details) {
+    const localOnly = {
+      jobPlace: next.job.place,
+      jobStartedOn: next.job.start,
+      skills: next.skills,
+    };
+    const merged: Profile = {
+      ...baselineRef.current,
+      email: next.email || baselineRef.current.email,
+      phone: next.phone || baselineRef.current.phone,
+      website: next.website,
+      jobRole: next.job.role,
+      jobCompany: next.job.company,
+      ...localOnly,
+    };
     setForm(next);
-    try {
-      localStorage.setItem(STORE, JSON.stringify(next));
-    } catch {
-      /* private mode — the change still holds for this session */
+    setSaving(true);
+    const result = await persistProfile(baselineRef.current, merged);
+    setSaving(false);
+    if (!result.ok) {
+      haptic("error");
+      if (result.errors) {
+        toast.error(Object.values(result.errors)[0] ?? "Some fields need attention");
+      } else {
+        toast.error(result.message ?? "The change could not be saved.");
+      }
+      return;
+    }
+    const unsupported = new Set(result.outcome.unsupported);
+    const keptLocal = [
+      ...(next.job.place && unsupported.has("jobPlace") ? ["work location"] : []),
+      ...(next.job.start && unsupported.has("jobStartedOn") ? ["started-in year"] : []),
+      ...(next.skills.length > 0 && unsupported.has("skills") ? ["skills"] : []),
+    ];
+    if (keptLocal.length > 0) {
+      toast.error(`Saved — kept on this device only: ${keptLocal.join(", ")}`);
+    } else {
+      toast.success("Saved");
     }
   }
 
@@ -135,26 +225,27 @@ export default function PersonalDetailsPage() {
       for (const k of JOB_KEYS) next[k] = form.job[k] ?? "";
       setDraft(next);
     } else {
+      // Phone is a recovery identity owned by /api/security — shown but
+      // never edited from here, so it doesn't go into the draft.
       setDraft({ phone: form.phone, website: form.website });
     }
     setSheet(id);
   }
 
-  function saveSheet() {
+  async function saveSheet() {
     if (!sheet) return;
     if (sheet === "job") {
       const clean: Record<JobKey, string> = { role: "", company: "", place: "", start: "" };
       for (const k of JOB_KEYS) clean[k] = (draft[k] ?? "").trim();
-      commit({ ...form, job: clean });
+      await commit({ ...form, job: clean });
     } else {
-      commit({
+      await commit({
         ...form,
-        phone: (draft.phone ?? "").trim(),
+        phone: (draft.phone ?? "").trim() || form.phone,
         website: (draft.website ?? "").trim(),
       });
     }
     setSheet(null);
-    toast.success("Saved");
   }
 
   /* ── Skills ── */
@@ -173,29 +264,31 @@ export default function PersonalDetailsPage() {
       toast.error("That skill is already listed");
       return;
     }
-    commit({ ...form, skills: [...form.skills, name] });
+    void commit({ ...form, skills: [...form.skills, name] });
     setDraftSkill("");
     setSkillSheet(false);
   }
 
   /** Only ever called from the confirm sheet, never straight off the pill. */
   function removeSkill(skill: string) {
-    commit({ ...form, skills: form.skills.filter((s) => s !== skill) });
+    void commit({ ...form, skills: form.skills.filter((s) => s !== skill) });
   }
 
   const full = form.skills.length >= MAX_SKILLS;
   const hasJob = !!(form.job.role || form.job.company);
+
+  if (!loaded) return <PageSkeleton title="Personal details" sections={2} />;
 
   return (
     <SettingsPage title="Personal details">
       {/* ── Contact — read-only values, one edit for the whole block.
           The email is fixed; it's what the account was created with. ── */}
       <SectionTitle>Contact</SectionTitle>
-      <div className="grouped list-divide">
-        <StaticRow title="Email" sub={form.email || "Not added"} right="Confirmed" />
+      <Group>
+        <StaticRow title="Email" sub={form.email || "Not added"} right={form.email ? "Confirmed" : undefined} />
         <StaticRow title="Phone" sub={form.phone || "Not added"} />
         <StaticRow title="Website" sub={form.website || "Not added"} />
-      </div>
+      </Group>
       <Button size="lg" block className="mt-3" onClick={() => openSheet("contact")}>
         Edit contact details
       </Button>
@@ -204,7 +297,7 @@ export default function PersonalDetailsPage() {
           one blue button. Four label/value rows read as a form you can't
           edit; this reads as a fact you can. ── */}
       <SectionTitle>Work</SectionTitle>
-      <div className="grouped">
+      <Group>
         <div className={ROW}>
           <span className="min-w-0 flex-1">
             {hasJob ? (
@@ -227,7 +320,7 @@ export default function PersonalDetailsPage() {
             )}
           </span>
         </div>
-      </div>
+      </Group>
       <Button size="lg" block className="mt-3" onClick={() => openSheet("job")}>
         Edit work details
       </Button>
@@ -239,17 +332,16 @@ export default function PersonalDetailsPage() {
       </SectionTitle>
       <div className="flex flex-wrap gap-2">
         {form.skills.map((skill) => (
-          <button
+          <Chip
             key={skill}
-            type="button"
             onClick={() => {
               haptic("light");
               setRemovingSkill(skill);
             }}
- className="min-h-10 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13.5px] font-medium outline-none transition-colors hover:border-danger/45 hover:text-danger-text"
+            className="min-h-10 hover:border-danger/45 hover:text-danger-text"
           >
             {skill}
-          </button>
+          </Chip>
         ))}
         <Button
           size="sm"
@@ -282,8 +374,9 @@ export default function PersonalDetailsPage() {
             <SheetActions
               cancelLabel="Cancel"
               onCancel={() => setSheet(null)}
-              confirmLabel="Save"
-              onConfirm={saveSheet}
+              confirmLabel={saving ? "Saving…" : "Save"}
+              disabled={saving}
+              onConfirm={() => void saveSheet()}
             />
           }
         >
@@ -302,7 +395,7 @@ export default function PersonalDetailsPage() {
                   onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      saveSheet();
+                      void saveSheet();
                     }
                   }}
                   type={f.type}
@@ -326,8 +419,9 @@ export default function PersonalDetailsPage() {
             <SheetActions
               cancelLabel="Cancel"
               onCancel={() => setSheet(null)}
-              confirmLabel="Save"
-              onConfirm={saveSheet}
+              confirmLabel={saving ? "Saving…" : "Save"}
+              disabled={saving}
+              onConfirm={() => void saveSheet()}
             />
           }
         >
@@ -346,7 +440,7 @@ export default function PersonalDetailsPage() {
                   onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      saveSheet();
+                      void saveSheet();
                     }
                   }}
                   placeholder={JOB_FIELDS[k].placeholder}
@@ -424,14 +518,4 @@ export default function PersonalDetailsPage() {
       ) : null}
     </SettingsPage>
   );
-}
-
-/* ── Helpers ─────────────────────────────────────────────────────── */
-
-function str(v: unknown): string {
-  return typeof v === "string" ? v : "";
-}
-
-function firstEntry(v: unknown): Record<string, unknown> {
-  return Array.isArray(v) && v.length > 0 ? (v[0] as Record<string, unknown>) : {};
 }

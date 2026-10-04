@@ -3,22 +3,31 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, SearchX } from "lucide-react";
-import { EmptyState, SearchField, Sheet, SheetActions, cn } from "@/components/ig-ui";
+import { LogOut, SearchX, WifiOff } from "lucide-react";
+import { Button, EmptyState, SearchField, Sheet, SheetActions, cn } from "@/components/ig-ui";
 import { NAV_GROUPS, searchNav, titleFor, type NavGroup } from "@/lib/nav";
 import { haptic } from "@/lib/haptics";
+import { SERVICE_DOWN } from "@/lib/service-events";
 import { englishFor, useT } from "@/lib/i18n";
-import { ensureSession, endSession, watchInactivity } from "@/lib/session";
+import {
+  probeSessionState,
+  endSessionAndLeave,
+  watchInactivity,
+  redirectToLogin,
+} from "@/lib/session";
 import { AccountLockScreen } from "@/components/account-lock";
 import { PullToRefresh } from "@/components/pull-to-refresh";
+import { ProfilePicture } from "@/components/profile-picture";
+import { displayName, useProfile } from "@/lib/profile";
 import { LOCK_HREFS, lockAllows, useAccountLock, useWelcome } from "@/lib/account-state";
 
 /* ═══════════════════════════════════════════════════════════════════
    Account app shell
 
-   Phone    : no app bar and no tab bar. Every page carries its own
-              back chevron, so the whole thing drills down the way the
-              rest of the app does, with the index as the one hub.
+   Phone    : each page opens under a sticky app bar — back chevron on
+               the left, the page's name centred, a hairline under it —
+               so it drills down the way Instagram does, with the index
+               as the one hub.
    Desktop  : fixed rail with live search, plus ⌘K anywhere.
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -117,13 +126,81 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
     document.title = `${title} · Tirbeo`;
   }, [title]);
 
-  // Keep a session alive for the whole shell, and enforce the inactivity
-  // sign-out whenever "stay signed in" is off (lib/session reads the switch
-  // fresh on every tick, so flipping it here takes hold without a reload).
+  /* Probe the real session once per shell load. A signed-out reader is moved
+     to /login exactly once — never in a loop, and never while they're already
+     standing on it. Also reacts to the server declaring the credential dead
+     mid-session (the 401 the profile calls raise).
+
+     Only a 401 may do it. The profile endpoint is the sole honest way to ask
+     whether the cookie is live, and when it answers with a 5xx, a timeout or
+     nothing at all, that is the service being down — not the reader being a
+     stranger. Treating the two as one used to throw signed-in people out to
+     the login page over a momentary blip, so an unknown answer now raises the
+     retry strip below and leaves the session alone.
+
+     The strip is one flag for every way the service can go missing, and it is
+     raised by whichever hears about it first — this probe or a page's own read
+     (see lib/service-events). It is *not* lowered by the next thing that
+     happens to succeed: two requests in flight answer in either order, and a
+     page whose read failed must not have its strip wiped by an unrelated 200.
+     It comes down in one place only — Try again, below. */
+  const redirectedRef = useRef(false);
+  const leave = useCallback(() => {
+    if (redirectedRef.current) return;
+    redirectedRef.current = true;
+    redirectToLogin();
+  }, []);
+
+  const [serviceDown, setServiceDown] = useState(false);
+  const [rechecking, setRechecking] = useState(false);
+
+  const runProbe = useCallback(
+    async (fresh: boolean) => {
+      const state = await probeSessionState({ fresh });
+      if (state === "unauthorized") {
+        leave();
+        return;
+      }
+      // Only ever raised here. A clean probe does not lower a strip a page's
+      // failed read put up — that is Try again's job.
+      if (state === "unavailable") setServiceDown(true);
+    },
+    [leave],
+  );
+
   useEffect(() => {
-    ensureSession();
+    void runProbe(false);
+    window.addEventListener("tirbeo:session-expired", leave);
+    return () => window.removeEventListener("tirbeo:session-expired", leave);
+  }, [runProbe, leave]);
+
+  /* The same strip, for the other reason it appears: a page asked the service
+     for something and got nothing back. Every read goes through one of the two
+     wrappers in lib/api{, -client}, so one listener here covers all of them —
+     an outage is not each screen's private mystery, and it should not cost a
+     hand-written error state per screen to be visible. */
+  useEffect(() => {
+    const down = () => setServiceDown(true);
+    window.addEventListener(SERVICE_DOWN, down);
+    return () => window.removeEventListener(SERVICE_DOWN, down);
+  }, []);
+
+  /* Try again has to do all three halves: drop the strip the reader is asking
+     about, re-ask whether the session is live, and rebuild the page so its own
+     reads are made a second time. Anything still broken puts the strip straight
+     back — from the probe or from the page, whichever notices. */
+  const retryProbe = useCallback(async () => {
+    setRechecking(true);
+    setServiceDown(false);
+    await runProbe(true);
+    refresh();
+    setRechecking(false);
+  }, [runProbe, refresh]);
+
+  // Inactivity sign-out, when "stay signed in" is off.
+  useEffect(() => {
     return watchInactivity(() => {
-      window.location.href = "/settings";
+      endSessionAndLeave();
     });
   }, []);
 
@@ -170,6 +247,7 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
       />
 
       <main ref={mainRef} key={cycle} className={cn("min-h-dvh", RAIL_WIDTH)}>
+        {serviceDown ? <SessionNotice onRetry={retryProbe} rechecking={rechecking} /> : null}
         {children}
       </main>
 
@@ -178,6 +256,33 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
       {paletteOpen ? <CommandPalette onClose={() => setPaletteOpen(false)} /> : null}
 
       {signOutOpen ? <SignOutSheet onClose={() => setSignOutOpen(false)} /> : null}
+    </div>
+  );
+}
+
+/*
+ * The "we couldn't ask" strip.
+ *
+ * Shown when the session probe could not be answered — deliberately not a
+ * login page, because the reader has done nothing wrong and their cookie may
+ * well be perfectly alive. It says what is missing, offers the retry, and
+ * otherwise leaves the page alone: a settings screen whose own data loaded
+ * fine stays usable underneath.
+ */
+function SessionNotice({ onRetry, rechecking }: { onRetry: () => void; rechecking: boolean }) {
+  const t = useT();
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-divider bg-surface-2 px-4 py-2.5 text-[13.5px] text-fg sm:px-6"
+    >
+      <WifiOff className="size-4 shrink-0 text-muted" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        {t("Tirbeo isn't answering right now, so some of your settings may not have loaded.")}
+      </span>
+      <Button variant="secondary" size="sm" onClick={onRetry} disabled={rechecking}>
+        {rechecking ? t("Checking…") : t("Try again")}
+      </Button>
     </div>
   );
 }
@@ -195,9 +300,10 @@ function SideRail({
 }) {
   const t = useT();
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[22rem] flex-col border-r border-divider bg-rail lg:flex">
-      <div className="px-5 pt-7 pb-5">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[22rem] flex-col border-r border-divider bg-rail backdrop-blur-2xl backdrop-saturate-150 lg:flex">
+      <div className="px-5 pt-7 pb-4">
         <Wordmark />
+        <AccountChip />
       </div>
 
       <div className="px-4 pb-4">
@@ -217,7 +323,7 @@ function SideRail({
         <button
           type="button"
           onClick={onSignOut}
- className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-full bg-danger px-3.5 text-[15px] font-semibold text-white outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_85%,#000)] active:bg-[color-mix(in_srgb,var(--danger)_72%,#000)]"
+          className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-danger px-3.5 text-[14px] font-semibold text-white outline-none transition-colors hover:brightness-105 active:brightness-95"
         >
           <LogOut className="size-[18px] shrink-0" strokeWidth={2.2} />
           {t("Log out")}
@@ -233,6 +339,48 @@ function Wordmark() {
       <span className="text-[24px] leading-none font-extrabold tracking-[-0.03em]">Tirbeo</span>
       <span className="text-[24px] leading-none font-bold tracking-[-0.02em] text-muted">MyProfile</span>
     </span>
+  );
+}
+
+/** Whose account this is, always on screen while you work.
+    The one place that answers "am I in the right account?" without a click,
+    which matters most right after a sign-out — so it reads the profile the
+    same way every page does, and the blank it shows while waiting is a blank
+    for *this* account rather than the last one's name. */
+function AccountChip() {
+  const profile = useProfile();
+  const t = useT();
+  if (!profile) {
+    return (
+      <div className="mt-4 flex items-center gap-3 px-1" aria-busy="true">
+        <span className="size-9 shrink-0 animate-pulse rounded-full bg-surface-2" />
+        <span className="min-w-0 flex-1 space-y-1.5">
+          <span className="block h-[12px] w-[55%] animate-pulse rounded-full bg-surface-2" />
+          <span className="block h-[11px] w-[78%] animate-pulse rounded-full bg-surface-2/70" />
+        </span>
+      </div>
+    );
+  }
+  const name = displayName(profile) || profile.username || profile.email;
+  const role = t("Signed-in account");
+  return (
+    <Link
+      href="/settings/edit-profile"
+      aria-label={`${role}: ${name}`}
+      onClick={() => haptic("light")}
+      className="mt-4 flex w-full items-center gap-3 rounded-xl px-1 py-1 outline-none transition-colors hover:bg-surface-2/60 active:bg-surface-2/80"
+    >
+      <ProfilePicture
+        photo={profile.photo}
+        seed={profile.username || profile.email}
+        name={name}
+        size={36}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] leading-tight font-semibold">{name}</span>
+        <span className="mt-0.5 block truncate text-[12px] leading-tight text-muted">{profile.email}</span>
+      </span>
+    </Link>
   );
 }
 
@@ -252,10 +400,9 @@ export function SignOutSheet({ onClose }: { onClose: () => void }) {
           confirmLabel="Log out"
           confirmVariant="danger"
           onConfirm={() => {
-            endSession();
-            /* There's no sign-in screen to fall back to — the app root is the
-               account, so logging out lands you back at the top of it. */
-            window.location.href = "/settings";
+            /* Revoke server session + cookies, then land on the accounts
+               login — the app that owns the cookie. */
+            endSessionAndLeave();
           }}
         />
       }
@@ -331,7 +478,7 @@ function NavGroups({ query, onNavigate }: { query: string; onNavigate?: () => vo
     <>
       {groups.map((group) => (
         <div key={group.id} className="mb-8 last:mb-0">
-          <p className="px-3.5 pt-2 pb-2.5 text-[11.5px] font-semibold tracking-[0.08em] text-muted uppercase">
+          <p className="px-3.5 pt-2 pb-2 text-[13px] font-semibold text-muted">
             {t(group.title)}
           </p>
           <div className="flex flex-col gap-0.5">
@@ -348,7 +495,7 @@ function NavGroups({ query, onNavigate }: { query: string; onNavigate?: () => vo
                   }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
- "flex min-h-11 items-center gap-3.5 rounded-2xl px-3.5 text-[15px] outline-none transition-colors",
+                    "flex min-h-10 items-center gap-3 rounded-lg px-3 text-[14.5px] outline-none transition-colors",
                     active
                       ? "bg-surface-2 font-semibold text-fg"
                       : "font-medium text-fg/90 hover:bg-surface-2/60 active:bg-surface-2/80",

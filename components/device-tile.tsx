@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight, Monitor, Smartphone, Tablet } from "lucide-react";
 import { cn } from "@/components/ig-ui";
+import { LIVE, ROW } from "@/components/settings-shell";
 import type { DeviceKind } from "@/lib/device";
 import { haptic } from "@/lib/haptics";
 
@@ -44,7 +45,7 @@ export function DeviceTile({
     <span
       aria-hidden
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-[22px]",
+        "flex shrink-0 items-center justify-center rounded-2xl",
         size === "xl" ? "size-[104px]" : "size-[62px]",
         TONE[tone],
       )}
@@ -78,7 +79,7 @@ export function DeviceRow({
     <Link
       href={href}
       onClick={() => haptic("light")}
- className="flex w-full items-center gap-4 px-5 py-4 text-left outline-none transition-colors hover:bg-surface-2/50 active:bg-surface-2/70"
+      className={cn(ROW, LIVE)}
     >
       <DeviceTile kind={kind} tone={tone} />
       <span className="min-w-0 flex-1">

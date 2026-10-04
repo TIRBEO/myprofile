@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { SearchField } from "@/components/ig-ui";
+import { Chip, cn, PILL_BASE, PILL_FILL, SearchField } from "@/components/ig-ui";
 import {
   Helper,
   LinkRow,
@@ -96,14 +96,9 @@ export default function HelpPage() {
       {searching ? null : (
         <div className="mt-3.5 flex flex-wrap gap-2">
           {DOC_CATEGORIES.map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              onClick={() => jumpTo(categoryId(category.id))}
- className="min-h-10 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13.5px] font-medium outline-none transition-colors hover:bg-surface-2"
-            >
+            <Chip key={category.id} onClick={() => jumpTo(categoryId(category.id))}>
               {category.id}
-            </button>
+            </Chip>
           ))}
         </div>
       )}
@@ -186,7 +181,7 @@ export default function HelpPage() {
             <Link
               href="/settings/help/support"
               onClick={() => haptic("light")}
- className="min-h-10 rounded-full bg-surface-3 px-4 py-2 text-[13.5px] font-semibold outline-none transition-colors hover:brightness-110"
+              className={cn(PILL_BASE, PILL_FILL.outline, "max-w-fit")}
             >
               Write to support
             </Link>

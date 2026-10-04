@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { cn, PILL_BASE, PILL_FILL, Sheet } from "@/components/ig-ui";
-import { type CodeSet, downloadCodesPdf, markSeen } from "@/lib/backup-codes";
+import { downloadCodesPdf } from "@/lib/backup-codes";
+import type { RevealedCodes } from "@/lib/two-factor";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { Check, Copy, Download } from "lucide-react";
@@ -10,10 +11,11 @@ import { Check, Copy, Download } from "lucide-react";
 /* ═══════════════════════════════════════════════════════════════════
    Backup codes reveal sheet
 
-   The only place a set of backup codes is ever readable, and it is
-   readable once: closing it, or leaving the page it sits on, files the
-   set away for good. Used by Two-factor right after setup and by the
-   backup codes page after a fresh generation.
+   The account service prints a set once, in the reply that minted it, and
+   keeps only the hashes after that. So this sheet is the one moment a set
+   is readable anywhere: it holds the codes for as long as it is open, and
+   when the parent drops it they are gone from the browser too. Nothing is
+   written to storage here — there is nowhere to write them back from.
    ═══════════════════════════════════════════════════════════════════ */
 
 export function BackupCodesSheet({
@@ -21,31 +23,12 @@ export function BackupCodesSheet({
   stamp,
   onDone,
 }: {
-  set: CodeSet;
+  set: RevealedCodes;
   stamp: string;
   onDone: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const toast = useToast();
-
-  function dismiss() {
-    markSeen(set.id);
-    onDone();
-  }
-
-  // Leaving without closing the sheet still costs the codes. The timer is
-  // cancelled by an immediate remount, so React's dev double-render doesn't
-  // file the set away before it is ever shown.
-  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (pending.current) {
-      clearTimeout(pending.current);
-      pending.current = null;
-    }
-    return () => {
-      pending.current = setTimeout(() => markSeen(set.id), 0);
-    };
-  }, [set.id]);
 
   function copyAll() {
     navigator.clipboard
@@ -68,7 +51,7 @@ export function BackupCodesSheet({
     <Sheet
       title="Your backup codes"
       description="Save these now. Once you close this, they can't be shown again."
-      onClose={dismiss}
+      onClose={onDone}
       footer={
         <div className="flex flex-col gap-2.5 sm:flex-row-reverse sm:gap-3">
           <button

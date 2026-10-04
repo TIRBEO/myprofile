@@ -24,7 +24,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
-import { Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Textarea, cn } from "@/components/ig-ui";
+import { Button, Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Textarea, cn } from "@/components/ig-ui";
 import { ProfilePicture } from "@/components/profile-picture";
 import { Prose, StatementBody, StatementHead, StatementSection } from "@/components/statement";
 import {
@@ -37,8 +37,12 @@ import {
   type Welcome,
 } from "@/lib/account-state";
 import { type Appeal, appeal, appealFor, decisionStatus } from "@/lib/account-status";
-import { GRACE_DAYS, cancel, readPlan, remaining } from "@/lib/delete-account";
-import { readDeactivation, reactivate } from "@/lib/deactivate";
+import { GRACE_DAYS, remaining } from "@/lib/delete-account";
+import {
+  apiCancelDeletion,
+  apiReactivate,
+  getAccountState,
+} from "@/lib/account-lifecycle";
 import { ago, formatDate, formatStamp } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 import { useProfile } from "@/lib/profile";
@@ -141,16 +145,16 @@ function Full({
     screen is allowed to be loud. */
 function Plain({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="lg"
       onClick={() => {
         haptic("light");
         onClick();
       }}
- className="min-h-[44px] rounded-full px-4 py-2 text-center text-[14.5px] font-semibold text-muted outline-none transition-colors hover:bg-surface-2 hover:text-fg"
     >
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -183,14 +187,23 @@ function BackMark() {
 /* ── 1. A pause you took ────────────────────────────────────────── */
 
 function Deactivated({ lock }: { lock: Lock }) {
-  /** The reason you gave is only on this screen while the pause is, and
-      pressing Reactivate deletes it from storage — so it's read once. */
-  const [record] = useState(readDeactivation);
+  /** The reason and the date come from the account, not this browser — so the
+      screen says the same thing whoever opened it. */
+  const account = getAccountState();
+  const record = account?.deactivated
+    ? { at: account.deactivatedAt ? Date.parse(account.deactivatedAt) : Date.now(), reason: account.deactivatedReason ?? "" }
+    : null;
+  const [busy, setBusy] = useState(false);
 
-  function comeBack() {
-    if (record) writeWelcome({ kind: "reactivated", at: Date.now(), from: record.at });
-    reactivate();
-    haptic("success");
+  async function comeBack() {
+    setBusy(true);
+    try {
+      await apiReactivate();
+      if (record) writeWelcome({ kind: "reactivated", at: Date.now(), from: record.at });
+      haptic("success");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -205,7 +218,7 @@ function Deactivated({ lock }: { lock: Lock }) {
               body: (
                 <>
                   <Prose>You paused this account yourself on {formatStamp(record.at)}.</Prose>
-                  <Prose>The reason you gave: {record.reason}.</Prose>
+                  {record.reason ? <Prose>The reason you gave: {record.reason}.</Prose> : null}
                 </>
               ),
             }
@@ -219,7 +232,7 @@ function Deactivated({ lock }: { lock: Lock }) {
             <>
               <Prose>
                 Nothing was deleted. Your profile details, your saved choices and your records are
-                held exactly where you left them, on this device.
+                held exactly where you left them, on the account.
               </Prose>
               <Prose>
                 Every other device was signed out when the profile went away, so they&apos;ll need to
@@ -238,7 +251,7 @@ function Deactivated({ lock }: { lock: Lock }) {
           ),
         },
       ]}
-      actions={<Full label="Reactivate now" onClick={comeBack} />}
+      actions={<Full label={busy ? "Reactivating…" : "Reactivate now"} onClick={comeBack} />}
       foot="Pausing is reversible for as long as you leave it paused — there's no window here and nothing expires."
     />
   );
@@ -247,8 +260,13 @@ function Deactivated({ lock }: { lock: Lock }) {
 /* ── 2. A deletion already asked for ───────────────────────────── */
 
 function Deletion({ lock }: { lock: Lock }) {
-  const plan = readPlan();
+  const account = getAccountState();
+  const finalAtMs = account?.deletionFinalAt ? Date.parse(account.deletionFinalAt) : null;
+  /* The window is a fixed 30 days from the request, so the request moment is
+     the final date minus that — enough to draw how far the clock has run. */
+  const asked = finalAtMs != null ? finalAtMs - GRACE_DAYS * 86_400_000 : Date.now();
   const [now, setNow] = useState(() => Date.now());
+  const [busy, setBusy] = useState(false);
 
   /* The countdown is the only thing on this screen that keeps moving, and
      it's allowed to: it is the reason the page exists. */
@@ -257,15 +275,19 @@ function Deletion({ lock }: { lock: Lock }) {
     return () => window.clearInterval(id);
   }, []);
 
-  if (!plan) return null;
-  const left = remaining(plan.finalAt, now);
-  const gone = Math.min(1, Math.max(0, (now - plan.scheduledAt) / (plan.finalAt - plan.scheduledAt)));
-  const asked = plan.scheduledAt;
+  if (finalAtMs == null) return null;
+  const left = remaining(finalAtMs, now);
+  const gone = Math.min(1, Math.max(0, (now - asked) / (finalAtMs - asked)));
 
-  function keepIt() {
-    writeWelcome({ kind: "deletion-cancelled", at: Date.now(), from: asked });
-    cancel();
-    haptic("success");
+  async function keepIt() {
+    setBusy(true);
+    try {
+      await apiCancelDeletion();
+      writeWelcome({ kind: "deletion-cancelled", at: Date.now(), from: asked });
+      haptic("success");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -297,8 +319,8 @@ function Deletion({ lock }: { lock: Lock }) {
           </div>
           <p className="mt-2.5 text-[13px] leading-relaxed text-muted tabular-nums">
             {left.done
-              ? `The window ran out on ${formatDate(plan.finalAt)}.`
-              : `${left.hours}h ${left.minutes}m ${left.seconds}s · final on ${formatDate(plan.finalAt)}`}
+              ? `The window ran out on ${formatDate(finalAtMs)}.`
+              : `${left.hours}h ${left.minutes}m ${left.seconds}s · final on ${formatDate(finalAtMs)}`}
           </p>
         </div>
       }
@@ -337,8 +359,8 @@ function Deletion({ lock }: { lock: Lock }) {
           ),
         },
       ]}
-      actions={<Full label="Keep my account" onClick={keepIt} />}
-      foot="Once the window runs out the record is gone from this browser, and there's no server holding a copy to bring it back from."
+      actions={<Full label={busy ? "Cancelling…" : "Keep my account"} onClick={keepIt} />}
+      foot="Once the window runs out the account is deleted on the server, and there's no copy left to bring it back from."
     />
   );
 }
@@ -365,16 +387,24 @@ function Restricted({ lock }: { lock: Lock }) {
     router.replace("/settings");
   }
 
-  function send(note: string) {
-    appeal(item.id, note);
-    /* An appeal is an answer, so it clears the stop the same way reading the
-       decision does. Both leave the decision itself on file. */
-    skipRestriction(item.id);
-    setAppealRow(appealFor(item.id));
-    setSheetOpen(false);
-    haptic("success");
-    toast.success("Review requested — we'll answer under Account status");
-    router.replace("/settings");
+  async function send(note: string) {
+    try {
+      const filed = await appeal(item.id, note);
+      /* An appeal is an answer, so it clears the stop the same way reading the
+         decision does. Both leave the decision itself on file — now on the
+         account, where a review server can answer it. */
+      skipRestriction(item.id);
+      setAppealRow(filed);
+      setSheetOpen(false);
+      haptic("success");
+      toast.success("Review requested — we'll answer under Account status");
+      router.replace("/settings");
+    } catch (err) {
+      haptic("error");
+      toast.error(
+        err instanceof Error && err.message ? err.message : "The appeal couldn't be filed.",
+      );
+    }
   }
 
   return (

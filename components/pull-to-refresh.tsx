@@ -5,9 +5,9 @@
 
    The gesture every phone user already knows: nothing has changed on the
    account, but the finger wants proof. So the column comes down against a
-   rubber band, a ring turns, and the page underneath is read again from
-   the beginning — which, with no server to ask, means re-mounting it so
-   every number and list is taken fresh off this device.
+   rubber band, a ring turns, and the page underneath asks the account
+   again — the page's own re-read (lib/page-refresh), not a rebuild of the
+   rail, the header and every other panel along with it.
 
    It only answers to a pull that starts at the top of the page, because a
    gesture that competes with scrolling loses every time.
@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { cn } from "@/components/ig-ui";
 import { haptic } from "@/lib/haptics";
+import { refreshCurrentPage } from "@/lib/page-refresh";
 
 /** How far it has to come down before it counts as an ask. */
 const THRESHOLD = 62;
@@ -109,7 +110,9 @@ export function PullToRefresh({
         busyRef.current = false;
         setBusy(false);
         lift(0, true);
-        onRefresh();
+        /* The page re-reads itself when it knows how; only a page with no
+           registered handler pays for the shell's rebuild. */
+        if (!refreshCurrentPage()) onRefresh();
       }, READ_MS);
     };
 

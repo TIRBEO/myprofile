@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AudioLines, ChevronRight, ImageIcon, Pause, Play, Rewind, Square, X } from "lucide-react";
 import {
+  Button,
+  Chip,
+  IconButton,
   cn,
   Disclosure,
   PILL_BASE,
@@ -17,9 +20,11 @@ import {
   Breadcrumb,
   Helper,
   LinkRow,
+  LIVE,
   Panel,
   PillButton,
   PillStack,
+  ROW,
   SectionTitle,
   SettingsPage,
 } from "@/components/settings-shell";
@@ -71,14 +76,6 @@ const FIGURE_DEFAULTS: FigureChoice = { figures: "shown" };
 function rateLabel(rate: number) {
   return rate === 1 ? "Normal" : `${rate}×`;
 }
-
-/** One control inside the article's toolbar. They share a shape so four
-    different ways of consuming the page read as one set of choices rather
-    than four unrelated buttons that happened to land in a row. */
-const SEGMENT =
- "inline-flex min-h-10 min-w-0 items-center gap-1.5 rounded-[10px] px-3 py-2 text-[13.5px] font-medium text-muted outline-none transition-colors hover:bg-surface-2 hover:text-fg";
-
-const SEGMENT_ON = "bg-surface-3 text-fg hover:bg-surface-3 hover:text-fg";
 
 export default function ArticlePage() {
   const params = useParams<{ slug: string }>();
@@ -260,33 +257,34 @@ export default function ArticlePage() {
           <div className="mt-5 flex flex-wrap items-center gap-1 rounded-[16px] border border-border bg-surface p-1.5">
             {voice.supported ? (
               <>
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  className="shrink-0"
                   onClick={() => {
                     haptic("light");
                     if (voice.playing) voice.pause();
                     else voice.play();
                   }}
-                  className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-[10px] bg-accent px-3.5 py-2 text-[13.5px] font-semibold text-accent-fg outline-none transition hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  icon={
+                    voice.playing ? (
+                      <Pause className="size-[16px]" strokeWidth={2.2} />
+                    ) : (
+                      <Play className="size-[16px]" strokeWidth={2.2} />
+                    )
+                  }
                 >
-                  {voice.playing ? (
-                    <Pause className="size-[16px]" strokeWidth={2.2} />
-                  ) : (
-                    <Play className="size-[16px]" strokeWidth={2.2} />
-                  )}
                   {voice.playing ? t("Pause") : voice.at >= 0 ? t("Continue") : t("Listen")}
-                </button>
+                </Button>
                 {/* Speed and voice, one tap away and named for what it changes.
                     It used to print the voice's own name here, which on most
                     machines is a string of another language — so the control
                     that only sets the reading read as a language switcher. */}
-                <button
-                  type="button"
+                <Chip
+                  className="min-w-0 max-w-full"
                   onClick={() => {
                     haptic("light");
                     setVoiceSheet(true);
                   }}
-                  className={cn(SEGMENT, "min-w-0 max-w-full")}
                 >
                   <AudioLines className="size-[15px] shrink-0 opacity-70" strokeWidth={2} />
                   <span className="truncate">
@@ -296,37 +294,33 @@ export default function ArticlePage() {
                     </span>
                     <span className="tabular-nums">{rateLabel(voice.rate)}</span>
                   </span>
-                </button>
+                </Chip>
               </>
             ) : null}
             <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-divider" />
             {/* One idiom for both optional views: pressed or not pressed, the
                 same shape. A full switch inside a toolbar made a two-state
                 button look like a setting page. */}
-            <button
-              type="button"
-              aria-pressed={follow}
+            <Chip
+              active={follow}
               onClick={() => {
                 haptic("light");
                 setFollow((prev) => !prev);
               }}
-              className={cn(SEGMENT, follow && SEGMENT_ON)}
             >
               {t("Read along")}
-            </button>
+            </Chip>
             {hasFigures ? (
-              <button
-                type="button"
-                aria-pressed={showFigures}
+              <Chip
+                active={showFigures}
                 onClick={() => {
                   haptic("light");
                   set({ figures: showFigures ? "hidden" : "shown" });
                 }}
-                className={cn(SEGMENT, !showFigures && SEGMENT_ON)}
               >
                 <ImageIcon className="size-[15px] shrink-0 opacity-70" strokeWidth={2} />
                 {showFigures ? t("Hide pictures") : t("Show pictures")}
-              </button>
+              </Chip>
             ) : null}
           </div>
         ) : null}
@@ -388,7 +382,7 @@ export default function ArticlePage() {
                   type="button"
                   aria-expanded={isOpen}
                   onClick={() => ask(i)}
- className="flex w-full items-center gap-3 px-4 py-4 text-left outline-none transition-colors hover:bg-surface-2/50 sm:px-5"
+                  className={cn(ROW, LIVE)}
                 >
                   <span
                     className={cn(
@@ -420,7 +414,7 @@ export default function ArticlePage() {
       {/* One bordered strip: the question and the two answers in the same
           container, so it reads as one thing being asked rather than a
           sentence with two unrelated buttons after it. */}
-      <div className="mt-10 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border px-4 py-3.5 sm:px-5">
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border px-4 py-3.5 sm:px-5">
         <p className="text-[14.5px] font-medium">
           {vote
             ? vote === "yes"
@@ -429,30 +423,27 @@ export default function ArticlePage() {
             : t("Was this helpful?")}
         </p>
         {vote ? (
-          <button
-            type="button"
+          <Chip
+            className="text-muted hover:text-fg"
             onClick={() => {
               haptic("light");
               setVotes(setVote(article.slug, vote));
             }}
- className="min-h-10 rounded-full px-3 py-1.5 text-[13px] font-medium text-muted outline-none transition-colors hover:bg-surface-2 hover:text-fg"
           >
             {t("Change")}
-          </button>
+          </Chip>
         ) : (
           <div className="flex items-center gap-2">
             {(["yes", "no"] as DocVote[]).map((answer) => (
-              <button
+              <Chip
                 key={answer}
-                type="button"
                 onClick={() => {
                   haptic("light");
                   setVotes(setVote(article.slug, answer));
                 }}
- className="min-h-10 rounded-full border border-border px-5 py-1.5 text-[13.5px] font-semibold outline-none transition-colors hover:bg-surface-2"
               >
                 {answer === "yes" ? t("Yes") : t("No")}
-              </button>
+              </Chip>
             ))}
           </div>
         )}
@@ -518,58 +509,50 @@ export default function ArticlePage() {
           <div aria-hidden className="h-24" />
           <div className="fixed inset-x-0 bottom-0 z-50 px-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))] sm:px-5 sm:pb-5">
             <div className="mx-auto flex max-w-[520px] items-center gap-1.5 rounded-full border border-border bg-surface-3/95 py-1.5 pr-2 pl-1.5 shadow-[0_10px_30px_rgb(0_0_0/0.35)] backdrop-blur-md">
-              <button
-                type="button"
+              <IconButton
+                label={t("Back a part")}
                 onClick={() => {
                   haptic("light");
                   voice.rewind();
                 }}
-                aria-label={t("Back a part")}
- className="grid size-10 shrink-0 place-items-center rounded-full text-fg outline-none transition-colors hover:bg-fg/10"
-              >
-                <Rewind className="size-[19px]" strokeWidth={2} />
-              </button>
-              <button
-                type="button"
+                icon={<Rewind className="size-[19px]" strokeWidth={2} />}
+              />
+              <IconButton
+                label={voice.playing ? t("Pause") : t("Continue")}
                 onClick={() => {
                   haptic("light");
                   if (voice.playing) voice.pause();
                   else voice.play();
                 }}
-                aria-label={voice.playing ? t("Pause") : t("Continue")}
-                className="grid size-11 shrink-0 place-items-center rounded-full bg-accent text-accent-fg outline-none transition hover:brightness-110 active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                {voice.playing ? (
-                  <Pause className="size-[19px]" strokeWidth={2.4} />
-                ) : (
-                  <Play className="size-[19px] translate-x-[1px]" strokeWidth={2.4} />
-                )}
-              </button>
+                className="size-11 bg-accent text-white hover:brightness-110 active:brightness-95 hover:text-fg"
+                icon={
+                  voice.playing ? (
+                    <Pause className="size-[19px]" strokeWidth={2.4} />
+                  ) : (
+                    <Play className="size-[19px] translate-x-[1px]" strokeWidth={2.4} />
+                  )
+                }
+              />
               <span className="min-w-0 flex-1 px-1 text-center text-[12.5px] tabular-nums text-muted">
                 {voice.at + 1} / {blocks.length}
               </span>
-              <button
-                type="button"
+              <IconButton
+                label={t("Voice and speed")}
                 onClick={() => {
                   haptic("light");
                   setVoiceSheet(true);
                 }}
-                aria-label={t("Voice and speed")}
- className="grid size-10 shrink-0 place-items-center rounded-full text-fg outline-none transition-colors hover:bg-fg/10"
-              >
-                <AudioLines className="size-[19px]" strokeWidth={2} />
-              </button>
-              <button
-                type="button"
+                icon={<AudioLines className="size-[19px]" strokeWidth={2} />}
+              />
+              <IconButton
+                label={t("Stop")}
                 onClick={() => {
                   haptic("light");
                   voice.stop();
                 }}
-                aria-label={t("Stop")}
- className="grid size-10 shrink-0 place-items-center rounded-full text-muted outline-none transition-colors hover:bg-fg/10 hover:text-fg"
-              >
-                <Square className="size-[15px]" strokeWidth={2.2} fill="currentColor" />
-              </button>
+                className="text-muted hover:text-fg"
+                icon={<Square className="size-[15px]" strokeWidth={2.2} fill="currentColor" />}
+              />
             </div>
           </div>
         </>
@@ -819,14 +802,12 @@ function FigureViewer({
           </figcaption>
         ) : null}
       </figure>
-      <button
-        type="button"
+      <IconButton
+        label="Close the picture"
         onClick={onClose}
-        aria-label="Close the picture"
- className="absolute top-4 right-4 flex size-10 items-center justify-center rounded-full bg-surface-3 text-fg outline-none transition-colors hover:bg-surface-3/80"
-      >
-        <X className="size-5" strokeWidth={2} />
-      </button>
+        className="absolute top-4 right-4 bg-surface-3 hover:bg-surface-3/80"
+        icon={<X className="size-5" strokeWidth={2} />}
+      />
     </div>
   );
 }

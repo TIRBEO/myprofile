@@ -12,6 +12,8 @@ import {
   StaticRow,
 } from "@/components/settings-shell";
 import { LANGS, useLanguage, type Lang } from "@/lib/language";
+import { reloadSettings } from "@/lib/remote-store";
+import { usePageRefresh } from "@/lib/page-refresh";
 import { formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 

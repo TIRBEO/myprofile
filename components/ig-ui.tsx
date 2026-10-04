@@ -3,6 +3,7 @@
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
+  KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
   ReactElement,
   ReactNode,
@@ -23,8 +24,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Loader2, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, Loader2, Search, X } from "lucide-react";
 import { haptic } from "@/lib/haptics";
+import { RandomAvatar } from "@/components/random-avatar";
 
 /* ═══════════════════════════════════════════════════════════════════
    Tirbeo — account primitives
@@ -351,27 +353,32 @@ export function Switch({
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
 type ButtonSize = "sm" | "md" | "lg";
 
+/* Instagram's four button skins: one blue fill, one hairline outline,
+   one quiet text, one red. Nothing else is ever a button. */
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-fg hover:brightness-110 active:brightness-95",
-  secondary: "border border-border bg-transparent text-fg hover:bg-surface-2",
+  primary: "bg-accent text-accent-fg hover:bg-accent-hover active:brightness-95",
+  secondary:
+    "border border-border-strong bg-surface text-fg hover:bg-surface-2 active:bg-surface-3",
   ghost: "text-muted hover:bg-surface-2 hover:text-fg",
-  danger: "bg-danger text-white hover:brightness-110 active:brightness-95",
-  link: "text-accent-text hover:underline px-0",
+  danger: "bg-danger text-white hover:brightness-105 active:brightness-95",
+  link: "text-accent-text hover:text-accent-hover px-0",
 };
 
 /** Every full-width action button in settings is built from these two, so a
     "Save" and a "Delete" can't drift apart in size, only in fill. */
 export const PILL_BASE =
-  "flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 " +
-  "text-center text-[14.5px] leading-snug font-semibold outline-none transition " +
+  "flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 " +
+  "text-center text-[14px] leading-snug font-semibold outline-none transition " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export const PILL_FILL = {
-  primary: "bg-accent text-accent-fg hover:brightness-110 active:brightness-95",
-  danger: "bg-danger text-white hover:brightness-110 active:brightness-95",
-  /** The way out is filled too — a bordered ghost next to a solid blue button
-      reads as the disabled one. */
-  outline: "bg-surface-3 text-fg hover:brightness-110 active:brightness-95",
+  primary: "bg-accent text-accent-fg hover:bg-accent-hover active:brightness-95",
+  danger: "bg-danger text-white hover:brightness-105 active:brightness-95",
+  /** Instagram's secondary button is a hairline outline, never a grey
+      slab — a filled one sits next to the blue one and reads as the
+      disabled pair, while the outline reads as the way out. */
+  outline:
+    "border border-border-strong bg-surface text-fg hover:bg-surface-2 active:bg-surface-3",
 } as const;
 
 /** A filled button that can't be used yet still has to read as blue, or as
@@ -379,9 +386,9 @@ export const PILL_FILL = {
 export const PILL_DISABLED = "pointer-events-none opacity-55";
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "h-10 rounded-lg px-3.5 text-[13px] gap-1.5",
-  md: "h-11 rounded-xl px-4 text-[14.5px] gap-2",
-  lg: "h-[46px] rounded-xl px-5 text-[14.5px] gap-2",
+  sm: "h-9 rounded-lg px-3.5 text-[13px] gap-1.5",
+  md: "h-10 rounded-lg px-4 text-[14px] gap-2",
+  lg: "h-11 rounded-lg px-5 text-[14.5px] gap-2",
 };
 
 export function Button({
@@ -422,12 +429,17 @@ export function Button({
   );
 }
 
+/** Round icon button — Instagram's transport and toolbar circles. The
+    default is 40px, but any caller that supplies its own `size-…` class
+    (an inline 8px eye, a 76px avatar picker) keeps it: Tailwind's order,
+    not the attribute's, decides which of two size utilities wins. */
 export function IconButton({
   label,
   icon,
   className,
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string; icon: ReactNode }) {
+  const sized = /(^|\s)size-/.test(className ?? "");
   return (
     <button
       {...rest}
@@ -435,7 +447,8 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-10 shrink-0 items-center justify-center rounded-full text-fg",
+        "flex shrink-0 items-center justify-center rounded-full text-fg",
+        !sized && "size-10",
         "transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3",
         "disabled:pointer-events-none disabled:opacity-45",
         className,
@@ -446,7 +459,8 @@ export function IconButton({
   );
 }
 
-/** Segmented control. Exactly one option is active. */
+/** Segmented control. Exactly one option is active — the active half is a
+    blue pill on a grey track, the shape Instagram uses for every chooser. */
 export function Segmented<T extends string>({
   value,
   options,
@@ -466,7 +480,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className={cn("flex gap-1 rounded-[13px] bg-surface-2 p-1", block && "w-full")}
+      className={cn("flex gap-1 rounded-full bg-surface-2 p-1", block && "w-full")}
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -481,11 +495,11 @@ export function Segmented<T extends string>({
               onChange(opt.value);
             }}
             className={cn(
-              "flex-1 rounded-[10px] text-center font-semibold whitespace-nowrap",
+              "flex-1 rounded-full text-center font-semibold whitespace-nowrap",
               "transition-all duration-150",
-              size === "sm" ? "h-8 text-[13px]" : "h-10 text-[14px]",
+              size === "sm" ? "h-8 text-[13px]" : "h-9 text-[14px]",
               active
-                ? "bg-accent text-accent-fg"
+                ? "bg-accent text-accent-fg shadow-[0_1px_2px_rgb(0_0_0/0.18)]"
                 : "bg-transparent text-muted hover:text-fg",
             )}
           >
@@ -499,16 +513,17 @@ export function Segmented<T extends string>({
 
 /* ── Form controls ──────────────────────────────────────────────── */
 
-/* A field is a line, not a box: the label sits above an underline and the
-   typed value carries no fill of its own. A grey box inside a card is a box
-   inside a box, and it makes a short answer look like a sunken panel. The rule
-   under the text is the field; it turns blue while it has focus and red when
-   the answer is wrong. */
+/* A field is a box, not a line: Instagram's inputs are an off-white slab
+   inside a hairline, turning white with a blue ring while you type. The
+   whole field is the target, so the box carries the padding rather than a
+   rule drawn under the text. */
 const CONTROL =
-  "w-full border-0 border-b border-border bg-transparent px-0 py-2 text-[15.5px] text-fg outline-none " +
-  "placeholder:text-muted/60 " +
+  "w-full rounded-lg border border-border bg-surface-2 px-3.5 py-2.5 text-[15px] text-fg outline-none " +
+  "placeholder:text-muted/70 " +
   "transition-colors duration-150 " +
-  "focus:border-accent focus:outline-none disabled:opacity-50";
+  "hover:border-border-strong " +
+  "focus:border-accent focus:bg-surface focus:ring-[3px] focus:ring-accent/18 focus:outline-none " +
+  "disabled:opacity-50";
 
 export const Input = forwardRef<
   HTMLInputElement,
@@ -521,8 +536,8 @@ export const Input = forwardRef<
       aria-invalid={invalid || undefined}
       className={cn(
         CONTROL,
-        "h-12",
-        invalid && "border-danger/70",
+        "h-11",
+        invalid && "border-danger",
         className,
       )}
     />
@@ -542,7 +557,7 @@ export const Textarea = forwardRef<
       className={cn(
         CONTROL,
         "resize-none leading-relaxed",
-        invalid && "border-danger/70",
+        invalid && "border-danger",
         className,
       )}
     />
@@ -555,7 +570,7 @@ export const Select = forwardRef<
 >(function Select({ className, options, ...rest }, ref) {
   return (
     <div className="relative">
-      <select ref={ref} {...rest} className={cn(CONTROL, "h-12 appearance-none pr-8", className)}>
+      <select ref={ref} {...rest} className={cn(CONTROL, "h-11 appearance-none pr-9", className)}>
         {options.map((o) => (
           <option key={o} value={o}>
             {o}
@@ -623,8 +638,56 @@ export function Field({
   );
 }
 
+/** A password box with the usual way to check what was typed in it. Sits in a
+    `Field` the same way an `Input` does, so the label and the error line up. */
+export function PasswordField({
+  value,
+  onChange,
+  onKeyDown,
+  placeholder = "Your password",
+  autoComplete = "current-password",
+  autoFocus = false,
+  disabled,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  autoComplete?: "current-password" | "new-password";
+  autoFocus?: boolean;
+  disabled?: boolean;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+        disabled={disabled}
+        className="pr-11"
+      />
+      <IconButton
+        label={visible ? "Hide password" : "Show password"}
+        icon={visible ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
+        onClick={() => setVisible((v) => !v)}
+        className={cn(
+          "absolute right-1.5 top-1/2 size-8 -translate-y-1/2 after:absolute after:-inset-1.5 after:content-['']",
+          visible ? "bg-surface-2" : "text-muted",
+        )}
+      />
+    </div>
+  );
+}
+
 /* ── Display ────────────────────────────────────────────────────── */
 
+/** Status chip. Instagram's chips are sentence case, semi-bold and
+    rounded-full on a hairline — never tracked capitals in mono. */
 export function Pill({
   children,
   tone = "neutral",
@@ -637,13 +700,55 @@ export function Pill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-current/25 px-2 py-[3px] font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase",
+        "inline-flex items-center gap-1.5 rounded-full border border-current/30 px-2.5 py-[3px] text-[12px] font-semibold whitespace-nowrap",
         CHIP[tone],
       )}
     >
       {dot ? <span className="size-1.5 rounded-full bg-current" /> : null}
       {children}
     </span>
+  );
+}
+
+/**
+ * Toggle chip — the filter and jump pills. One primitive, so a row of
+ * filters is always the same 36px rounded-full on a hairline, with the
+ * selected one filled blue the way Instagram fills a chosen filter.
+ */
+export function Chip({
+  active,
+  onClick,
+  children,
+  dot,
+  className,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  active?: boolean;
+  children: ReactNode;
+  /** A category's colour, for filter rows that key off it. */
+  dot?: ReactNode;
+}) {
+  return (
+    <button
+      {...rest}
+      type="button"
+      aria-pressed={active || undefined}
+      onClick={(e) => {
+        if (onClick) haptic("selection");
+        onClick?.(e);
+      }}
+      className={cn(
+        "inline-flex min-h-9 touch-manipulation items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13.5px] font-semibold whitespace-nowrap outline-none transition-colors",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        active
+          ? "border-transparent bg-accent text-accent-fg hover:bg-accent-hover"
+          : "border-border-strong bg-surface text-fg hover:bg-surface-2 active:bg-surface-3",
+        className,
+      )}
+    >
+      {dot}
+      {children}
+    </button>
   );
 }
 
@@ -666,6 +771,10 @@ export function Avatar({
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
+  /* A provider photo (lh3.googleusercontent.com and friends) can be blocked
+     by the browser before it ever paints — a dead <img> reads as a black
+     circle. On error the generated face takes over, seeded by the name. */
+  const [photoBroken, setPhotoBroken] = useState(false);
 
   return (
     <span
@@ -677,11 +786,21 @@ export function Avatar({
       )}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
     >
-      {src ? (
+      {src && !photoBroken ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={name ?? "Profile photo"} className="size-full object-cover" />
+        <img
+          src={src}
+          alt={name ?? "Profile photo"}
+          referrerPolicy="no-referrer"
+          className="size-full object-cover"
+          onError={() => setPhotoBroken(true)}
+        />
+      ) : src && photoBroken && name ? (
+        <RandomAvatar seed={name} className="size-full" />
       ) : initials ? (
         initials
+      ) : src && photoBroken ? (
+        <RandomAvatar seed="tirbeo" className="size-full" />
       ) : (
         <PersonGlyph size={size} />
       )}
@@ -931,7 +1050,9 @@ export function SearchField({
         aria-label={placeholder}
         className={cn(
           CONTROL,
-          "h-11 rounded-full pr-10 pl-10 [&::-webkit-search-cancel-button]:hidden",
+          "h-10 rounded-full border-transparent bg-surface-2 pr-10 pl-10",
+          "hover:border-transparent focus:border-transparent focus:ring-0",
+          "[&::-webkit-search-cancel-button]:hidden",
         )}
       />
       {value ? (
@@ -939,7 +1060,7 @@ export function SearchField({
           type="button"
           aria-label="Clear search"
           onClick={() => onChange("")}
- className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded-full p-1.5 text-muted outline-none transition-colors hover:text-fg after:absolute after:-inset-2 after:content-['']"
+          className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded-full p-1.5 text-muted outline-none transition-colors hover:text-fg after:absolute after:-inset-2 after:content-['']"
         >
           <X className="size-4" />
         </button>
@@ -1182,9 +1303,9 @@ export function Sheet({
                 (closing
                   ? "animate-sheet-down sm:animate-scale-out"
                   : "animate-sheet-up sm:animate-scale-in"),
-              "rounded-t-[34px] bg-surface",
+              "rounded-t-2xl bg-surface",
               "shadow-[0_-30px_90px_-20px_rgb(0_0_0/0.7)]",
-              "sm:rounded-[30px] sm:border sm:border-border/70 sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
+              "sm:rounded-2xl sm:border sm:border-border/70 sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
               width === "lg" ? "sm:max-w-[560px]" : "sm:max-w-[420px]",
             )}
             style={{
@@ -1315,13 +1436,13 @@ export function SheetOption({
       </span>
       <span
         className={cn(
-          "flex size-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150",
-          selected ? "border-fg" : "border-track group-hover:border-muted/60",
+          "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-150",
+          selected ? "border-accent" : "border-track group-hover:border-muted/60",
         )}
       >
         <span
           className={cn(
-            "size-2 rounded-full bg-fg transition-transform duration-150",
+            "size-2.5 rounded-full bg-accent transition-transform duration-150",
             selected ? "scale-100" : "scale-0",
           )}
         />
@@ -1351,34 +1472,33 @@ export function SheetActions({
   loading?: boolean;
 }) {
   const deferredClose = useContext(SheetDeferredClose);
-  /* The bar runs edge to edge under the rule the footer already draws, and the
-     two halves are split by a hairline, so the sheet ends on lines rather than
-     on two floating pills. Cancel is the quiet half; the action keeps its
-     colour — blue when it saves, red when it takes something away. */
+  /* Instagram's dialog actions: an outlined way out beside a filled
+     decision, both 8px corners, stacked on a phone with the action under
+     the thumb. Blue when it builds, red when it takes something away. */
   return (
-    <div className="-mx-4 -mb-[calc(14px+env(safe-area-inset-bottom,0px))] flex sm:-mx-5 sm:-mb-[calc(20px+env(safe-area-inset-bottom,0px))]">
-      <button
-        type="button"
-        onClick={() => (deferredClose ? deferredClose() : onCancel())}
- className="min-w-0 flex-1 py-4 text-center text-[15px] font-medium text-muted outline-none transition-colors hover:bg-surface-2/60 hover:text-fg"
-      >
-        {cancelLabel}
-      </button>
-      <span aria-hidden className="w-px shrink-0 bg-divider" />
+    <div className="flex flex-col gap-2.5 sm:flex-row-reverse">
       <button
         type="button"
         onClick={onConfirm}
         disabled={disabled || loading}
         className={cn(
- "min-w-0 flex-1 py-4 text-center text-[15px] font-semibold outline-none transition-colors",
+          "flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[14px] font-semibold outline-none transition",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
           confirmVariant === "danger"
-            ? "text-danger-text hover:bg-danger/8"
-            : "text-accent-text hover:bg-accent/8",
-          (disabled || loading) && "pointer-events-none opacity-45",
+            ? "bg-danger text-white hover:brightness-105 active:brightness-95"
+            : "bg-accent text-accent-fg hover:bg-accent-hover active:brightness-95",
+          (disabled || loading) && "pointer-events-none opacity-55",
         )}
       >
-        {loading ? <Loader2 className="mr-1 inline size-4 animate-spin-slow align-[-2px]" /> : null}
+        {loading ? <Loader2 className="size-4 animate-spin-slow" /> : null}
         {confirmLabel}
+      </button>
+      <button
+        type="button"
+        onClick={() => (deferredClose ? deferredClose() : onCancel())}
+        className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-border-strong bg-surface px-4 py-2.5 text-[14px] font-semibold text-fg outline-none transition hover:bg-surface-2 active:bg-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        {cancelLabel}
       </button>
     </div>
   );
@@ -1698,12 +1818,12 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "w-full max-w-md overflow-hidden rounded-t-[34px] bg-surface",
+          "w-full max-w-md overflow-hidden rounded-t-2xl bg-surface",
           closing
             ? "animate-sheet-down sm:animate-scale-out"
             : "animate-sheet-up sm:animate-scale-in",
           "shadow-[0_-30px_90px_-20px_rgb(0_0_0/0.7)]",
-          "sm:rounded-[30px] sm:border sm:border-border/70 sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
+          "sm:rounded-2xl sm:border sm:border-border/70 sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
         )}
       >
         <div className="px-6 pt-4 pb-1 sm:pt-6">

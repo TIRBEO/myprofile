@@ -30,46 +30,63 @@ import {
   findEvent,
   logSignOutEverywhere,
 } from "@/lib/login-activity";
-import { readDevices, signOutOthers } from "@/lib/devices";
+import { signOutOthers } from "@/lib/devices";
+import { useReauthGuard } from "@/components/reauth-sheet";
+import { wasDeclined } from "@/lib/reauth";
 import { placeFor } from "@/lib/places";
 import { ago, formatDate, formatTime } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 import { useToast } from "@/lib/use-toast";
+import { usePageRefresh } from "@/lib/page-refresh";
+import { LoadFailed } from "@/components/page-loading";
 
 /* ═══════════════════════════════════════════════════════════════════
-   One sign-in, in full
+   One sign-in, in full — kept calm on purpose.
 
-   A row in the log is a line; this is the record behind it, written as the
-   sentences a person reading it needs — what opened, from where, when, and
-   then the one decision that matters: was this you. Saying it was leaves
-   everything as it is — no mark, no navigation, nothing sent. Saying it
-   wasn't flags the record, which lifts the log into its red state, and puts
-   up a sheet that asks you to confirm it — with the option to log out of
-   every session. Nothing here leaves the browser: no password is kept, and
-   nothing is sent anywhere.
+   The record behind a row in the log: what happened, on which machine,
+   from where, when — one short line per fact — then the one decision that
+   matters: was this you. The map shows itself when the record has coords.
+   Answering is local; the log-out is a call to the account, gated by proof
+   it's you. All behaviour is unchanged from the long-form version.
    ═══════════════════════════════════════════════════════════════════ */
 
 export default function LoginEventDetailPage() {
   const params = useParams<{ id: string }>();
   const [event, setEvent] = useState<ActivityEvent | null | undefined>(undefined);
+  const [failed, setFailed] = useState(false);
   const [confirmNotMe, setConfirmNotMe] = useState(false);
   /** How many sessions the "log out everywhere" button just ended, or 0. */
   const [signedOutAll, setSignedOutAll] = useState(0);
   const toast = useToast();
+  const { guard, reauthDialog } = useReauthGuard();
+
+  const load = () => {
+    setFailed(false);
+    findEvent(params.id).then(setEvent).catch(() => setFailed(true));
+  };
+
+  usePageRefresh(load);
 
   useEffect(() => {
-    setEvent(findEvent(params.id));
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
+
+  if (failed)
+    return (
+      <LoadFailed
+        title="Login activity"
+        message="This sign-in couldn't be read from the account. It hasn't been removed from your history — the account just didn't answer."
+        onRetry={load}
+      />
+    );
 
   if (event === undefined) return <PageSkeleton title="Login activity" sections={2} />;
 
   if (!event) {
     return (
       <SettingsPage title="Login activity">
-        <Helper lead>
-          That event isn&apos;t in the log. The log keeps a limited number of events, so an old one
-          may have aged out.
-        </Helper>
+        <Helper lead>That event isn&apos;t in the log — old entries age out.</Helper>
         <PillStack>
           <PillButton label="Back to login activity" href="/settings/login-activity" tone="outline" />
         </PillStack>
@@ -78,11 +95,19 @@ export default function LoginEventDetailPage() {
   }
 
   const record = event;
-  const place = placeFor(record.location);
+  const place = record.coords
+    ? { location: record.location, coords: record.coords }
+    : placeFor(record.location);
   /** The answer you gave, or null while the log is still asking. */
   const answer = record.review ?? null;
   const confirmed = answer === "me";
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const whatHappened =
+    record.kind === "failed"
+      ? `Sign-in blocked after ${record.method.toLowerCase()}`
+      : record.kind === "signout"
+        ? "This machine signed out"
+        : EVENT_TITLE[record.kind];
 
   /** Say it was you. The record stops asking, here and in the log. */
   function thatWasMe() {
@@ -109,13 +134,17 @@ export default function LoginEventDetailPage() {
     haptic("light");
   }
 
-  /** End every session but this one, here. The old route sent you to a picker
-      and left the record still saying "not me" with nothing done about it.
-      Pulling this trigger from the asking sheet settles the record too — you
-      don't shut every other machine out on a sign-in you recognise. */
-  function signOutAll() {
-    const others = readDevices().filter((d) => !d.current).length;
-    signOutOthers();
+  /** End every session but this one, here. */
+  async function signOutAll() {
+    let others: number;
+    try {
+      others = await guard((proof) => signOutOthers(proof));
+    } catch (err) {
+      if (wasDeclined(err)) return;
+      haptic("error");
+      toast.error(err instanceof Error && err.message ? err.message : "No sessions were ended.");
+      return;
+    }
     if (others) logSignOutEverywhere(others);
     if (answer === null)
       setEvent(answerEvent(record.id, "not-me").find((e) => e.id === record.id) ?? event);
@@ -145,86 +174,34 @@ export default function LoginEventDetailPage() {
           </StatementMark>
         }
         sub={record.current ? "This machine, right now." : "A sign-in on this account."}
-        meta={`${formatDate(record.at)} at ${formatTime(record.at)} · ${ago(record.at)}`}
       />
 
       <StatementBody>
         <StatementSection label="What happened">
           <Prose>
-            {record.kind === "failed" ? (
-              <>
-                A sign-in was <Value>turned away</Value> after <Value>{record.method.toLowerCase()}</Value>
-                . Nothing opened: no session started, and no data was reached.
-              </>
-            ) : record.kind === "signout" ? (
-              <>
-                This machine <Value>signed out</Value>, from the app or by closing the session
-                somewhere else.
-              </>
-            ) : (
-              <>
-                The account <Value>{EVENT_TITLE[record.kind].toLowerCase()}</Value> on{" "}
-                <Value>{record.device}</Value>, confirmed with{" "}
-                <Value>{record.method.toLowerCase()}</Value>.
-              </>
-            )}
+            <Value>{whatHappened}</Value> on a <Value>{record.device}</Value>, signing in with{" "}
+            <Value>{record.method.toLowerCase()}</Value>.
           </Prose>
         </StatementSection>
 
-        <StatementSection label="Where it came from">
+        <StatementSection label="Where and when">
           <Prose>
-            The request arrived on <Value>{record.ip}</Value>, which resolves to{" "}
-            <Value>{record.location}</Value>.
+            It came from the network address <Value>{record.ip}</Value>, which traces to{" "}
+            <Value>{record.location}</Value>. A location read from an address names a city, not an
+            exact place.
           </Prose>
           <Prose>
-            That is the town your network address resolves to, not the corner a device was standing
-            in. Mobile carriers and VPNs hand out addresses from somewhere other than where the
-            phone actually is, so a sign-in made from home can be drawn fifty kilometres away — and
-            a traced city is never, on its own, proof of someone else.
+            It happened on <Value>{formatDate(record.at)}</Value> at{" "}
+            <Value>{formatTime(record.at)}</Value> — <Value>{ago(record.at)}</Value>.
           </Prose>
-        </StatementSection>
-
-        <StatementSection label="When">
-          <Prose>
-            <Value>{formatDate(record.at)}</Value> at <Value>{formatTime(record.at)}</Value>, which
-            is {ago(record.at)}. Times are your own clock ({zone}), converted from the instant the
-            record took it.
-          </Prose>
-        </StatementSection>
-
-        {place ? (
-          <StatementSection label="The place, on a map">
-            <MapCard coords={place.coords} label={record.location} />
-            <Prose>
-              Pinned from the network address, which names a city rather than a place.
-            </Prose>
-          </StatementSection>
-        ) : null}
-
-        <StatementSection label="Was this you?">
-          {confirmed ? (
-            <Prose>
-              You said this was you{record.reviewedAt ? `, ${ago(record.reviewedAt)}` : ""}. This
-              entry is settled — the log stops asking, and it counts as checked. Nothing was sent
-              anywhere and your password is never stored here.
-            </Prose>
-          ) : answer === "not-me" ? (
-            <Prose className="text-danger-text">
-              {signedOutAll
-                ? `You ended ${signedOutAll} other ${
-                    signedOutAll === 1 ? "session" : "sessions"
-                  } from this screen — every one of them now needs your password to get back in. Change your password next, in case it was the password that was taken.`
-                : "End every session on the account but this one, then change your password. This mark is kept on this device only — nothing was sent anywhere, and your password is never stored here."}
-            </Prose>
-          ) : (
-            <Prose>
-              Nothing here can tell the two of you apart, so the answer is the record. Say it was
-              you and the entry stops asking; say it wasn&apos;t and the log turns red and puts the
-              one action that helps beside it.
-            </Prose>
-          )}
         </StatementSection>
       </StatementBody>
+
+      {place ? (
+        <div className="mt-6">
+          <MapCard coords={place.coords} label={record.location} />
+        </div>
+      ) : null}
 
       {answer === null ? (
         <PillStack>
@@ -232,11 +209,25 @@ export default function LoginEventDetailPage() {
           <PillButton label="That wasn't me" tone="danger" onClick={askWasThisYou} />
         </PillStack>
       ) : confirmed ? (
-        <PillStack>
-          <PillButton label="Change my answer" tone="outline" onClick={changeAnswer} />
-        </PillStack>
+        <>
+          <Helper tone="ok">
+            You confirmed this{record.reviewedAt ? `, ${ago(record.reviewedAt)}` : ""}.
+          </Helper>
+          <PillStack>
+            <PillButton label="Change my answer" tone="outline" onClick={changeAnswer} />
+          </PillStack>
+        </>
       ) : (
         <>
+          <Helper tone="danger">
+            {signedOutAll
+              ? `Signed out of ${signedOutAll} other ${
+                  signedOutAll === 1 ? "session" : "sessions"
+                }. Change your password next.`
+              : `You said this wasn't you${
+                  record.reviewedAt ? `, ${ago(record.reviewedAt)}` : ""
+                }. Log out of every other session, then change your password.`}
+          </Helper>
           <PillStack>
             <PillButton
               label={signedOutAll ? "Logged out everywhere" : "Log out of all sessions"}
@@ -244,32 +235,19 @@ export default function LoginEventDetailPage() {
               disabled={signedOutAll > 0}
               onClick={signOutAll}
             />
-            {/* The second half of the fix, offered the moment the first half is
-                done — closing sessions doesn't help if the password that
-                opened them is still someone else's. */}
             {signedOutAll ? (
               <PillButton label="Change your password" tone="primary" href="/settings/security" />
             ) : null}
             <PillButton label="Change my answer" tone="outline" onClick={changeAnswer} />
           </PillStack>
-
-          {signedOutAll ? (
-            <Helper>
-              Every session on the account is closed except the one you&apos;re reading this from.
-              Each machine will need your password to get back in.
-            </Helper>
-          ) : null}
         </>
       )}
 
-      {/* The question, asked on its own surface — with the record inside it, so
-          you're answering something you can see, and with each answer saying
-          what pressing it will do. The log-out lives on the page, not here:
-          you don't shut every other machine out from inside a yes/no. */}
+      {/* The question, asked on its own surface — with the record inside it. */}
       {confirmNotMe ? (
         <Sheet
           title="Was this you?"
-          description="Only you can answer this. The answer is kept on this device — nothing is sent anywhere, and your password is never stored here."
+          description="The answer is kept on this device — nothing is sent anywhere."
           onClose={() => setConfirmNotMe(false)}
           footer={
             <div className="flex flex-col gap-2">
@@ -297,6 +275,8 @@ export default function LoginEventDetailPage() {
           </SheetGroup>
         </Sheet>
       ) : null}
+
+      {reauthDialog}
     </SettingsPage>
   );
 }

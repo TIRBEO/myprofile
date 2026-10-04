@@ -40,7 +40,7 @@ export function StatementMark({
     <span
       aria-hidden
       className={cn(
-        "grid size-[92px] shrink-0 place-items-center rounded-[28px] bg-bg shadow-[0_0_0_1px_var(--border)] [&>svg]:size-11",
+        "grid size-[92px] shrink-0 place-items-center rounded-3xl bg-bg shadow-[0_0_0_1px_var(--border)] [&>svg]:size-11",
         danger ? "text-danger-text" : "text-fg",
       )}
     >

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { RandomAvatar } from "@/components/random-avatar";
 import { cn } from "@/components/ig-ui";
 
@@ -31,6 +32,10 @@ export function ProfilePicture({
   ring?: boolean;
   className?: string;
 }) {
+  /* A provider photo can be blocked by the browser before it paints, and a
+     dead <img> is a black circle — the seeded face is the honest fallback. */
+  const [photoBroken, setPhotoBroken] = useState(false);
+
   return (
     <span
       className={cn(
@@ -40,9 +45,15 @@ export function ProfilePicture({
       )}
       style={{ width: size, height: size }}
     >
-      {photo ? (
+      {photo && !photoBroken ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={photo} alt={name ? `${name}'s photo` : "Your photo"} className="size-full object-cover" />
+        <img
+          src={photo}
+          alt={name ? `${name}'s photo` : "Your photo"}
+          referrerPolicy="no-referrer"
+          className="size-full object-cover"
+          onError={() => setPhotoBroken(true)}
+        />
       ) : (
         <RandomAvatar seed={seed} className="size-full" />
       )}

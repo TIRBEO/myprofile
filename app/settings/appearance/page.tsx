@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check } from "lucide-react";
 
-import { cn } from "@/components/ig-ui";
+import { cn, Skeleton } from "@/components/ig-ui";
 import { SectionTitle, SettingsPage } from "@/components/settings-shell";
 import { THEMES, applyTheme, onSystemThemeChange, readTheme, type ThemeId } from "@/lib/theme";
+import { reloadSettings } from "@/lib/remote-store";
 import { useToast } from "@/lib/use-toast";
+import { usePageRefresh } from "@/lib/page-refresh";
 
 /* ═══════════════════════════════════════════════════════════════════
    Appearance — three sample screens side by side rather than three
@@ -28,12 +30,21 @@ const PALETTE: Record<Concrete, { bg: string; ink: string; line: string; soft: s
 export default function AppearancePage() {
   // readTheme() answers "system" on the server, so the read happens after
   // mount — reading localStorage during render would desync the markup.
-  const [theme, setTheme] = useState<ThemeId>("system");
+  // Until it has, the page shows the three tiles as shapes, not a tick on
+  // the option the reader may not have picked.
+  const [theme, setTheme] = useState<ThemeId | undefined>(undefined);
   const toast = useToast();
 
+  const look = useCallback(() => setTheme(readTheme()), []);
+
   useEffect(() => {
-    setTheme(readTheme());
-  }, []);
+    look();
+  }, [look]);
+
+  usePageRefresh(() => {
+    void reloadSettings().then(look);
+    look();
+  });
 
   // While pinned to "system", follow the OS the moment it flips.
   useEffect(() => {
@@ -47,6 +58,21 @@ export default function AppearancePage() {
     const label = THEMES.find((t) => t.id === next)?.label ?? next;
     toast.success(`${label} theme applied`);
   }
+
+  if (theme === undefined)
+    return (
+      <SettingsPage title="Appearance">
+        <Skeleton className="mb-3 h-[17px] w-[140px] rounded-full" />
+        <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+          {THEMES.map((t) => (
+            <span key={t.id} className="flex flex-col gap-2">
+              <Skeleton className="aspect-[4/5] w-full rounded-[12px]" />
+              <Skeleton className="mx-auto h-[13px] w-[60%] rounded-full" />
+            </span>
+          ))}
+        </div>
+      </SettingsPage>
+    );
 
   const current = THEMES.find((t) => t.id === theme);
 
@@ -94,8 +120,8 @@ function ThemeTile({
       aria-label={label}
       onClick={onSelect}
       className={cn(
- "flex min-w-0 flex-col gap-2 rounded-[20px] border-2 p-2 text-left outline-none transition-colors sm:p-2.5",
-        active ? "border-accent" : "border-border hover:border-muted/55",
+        "flex min-w-0 flex-col gap-2 rounded-2xl border-2 p-2 text-left outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:p-2.5",
+        active ? "border-accent" : "border-border-strong hover:border-muted/55",
       )}
     >
       <Preview id={id} />

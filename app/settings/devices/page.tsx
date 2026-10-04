@@ -10,9 +10,11 @@ import {
   SettingsPage,
   StaticRow,
 } from "@/components/settings-shell";
+import { LoadFailed } from "@/components/page-loading";
 import { DeviceRow } from "@/components/device-tile";
 import { type Device, type SessionEvent, readDevices, readLog } from "@/lib/devices";
 import { ago, formatStamp } from "@/lib/dates";
+import { usePageRefresh } from "@/lib/page-refresh";
 import { LogOut } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -27,14 +29,33 @@ import { LogOut } from "lucide-react";
 
 export default function DevicesPage() {
   const [devices, setDevices] = useState<Device[] | null>(null);
-  const [events, setEvents] = useState<SessionEvent[]>([]);
+  const [events, setEvents] = useState<SessionEvent[] | null>(null);
+  /* "The account wouldn't answer" is not "no other device is signed in" —
+     the page says which of the two it is. */
+  const [failed, setFailed] = useState(false);
+
+  const load = () => {
+    setFailed(false);
+    readDevices().then(setDevices).catch(() => setFailed(true));
+    setEvents(readLog());
+  };
+
+  usePageRefresh(load);
 
   useEffect(() => {
-    setDevices(readDevices());
-    setEvents(readLog());
+    load();
   }, []);
 
-  if (devices === null) return <PageSkeleton title="Devices and sessions" />;
+  if (failed)
+    return (
+      <LoadFailed
+        title="Devices and sessions"
+        message="The list of sessions couldn't be read from the account. Nothing has been signed out — the account just didn't answer."
+        onRetry={load}
+      />
+    );
+
+  if (devices === null || events === null) return <PageSkeleton title="Devices and sessions" />;
 
   const here = devices.find((device) => device.current) ?? null;
   const others = devices.filter((device) => !device.current);
@@ -93,8 +114,8 @@ export default function DevicesPage() {
       ) : null}
 
       <Helper className="mt-8">
-        Location and address come from the network a session arrived on, so they&apos;re approximate.
-        If you see a device you don&apos;t recognise, log it out and change your password.
+        Location and address are traced from the network a session arrived on, so they&apos;re
+        approximate. Don&apos;t recognise a device? Log it out and change your password.
       </Helper>
     </SettingsPage>
   );

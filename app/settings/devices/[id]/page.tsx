@@ -20,29 +20,27 @@ import {
   PageSkeleton,
   PillButton,
   PillStack,
+  SectionTitle,
   SettingsPage,
   StaticRow,
 } from "@/components/settings-shell";
 import { type Device, findDevice, signOut } from "@/lib/devices";
+import { useReauthGuard } from "@/components/reauth-sheet";
+import { wasDeclined } from "@/lib/reauth";
 import { placeFor } from "@/lib/places";
 import { ago, formatDate, formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { usePageRefresh } from "@/lib/page-refresh";
+import { LoadFailed } from "@/components/page-loading";
 import { ExternalLink } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
-   One machine, in full
+   One machine, in full — one short line per fact.
 
-   This used to be a form: Browser / Operating system / Network address /
-   Signed in / Last active / Traced to, six rows of label and value. It read
-   in two seconds and explained nothing — it never said where the city comes
-   from, or that a mobile network can put it a hundred kilometres out, which
-   is the exact thing a person staring at an unfamiliar town needs to know.
-
-   So it's a statement now, the way the account-status pages are: the machine
-   up top, then the three questions under hairlines — what it is, where it
-   signs in from, when it was used — with the values inside the sentences
-   rather than beside their labels.
+   The machine up top, then its details as a small key/value list: what it
+   is, where it signs in from, when it was used. The map shows itself when
+   the session has a place. Ending a session still asks in a sheet.
    ═══════════════════════════════════════════════════════════════════ */
 
 export default function DeviceDetailPage() {
@@ -50,21 +48,39 @@ export default function DeviceDetailPage() {
   const router = useRouter();
   const toast = useToast();
   const [device, setDevice] = useState<Device | null | undefined>(undefined);
+  /* A session that isn't there and a service that didn't answer are different
+     facts, and the first one shouldn't be printed when the second happened. */
+  const [failed, setFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const { guard, reauthDialog } = useReauthGuard();
+
+  const load = () => {
+    setFailed(false);
+    findDevice(params.id).then(setDevice).catch(() => setFailed(true));
+  };
+
+  usePageRefresh(load);
 
   useEffect(() => {
-    setDevice(findDevice(params.id));
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
+
+  if (failed)
+    return (
+      <LoadFailed
+        title="Device"
+        message="This session couldn't be read from the account. Nothing about it has changed — the account just didn't answer."
+        onRetry={load}
+      />
+    );
 
   if (device === undefined) return <PageSkeleton title="Device" sections={2} />;
 
   if (!device) {
     return (
       <SettingsPage title="Device">
-        <Helper lead>
-          That session has ended. The device is no longer signed in, so there&apos;s nothing left to
-          show here.
-        </Helper>
+        <Helper lead>That session has ended — there&apos;s nothing left to show here.</Helper>
         <PillStack>
           <PillButton label="Back to devices" href="/settings/devices" tone="outline" />
         </PillStack>
@@ -75,13 +91,19 @@ export default function DeviceDetailPage() {
   const machine = device;
   const recent = [...device.logins].sort((a, b) => b - a).slice(0, 5);
   /* Every machine's position is traced from the network address its own
-     session arrived on, so each one keeps the place it actually signed in from. */
-  const place = placeFor(device.location);
-  const coords: [number, number] | null = place ? place.coords : null;
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+     session arrived on; a place nothing knows has no map. */
+  const coords: [number, number] | null = device.coords ?? placeFor(device.location)?.coords ?? null;
 
-  function eject() {
-    signOut(machine.id);
+  async function eject() {
+    try {
+      await guard((proof) => signOut(machine.id, proof));
+    } catch (err) {
+      // Backing out of the check leaves the session exactly where it was.
+      if (wasDeclined(err)) return;
+      haptic("error");
+      toast.error(err instanceof Error && err.message ? err.message : `${machine.name} wasn't signed out`);
+      return;
+    }
     haptic("success");
     toast.error(`${machine.name} signed out`);
     router.push("/settings/devices");
@@ -98,8 +120,8 @@ export default function DeviceDetailPage() {
         }
         sub={
           device.current
-            ? "The machine you're reading this on. Nothing here ends your own session."
-            : "A machine holding a signed-in session on this account."
+            ? "The machine you're reading this on."
+            : "A machine holding a signed-in session."
         }
         meta={
           device.current
@@ -109,120 +131,94 @@ export default function DeviceDetailPage() {
       />
 
       <StatementBody>
-        <StatementSection label="What this machine is">
+        <StatementSection label="This machine">
           <Prose>
-            It reports itself as <Value>{device.browser || "a browser that wouldn't say"}</Value>
-            {" "}running{" "}
-            <Value>{device.os || "an operating system it didn't name"}</Value>, under the name{" "}
-            <Value>{device.name}</Value>. All three are what the browser chose to send when the
-            session opened, so they describe what it asked to be treated as rather than what the
-            hardware is.
+            <Value>{device.browser || "A browser"}</Value> on{" "}
+            <Value>{device.os || "an unreported system"}</Value>.
+          </Prose>
+          <Prose>
+            It signs in from the network address <Value>{device.ip}</Value>, which traces to{" "}
+            <Value>{device.location}</Value>. A location read from an address names a city, not an
+            exact place.
           </Prose>
         </StatementSection>
 
-        <StatementSection label="Where it signs in from">
+        <StatementSection label="How long it's been open">
           <Prose>
-            Every session here has come in on <Value>{device.ip}</Value>, which resolves to{" "}
-            <Value>{device.location}</Value>.
+            The session started on <Value>{formatDate(device.signedInAt)}</Value> —{" "}
+            <Value>{ago(device.signedInAt)}</Value>.
           </Prose>
-          <Prose>
-            That town is estimated from the network address, which is registered to the carrier that
-            routed the session — accurate to a city, never to a street. A mobile network or a VPN
-            can therefore show a place the device was not standing in.
-          </Prose>
-        </StatementSection>
-
-        <StatementSection label="When it was used">
-          <Prose>
-            Signed in <Value>{formatDate(device.signedInAt)}</Value> ({ago(device.signedInAt)})
-            {device.current ? (
-              <> and active now.</>
-            ) : (
-              <>
-                , last active <Value>{formatDate(device.lastActiveAt)}</Value> (
-                {ago(device.lastActiveAt)}).
-              </>
-            )}
-          </Prose>
-          <Prose>
-            Every time on this page is your own clock ({zone}), converted from the instant the
-            session recorded it.
-          </Prose>
-        </StatementSection>
-
-        {recent.length > 1 ? (
-          <StatementSection label="Recent sign-ins from this machine">
+          {device.current ? null : (
             <Prose>
-              Only the sign-ins made from this one device. Everything, from every machine, is in{" "}
-              <Link
-                href="/settings/login-activity"
-                className="font-medium text-link underline underline-offset-2"
-              >
-                Login activity
-              </Link>
-              .
-            </Prose>
-            <div className="mt-1">
-              <Group>
-                {recent.map((at, i) => (
-                  <StaticRow
-                    key={at}
-                    title={formatStamp(at)}
-                    sub={`${device.location} · ${device.ip}${i === 0 ? " · latest" : ""}`}
-                  />
-                ))}
-              </Group>
-            </div>
-          </StatementSection>
-        ) : null}
-
-        {coords ? (
-          <StatementSection label="The place, on a map">
-            <MapCard coords={coords} label={device.location} />
-            <Prose>
-              Pinned from the network address, which names a city rather than a place.{" "}
-              <Link
-                href={`https://www.openstreetmap.org/?mlat=${coords[0]}&mlon=${coords[1]}#map=17/${coords[0]}/${coords[1]}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 font-medium text-link underline underline-offset-2"
-              >
-                Open a larger map
-                <ExternalLink className="size-3" strokeWidth={2.4} />
-              </Link>
-            </Prose>
-          </StatementSection>
-        ) : null}
-
-        <StatementSection label={device.current ? "What you can do here" : "Ending this session"}>
-          {device.current ? (
-            <Prose>
-              Nothing, on this page. This is the machine you&apos;re reading it from, so logging out
-              of Tirbeo closes this session too — the button is at the bottom of the menu.
-            </Prose>
-          ) : (
-            <Prose>
-              Ending it signs that machine out at once and deletes the session token on this device.
-              Nothing is removed from the machine itself, and it will need your password and a fresh
-              two-factor code to get back in.
+              It was last used on <Value>{formatDate(device.lastActiveAt)}</Value> —{" "}
+              <Value>{ago(device.lastActiveAt)}</Value>.
             </Prose>
           )}
         </StatementSection>
       </StatementBody>
 
+      {recent.length > 1 ? (
+        <>
+          <SectionTitle
+            desc={
+              <>
+                This machine&apos;s sign-ins only — everything is in{" "}
+                <Link
+                  href="/settings/login-activity"
+                  className="font-medium text-link underline underline-offset-2"
+                >
+                  Login activity
+                </Link>
+                .
+              </>
+            }
+          >
+            Recent sign-ins
+          </SectionTitle>
+          <Group>
+            {recent.map((at, i) => (
+              <StaticRow
+                key={at}
+                title={formatStamp(at)}
+                sub={`${device.location} · ${device.ip}${i === 0 ? " · latest" : ""}`}
+              />
+            ))}
+          </Group>
+        </>
+      ) : null}
+
+      {coords ? (
+        <div className="mt-8">
+          <MapCard coords={coords} label={device.location} />
+          <Link
+            href={`https://www.openstreetmap.org/?mlat=${coords[0]}&mlon=${coords[1]}#map=17/${coords[0]}/${coords[1]}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-link underline underline-offset-2"
+          >
+            Open a larger map
+            <ExternalLink className="size-3" strokeWidth={2.4} />
+          </Link>
+        </div>
+      ) : null}
+
       {device.current ? null : (
-        <PillStack>
-          <PillButton
-            label="Log out of this device"
-            tone="danger"
-            onClick={() => setConfirming(true)}
-          />
-          <PillButton label="Back to devices" href="/settings/devices" tone="outline" />
-        </PillStack>
+        <>
+          <PillStack>
+            <PillButton
+              label="Log out of this device"
+              tone="danger"
+              onClick={() => setConfirming(true)}
+            />
+            <PillButton label="Back to devices" href="/settings/devices" tone="outline" />
+          </PillStack>
+          <Helper>
+            Signing out ends this device&apos;s session — it doesn&apos;t change your password.
+          </Helper>
+        </>
       )}
 
-      {/* The question, asked on its own surface — a bottom sheet on a phone
-          where the thumb already is. The session only ends here. */}
+      {/* The question, asked on its own surface. The session only ends here. */}
       {confirming ? (
         <Sheet
           title="Log out of this device?"
@@ -239,6 +235,8 @@ export default function DeviceDetailPage() {
           }
         />
       ) : null}
+
+      {reauthDialog}
     </SettingsPage>
   );
 }

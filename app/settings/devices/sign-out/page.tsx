@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { cn, Sheet, SheetActions } from "@/components/ig-ui";
+import { Chip, cn, Sheet, SheetActions } from "@/components/ig-ui";
 import { DeviceTile } from "@/components/device-tile";
 import { Group, Helper, PillButton, PageSkeleton, PillStack, SettingsPage } from "@/components/settings-shell";
+import { LoadFailed } from "@/components/page-loading";
 import { type Device, readDevices, signOutMany } from "@/lib/devices";
+import { useReauthGuard } from "@/components/reauth-sheet";
+import { wasDeclined } from "@/lib/reauth";
 import { ago } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { usePageRefresh } from "@/lib/page-refresh";
 import { Check } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -25,12 +29,32 @@ export default function SignOutDevicesPage() {
   const router = useRouter();
   const toast = useToast();
   const [others, setOthers] = useState<Device[] | null>(null);
+  const [failed, setFailed] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const [confirming, setConfirming] = useState(false);
+  const { guard, reauthDialog } = useReauthGuard();
+
+  const load = () => {
+    setFailed(false);
+    readDevices()
+      .then((devices) => setOthers(devices.filter((device) => !device.current)))
+      .catch(() => setFailed(true));
+  };
+
+  usePageRefresh(load);
 
   useEffect(() => {
-    setOthers(readDevices().filter((device) => !device.current));
+    load();
   }, []);
+
+  if (failed)
+    return (
+      <LoadFailed
+        title="Select devices to log out"
+        message="The sessions on the account couldn't be read right now. Nothing has been signed out — the account just didn't answer."
+        onRetry={load}
+      />
+    );
 
   if (others === null) return <PageSkeleton title="Select devices to log out" />;
 
@@ -41,12 +65,24 @@ export default function SignOutDevicesPage() {
     setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
-  function eject() {
-    const n = picked.length;
-    signOutMany(picked);
-    haptic("success");
-    toast.success(`Signed out of ${n} ${n === 1 ? "device" : "devices"}`);
-    router.push("/settings/devices");
+  async function eject() {
+    /* The count only gets claimed once the account has actually ended the
+       sessions — a failed write must not read as a sign-out that happened.
+       One guarded call for the whole batch: the emailed code that pays for it
+       works once, so it can't fund three separate deletes. */
+    try {
+      const n = await guard((proof) => signOutMany(picked, proof));
+      setConfirming(false);
+      haptic("success");
+      toast.success(`Signed out of ${n} ${n === 1 ? "device" : "devices"}`);
+      router.push("/settings/devices");
+    } catch (err: any) {
+      /* Backing out of the check leaves every session signed in, and the
+         question on screen, so it can be answered again. */
+      if (wasDeclined(err)) return;
+      haptic("error");
+      toast.error(err?.message || "The sessions couldn't be ended. Nothing was signed out.");
+    }
   }
 
   if (!others.length) {
@@ -74,16 +110,16 @@ export default function SignOutDevicesPage() {
         <span className="text-[13px] font-medium tabular-nums text-muted">
           {picked.length} of {others.length} selected
         </span>
-        <button
-          type="button"
+        <Chip
+          active={allPicked}
+          className="min-h-10"
           onClick={() => {
             haptic("light");
             setPicked(allPicked ? [] : others.map((d) => d.id));
           }}
- className="min-h-10 rounded-full bg-surface-2 px-3 py-1.5 text-[12.5px] font-semibold text-fg outline-none transition-colors hover:bg-surface-3 active:bg-surface-3"
         >
           {allPicked ? "Deselect all" : "Select all"}
-        </button>
+        </Chip>
       </div>
 
       <Group>
@@ -128,6 +164,8 @@ export default function SignOutDevicesPage() {
           }
         />
       ) : null}
+
+      {reauthDialog}
     </SettingsPage>
   );
 }

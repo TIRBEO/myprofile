@@ -1,24 +1,40 @@
 "use client";
 
-import { openRequest } from "@/lib/account-history";
+import { apiJson } from "@/lib/api";
+import { ACCOUNT_EVENT, openRequest, type RequestKind } from "@/lib/account-history";
 
 /* ═══════════════════════════════════════════════════════════════════
-   Account status
+   Account status — the real checks, from the account
 
    The screen that answers "is my account in good standing, and if not,
-   what exactly is wrong." Nothing here is decided by this app — there's
-   no review server yet — so this is the shape the API will hand back
-   later, with representative rows standing in.
+   what exactly is wrong." Every number on it comes from /api/user/
+   account-checks on the brain, which counts only what each label says:
 
-   Everything on this page is about the account itself: what was blocked,
-   what's limited, what's waiting on an answer from you. Nothing here
-   counts posts, comments or likes, because none of that is measured yet.
-   Asking for a review is the one action, and it's a written explanation,
-   so it gets a page with a box to type in rather than a button that
-   decides on its own.
+     • Account standing ......... the account's own status + the admin's
+                                  number
+     • Sign-ins we stopped ...... stopped sign-in attempts that were never
+                                  followed by getting in
+     • What's limited right now . restrictions still in force
+     • Checks waiting on you .... notices waiting on an answer from you
+     • What stops people finding
+       your account ............. discovery restrictions
+
+   A brand-new account has nothing in any of those tables, so every check
+   reads 0 and the page reads as a quiet all-clear. Nothing is invented
+   here anymore — no stand-in rows, no counts from this browser.
+
+   The last snapshot the account sent back is kept so the settings gate
+   can answer synchronously between loads; before the first reply lands
+   the default is the same answer a clean account gets: five empty checks.
+
+   Filing a review is the one action: it goes to the brain (POST
+   /api/support/appeal) and attaches to a real restriction, and the
+   account's appeals are read back from the brain too — so a second
+   device sees the same review that the first one filed.
    ═══════════════════════════════════════════════════════════════════ */
 
-const STORE = "tirbeo:account-status:appeals";
+const CHECKS_STORE = "tirbeo:account-status:checks";
+const APPEALS_STORE = "tirbeo:account-status:appeals";
 
 export type Severity = "ok" | "warning" | "action";
 
@@ -30,7 +46,8 @@ export type StatusItem = {
   /** The rule it was judged against, shown as its own line. */
   guideline: string;
   at: number;
-  /** Whether a review can still be requested for this item. */
+  /** Whether a review can still be requested for this item. Only a real
+      restriction can carry an appeal, and only once. */
   appealable: boolean;
   /** What a review is being asked to change, said back to you. */
   ask: string;
@@ -45,12 +62,18 @@ export type StatusSection = {
   items: StatusItem[];
 };
 
-/** A review you've asked for, and what you said in it. */
-export type Appeal = { id: string; at: number; note: string };
+/** A review you've asked for, as the account holds it. `id` is the appeal
+    row; `restrictionId` is the decision it argues with. */
+export type Appeal = {
+  id: string;
+  restrictionId: string;
+  at: number;
+  note: string;
+  /** null while nobody has read it yet. */
+  decision: "pending" | "upheld" | "overturned" | null;
+};
 
-/** How a decision reads in the list and on its detail page. A review that's
-    been filed, a limit still open to you, and a decision that's closed all
-    read differently — but only through the theme's text tokens, never a fill. */
+/** How a decision reads in the list and on its detail page. */
 export type DecisionTone = "warn" | "danger" | "muted";
 
 /** The one status word a decision carries, derived from its live state. */
@@ -58,102 +81,162 @@ export function decisionStatus(
   item: StatusItem,
   appeal: Appeal | null,
 ): { word: string; tone: DecisionTone } {
+  if (appeal?.decision === "overturned") return { word: "Lifted", tone: "muted" };
+  if (appeal?.decision === "upheld") return { word: "Final", tone: "muted" };
   if (appeal) return { word: "Under review", tone: "warn" };
   if (item.appealable) return { word: "Needs action", tone: "danger" };
   return { word: "Final", tone: "muted" };
 }
 
-const MIN = 60_000;
-const HOUR = 60 * MIN;
-const DAY = 24 * HOUR;
+/* ── The five checks, in the order the page lists them ──────────── */
 
+type SectionId = "standing" | "sign-ins" | "limits" | "checks" | "discovery";
+
+const SECTION_TITLES: Record<SectionId, string> = {
+  standing: "Account standing",
+  "sign-ins": "Sign-ins we stopped",
+  limits: "What's limited right now",
+  checks: "Checks waiting on you",
+  discovery: "What stops people finding your account",
+};
+
+function summaryFor(id: SectionId, n: number): string {
+  if (n === 0) {
+    switch (id) {
+      case "standing":
+        return "Your account is in good standing.";
+      case "sign-ins":
+        return "No sign-in has been stopped on your account.";
+      case "limits":
+        return "Nothing on the account is on hold.";
+      case "checks":
+        return "Nothing is waiting on an answer from you.";
+      case "discovery":
+        return "Nothing here is blocking your account from being found.";
+    }
+  }
+  switch (id) {
+    case "standing":
+      return "The account itself is not in its normal state.";
+    case "sign-ins":
+      return `${n} ${n === 1 ? "attempt was" : "attempts were"} blocked before ${n === 1 ? "it" : "they"} got into your account.`;
+    case "limits":
+      return n === 1
+        ? "One part of the account is on hold until a decision lifts."
+        : `${n} parts of the account are on hold until a decision lifts.`;
+    case "checks":
+      return n === 1
+        ? "One thing needs an answer from you before it closes."
+        : `${n} things need an answer from you before they close.`;
+    case "discovery":
+      return `${n} ${n === 1 ? "decision is" : "decisions are"} limiting how people find your account.`;
+  }
+}
+
+function severityFor(id: SectionId, n: number): Severity {
+  if (!n) return "ok";
+  return id === "standing" || id === "limits" || id === "checks" ? "action" : "warning";
+}
+
+/** The answer for an account nobody has decided anything about — the same
+    five checks, all empty. */
+export function cleanSections(): StatusSection[] {
+  return (Object.keys(SECTION_TITLES) as SectionId[]).map((id) => ({
+    id,
+    title: SECTION_TITLES[id],
+    summary: summaryFor(id, 0),
+    severity: "ok" as Severity,
+    items: [],
+  }));
+}
+
+/* The brain's reply shape — one row per real event, nothing invented. */
+type ServerCheckItem = {
+  id: string;
+  title: string;
+  sub: string;
+  guideline: string;
+  at: string;
+  appealable: boolean;
+  ask: string;
+};
+type ServerChecks = {
+  level: number;
+  sections: { id: string; title: string; items: ServerCheckItem[] }[];
+};
+
+function shapeSection(raw: { id: string; title?: string; items: ServerCheckItem[] }): StatusSection {
+  const id = raw.id as SectionId;
+  const items: StatusItem[] = raw.items.map((row) => ({
+    id: row.id,
+    title: row.title,
+    sub: row.sub,
+    guideline: row.guideline,
+    at: Date.parse(row.at) || Date.now(),
+    appealable: !!row.appealable,
+    ask: row.ask ?? "",
+  }));
+  return {
+    id,
+    title: SECTION_TITLES[id] ?? raw.title,
+    summary: summaryFor(id, items.length),
+    severity: severityFor(id, items.length),
+    items,
+  };
+}
+
+type ChecksSnapshot = { level: number; sections: StatusSection[] };
+
+function readSnapshot(): ChecksSnapshot {
+  if (typeof window === "undefined") return { level: 0, sections: cleanSections() };
+  try {
+    const raw = localStorage.getItem(CHECKS_STORE);
+    if (!raw) return { level: 0, sections: cleanSections() };
+    const parsed = JSON.parse(raw) as ChecksSnapshot;
+    if (!parsed || !Array.isArray(parsed.sections) || parsed.sections.length === 0) {
+      return { level: 0, sections: cleanSections() };
+    }
+    return {
+      level: typeof parsed.level === "number" && parsed.level >= 0 ? parsed.level : 0,
+      sections: parsed.sections,
+    };
+  } catch {
+    return { level: 0, sections: cleanSections() };
+  }
+}
+
+function writeSnapshot(snapshot: ChecksSnapshot): void {
+  try {
+    localStorage.setItem(CHECKS_STORE, JSON.stringify(snapshot));
+  } catch {
+    /* private mode — the read still answers for this session */
+  }
+  /* The gate and the pages read the checks synchronously; they need to hear
+     that the account just answered. */
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(ACCOUNT_EVENT));
+}
+
+/** Ask the brain for the account's real checks and keep the answer.
+    Resolves with the fresh sections; rejects only if the brain didn't
+    answer, so a page can say so and offer the way to ask again. */
+export async function loadAccountChecks(): Promise<ChecksSnapshot> {
+  const res = await apiJson<ServerChecks & { ok: boolean }>("/api/user/account-checks");
+  const snapshot: ChecksSnapshot = {
+    level: typeof res.level === "number" ? res.level : 0,
+    sections: (Object.keys(SECTION_TITLES) as SectionId[]).map((id) => {
+      const raw = res.sections?.find((s) => s.id === id);
+      return raw ? shapeSection(raw) : cleanSections().find((s) => s.id === id)!;
+    }),
+  };
+  writeSnapshot(snapshot);
+  return snapshot;
+}
+
+/** The checks as the account last sent them. Before the first read lands
+    this is the answer a clean account gets — five empty checks — so
+    nothing here can lock or alarm an account on a guess. */
 export function sections(): StatusSection[] {
-  const now = Date.now();
-  return [
-    {
-      id: "standing",
-      title: "Account standing",
-      summary: "Your account is in good standing.",
-      severity: "ok",
-      items: [],
-    },
-    {
-      id: "sign-ins",
-      title: "Sign-ins we stopped",
-      summary: "2 attempts were blocked before they got into your account.",
-      severity: "warning",
-      items: [
-        {
-          id: "blocked-lagos",
-          title: "A sign-in was blocked",
-          sub: "26 Sept 2026. Three wrong passwords in a row from an address that had never reached your account.",
-          guideline: "Automated protection — repeated wrong passwords",
-          at: now - 1 * DAY,
-          appealable: true,
-          ask: "Tell us it was you and we'll stop holding that network back.",
-        },
-        {
-          id: "held-new-device",
-          title: "A new device was held for a code",
-          sub: "14 Sept 2026. The password was right, so it waited for a two-factor code before it got in.",
-          guideline: "Two-factor — first sign-in on a new device",
-          at: now - 13 * DAY,
-          appealable: false,
-          ask: "",
-        },
-      ],
-    },
-    {
-      id: "limits",
-      title: "What's limited right now",
-      summary: "Two parts of the account are on hold until something is confirmed.",
-      severity: "action",
-      items: [
-        {
-          id: "changes-on-hold",
-          title: "Account changes are on hold",
-          sub: "Details can't be edited until the new email address is confirmed. Everything else works as normal.",
-          guideline: "Verification — unconfirmed email address",
-          at: now - 4 * DAY,
-          appealable: true,
-          ask: "Explain why the confirmation isn't reaching you and we'll check the address by hand.",
-        },
-        {
-          id: "recovery-stale",
-          title: "Recovery details need re-confirming",
-          sub: "Since 3 Sept 2026. The phone number on the account hasn't been checked in two years.",
-          guideline: "Recovery — stale phone number",
-          at: now - 24 * DAY,
-          appealable: false,
-          ask: "",
-        },
-      ],
-    },
-    {
-      id: "checks",
-      title: "Checks waiting on you",
-      summary: "One thing needs an answer from you before it closes.",
-      severity: "action",
-      items: [
-        {
-          id: "confirm-pokhara",
-          title: "Confirm whether a sign-in was yours",
-          sub: "Opened 2 days ago. A sign-in from Pokhara was marked as not you, and nothing has said otherwise since.",
-          guideline: "Security — sign-in reported by you",
-          at: now - 2 * DAY,
-          appealable: true,
-          ask: "Say it was you and the report closes. Say it wasn't and the password reset stays in force.",
-        },
-      ],
-    },
-    {
-      id: "discovery",
-      title: "What stops people finding your account",
-      summary: "Nothing here is blocking your account from being found.",
-      severity: "ok",
-      items: [],
-    },
-  ];
+  return readSnapshot().sections;
 }
 
 /** One section by its id, for the page that lists just its decisions. */
@@ -182,38 +265,93 @@ export function findItemById(itemId: string): { section: StatusSection; item: St
   return null;
 }
 
-export function readAppeals(): Appeal[] {
+/* ── Appeals — on the account, not on this device ──────────────── */
+
+type ServerAppeal = {
+  id: string;
+  restrictionId: string;
+  note: string;
+  decision: string | null;
+  createdAt: string;
+};
+
+const DECISIONS = new Set(["pending", "upheld", "overturned"]);
+
+function asAppeal(row: unknown): row is Appeal {
+  return (
+    !!row &&
+    typeof (row as Appeal).id === "string" &&
+    typeof (row as Appeal).restrictionId === "string" &&
+    typeof (row as Appeal).at === "number" &&
+    typeof (row as Appeal).note === "string"
+  );
+}
+
+function readAppealRows(): Appeal[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORE);
+    const raw = localStorage.getItem(APPEALS_STORE);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (row): row is Appeal =>
-        typeof row?.id === "string" && typeof row?.at === "number" && typeof row?.note === "string",
-    );
+    return parsed.filter(asAppeal);
   } catch {
     return [];
   }
 }
 
-/** The review filed for one decision, if there is one. */
-export function appealFor(id: string): Appeal | null {
-  return readAppeals().find((appeal) => appeal.id === id) ?? null;
+function writeAppealRows(list: Appeal[]): void {
+  try {
+    localStorage.setItem(APPEALS_STORE, JSON.stringify(list));
+  } catch {
+    /* private mode — the read still answers for this session */
+  }
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(ACCOUNT_EVENT));
 }
 
-/** Files a review request with what you wrote, and returns the full list. */
-export function appeal(id: string, note: string): Appeal[] {
-  const next = [
-    ...readAppeals().filter((appeal) => appeal.id !== id),
-    { id, at: Date.now(), note: note.trim() },
-  ];
-  try {
-    localStorage.setItem(STORE, JSON.stringify(next));
-  } catch {
-    /* private mode — the appeal still holds for this session */
-  }
-  openRequest(id, "appeal");
-  return next;
+/** The account's appeals as the brain last sent them, newest first. */
+export function readAppeals(): Appeal[] {
+  return readAppealRows().sort((a, b) => b.at - a.at);
+}
+
+/** The review filed for one decision, if there is one. */
+export function appealFor(id: string): Appeal | null {
+  return readAppeals().find((appeal) => appeal.restrictionId === id) ?? null;
+}
+
+/** Pull the appeals from the brain and keep the answer for the gate. */
+export async function loadAppeals(): Promise<Appeal[]> {
+  const res = await apiJson<{ ok: boolean; appeals: ServerAppeal[] }>(
+    "/api/support/tickets/appeals",
+  );
+  const list: Appeal[] = (res.appeals ?? []).map((row) => ({
+    id: row.id,
+    restrictionId: row.restrictionId,
+    at: Date.parse(row.createdAt) || Date.now(),
+    note: row.note,
+    decision: (DECISIONS.has(String(row.decision)) ? row.decision : "pending") as Appeal["decision"],
+  }));
+  writeAppealRows(list);
+  return readAppeals();
+}
+
+/** Files a review request with what you wrote. The brain attaches it to
+    the real decision and refuses a second appeal on the same one — so a
+    restriction is the only thing that can ever be appealed here. */
+export async function appeal(restrictionId: string, note: string): Promise<Appeal> {
+  const res = await apiJson<{ ok: boolean; appeal: ServerAppeal }>("/api/support/appeal", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ restrictionId, note: note.trim() }),
+  });
+  const row: Appeal = {
+    id: res.appeal.id,
+    restrictionId: res.appeal.restrictionId,
+    at: Date.parse(res.appeal.createdAt) || Date.now(),
+    note: res.appeal.note,
+    decision: (res.appeal.decision ?? "pending") as Appeal["decision"],
+  };
+  writeAppealRows([row, ...readAppealRows().filter((a) => a.id !== row.id)]);
+  openRequest(restrictionId, "appeal" satisfies RequestKind);
+  return row;
 }

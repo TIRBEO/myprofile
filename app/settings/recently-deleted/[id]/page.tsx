@@ -4,20 +4,15 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Sheet, SheetActions } from "@/components/ig-ui";
 import { trayGlyph } from "@/components/tray-icons";
+import { StatementHead, StatementMark } from "@/components/statement";
 import {
-  Prose,
-  StatementBody,
-  StatementHead,
-  StatementMark,
-  StatementSection,
-  Value,
-} from "@/components/statement";
-import {
+  Group,
   Helper,
   PageSkeleton,
   PillButton,
   PillStack,
   SettingsPage,
+  StaticRow,
 } from "@/components/settings-shell";
 import {
   KEEP_DAYS,
@@ -25,22 +20,17 @@ import {
   daysLeft,
   findDeleted,
   removeFromTray,
-} from "@/lib/your-activity";
+} from "@/lib/deleted-items";
 import { ago, formatDate, formatTime } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 
 /* ═══════════════════════════════════════════════════════════════════
-   One deleted thing, with its clock
+   One deleted thing, with its clock — kept to the essentials.
 
-   Two ways out and nothing else: back where it was, or gone before the
-   countdown finishes. It used to be a tile, a heading and a four-row table
-   of label/value pairs — which said how long was left without ever saying
-   what either button actually does, or what happens if you press neither.
-   So it's a statement now, the way the other records are: the thing up top,
-   then the three questions under hairlines, with the dates inside the
-   sentences. The clock is still the loudest number on the page, because
-   it's the only thing here that changes on its own.
+   What it is, when it went in, when it leaves for good — one line each —
+   then the two ways out: back where it was, or gone before the countdown
+   finishes. The countdown is the only thing here that changes on its own.
    ═══════════════════════════════════════════════════════════════════ */
 
 export default function DeletedItemPage() {
@@ -59,9 +49,7 @@ export default function DeletedItemPage() {
   if (!item) {
     return (
       <SettingsPage title="Recently deleted">
-        <Helper lead>
-          Nothing left in the tray. It has either gone for good or been put back where it came from.
-        </Helper>
+        <Helper lead>Nothing left in the tray — it&apos;s gone for good or been restored.</Helper>
         <PillStack>
           <PillButton label="Back to the tray" href="/settings/recently-deleted" tone="outline" />
         </PillStack>
@@ -89,71 +77,45 @@ export default function DeletedItemPage() {
         title={item.label}
         mark={<StatementMark danger={!left}>{trayGlyph(item.kind)}</StatementMark>}
         sub={`${item.kind} in the tray.`}
-        meta={
-          left
-            ? `Deleted ${formatDate(item.deletedAt)} at ${formatTime(item.deletedAt)} · ${ago(item.deletedAt)}`
-            : `Gone today, whether you act or not · deleted ${ago(item.deletedAt)}`
-        }
+        meta={left ? `${left} ${left === 1 ? "day" : "days"} left` : "Gone today, whether you act or not"}
       />
 
-      <StatementBody>
-        <StatementSection label="What this is">
-          <Prose>
-            A <Value>{item.kind.toLowerCase()}</Value> called <Value>{item.label}</Value>, deleted{" "}
-            {ago(item.deletedAt)}. It still exists, and it still holds whatever was in it at the
-            moment it went to the tray.
-          </Prose>
-        </StatementSection>
+      <Group>
+        <StaticRow title="Type" sub={item.kind} />
+        <StaticRow
+          title="Deleted"
+          sub={`${formatDate(item.deletedAt)} at ${formatTime(item.deletedAt)}`}
+          right={ago(item.deletedAt)}
+        />
+        <StaticRow
+          title="Removed for good"
+          sub={formatDate(purgeAt)}
+          right={left ? `${left} ${left === 1 ? "day" : "days"}` : "today"}
+        />
+      </Group>
 
-        <StatementSection label="How long it stays">
-          <Prose>
-            The tray keeps a deleted thing for <Value>{KEEP_DAYS} days</Value>. This one was deleted
-            on <Value>{formatDate(item.deletedAt)}</Value>, so it leaves for good on{" "}
-            <Value>{formatDate(purgeAt)}</Value> —{" "}
-            {left ? (
-              <>
-                that is <Value>{left} {left === 1 ? "day" : "days"}</Value> from now.
-              </>
-            ) : (
-              <>that is today.</>
-            )}
-          </Prose>
-          <Prose>
-            Doing nothing is one of the choices. Leave the page and the clock keeps running, and when
-            it reaches zero the item goes on its own.
-          </Prose>
-        </StatementSection>
-
-        <StatementSection label="The two ways out">
-          <Prose>
-            <Value>Restoring</Value> puts it back where it came from, with its history intact, and
-            takes it off this page. <Value>Deleting for good</Value> skips the countdown and removes
-            it now.
-          </Prose>
-          <Prose>
-            Neither can be taken back afterwards — the {KEEP_DAYS} days are the undo, and once
-            they&apos;re used up there&apos;s nothing left to restore, not even for support.
-          </Prose>
-        </StatementSection>
-      </StatementBody>
+      <Helper>
+        Do nothing and it deletes itself on that date. After it&apos;s gone, support can&apos;t
+        recover it either. This tray lives in this browser only — it isn&apos;t synced.
+      </Helper>
 
       <PillStack>
         <PillButton
           label="Restore it"
           tone="primary"
-          sub="Back where it was, with its history intact."
+          sub="Out of the tray, back where you left it."
           onClick={() => takeOut("restored")}
         />
         <PillButton label="Delete for good" tone="danger" onClick={() => setConfirming(true)} />
         <PillButton label="Leave it in the tray" tone="outline" href="/settings/recently-deleted" />
       </PillStack>
 
-      {/* The final one asks on its own surface, because it's the only button
-          here that can't be answered for. */}
+      {/* The final one asks on its own surface — it's the only button here
+          that can't be answered for. */}
       {confirming ? (
         <Sheet
           title="Delete this for good?"
-          description={`That skips the remaining ${left} ${left === 1 ? "day" : "days"}. Support can't recover it afterwards, and neither can you.`}
+          description={`That skips the remaining ${left} ${left === 1 ? "day" : "days"}. It can't be undone.`}
           onClose={() => setConfirming(false)}
           footer={
             <SheetActions

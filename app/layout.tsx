@@ -23,7 +23,7 @@ export const viewport: Viewport = {
   // Lets the tab bar sit under the home indicator on notched devices.
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#08080a" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
     { media: "(prefers-color-scheme: light)", color: "#f4f4f6" },
   ],
 };

@@ -3,24 +3,25 @@
 /* ═══════════════════════════════════════════════════════════════════
    Connected apps
 
-   Nothing brokers these OAuth links server-side yet, so this is the
-   account's own record of which third-party apps hold access and what
-   each was granted — the shape the API will hand back later, with seed
-   rows standing in. Disconnecting revokes the record and files it under
-   recently disconnected; the catalog stays so the same app can be
-   reconnected. Scopes are written as plain phrases, never raw strings.
+   The links themselves live on the account: the brain holds which provider
+   id is attached to the user row, and the login ledger says when the account
+   actually signed in through it. Nothing here is kept in this browser,
+   because a record of who can reach your account that only exists on one
+   device is a record that can't be trusted from another one.
 
-   Only three providers are offered: Google, GitHub and Discord. What a
-   record reads off the catalog (name, access, scopes) is filled in from
-   there rather than trusted from storage, so an app that has since left
-   the catalog drops out of the list instead of rendering half a row.
+   What stays local is copy: PROVIDERS is the catalog of what each app is
+   offered for and what it would be granted. The account, the dates and the
+   on/off state all come from the brain. Connecting is not a flip either —
+   POST hands back the provider's own authorisation URL, and the link only
+   appears once that round trip has finished.
+
+   Dates are honest: a link that has never been used to sign in reports no
+   dates at all rather than a plausible-looking one.
    ═══════════════════════════════════════════════════════════════════ */
 
-const STORE = "tirbeo:connected-apps";
-const HISTORY_STORE = "tirbeo:connected-apps:history";
-
-export const MAX_LOG = 8;
-export const MAX_CONNECTED = 8;
+import { useCallback, useEffect, useState } from "react";
+import { apiJson, apiSend } from "@/lib/api";
+import { withProof, type ReauthProof } from "@/lib/reauth";
 
 export type Provider = {
   id: string;
@@ -29,8 +30,6 @@ export type Provider = {
   access: string;
   /** One line under the app's name in the "could connect" list. */
   tagline: string;
-  /** The example account shown once connected. */
-  account: string;
   /** What stops working if you disconnect — the confirm sheet's line. */
   loss: string;
   /** The permissions granted, in words a user reads. */
@@ -43,7 +42,6 @@ export const PROVIDERS: Provider[] = [
     name: "Google",
     access: "your name and email",
     tagline: "Sign in with Google and keep your profile in step.",
-    account: "rina.shrestha@gmail.com",
     loss: "Signing in with Google stops, and Tirbeo can no longer read your profile from it.",
     scopes: ["See your name and photo", "See the email you sign in with"],
   },
@@ -52,7 +50,6 @@ export const PROVIDERS: Provider[] = [
     name: "GitHub",
     access: "your public profile",
     tagline: "Sign in with GitHub and show your pinned repositories.",
-    account: "rinashrestha",
     loss: "Signing in with GitHub stops and your pinned repositories come off your profile.",
     scopes: ["See your username and avatar", "Read your public repositories"],
   },
@@ -61,7 +58,6 @@ export const PROVIDERS: Provider[] = [
     name: "Discord",
     access: "your username and avatar",
     tagline: "Sign in with Discord and link your account.",
-    account: "rina",
     loss: "Signing in with Discord stops and your linked account is removed.",
     scopes: ["See your username and avatar", "See which servers you're in"],
   },
@@ -70,189 +66,148 @@ export const PROVIDERS: Provider[] = [
 export type ConnectedApp = {
   id: string;
   name: string;
-  account: string;
+  /** The id the provider issued, exactly as the account holds it. Omitted
+      from the list page; the detail page still shows it. */
+  account: string | null;
   access: string;
   scopes: string[];
-  connectedAt: number;
-  lastUsedAt: number;
+  /** When the link was made — the callback's date, or first sign-in if older. */
+  connectedAt: number | null;
+  /** Most recent sign-in through it, or null. */
+  lastUsedAt: number | null;
 };
 
-export type DisconnectEvent = {
+type ConnectionRow = {
   id: string;
   provider: string;
-  name: string;
-  at: number;
+  connected: boolean;
+  accountId: string | null;
+  /** When the provider was linked (the OAuth callback's connected event). */
+  linkedAt: string | null;
+  /** First sign-in actually made through it, if any. */
+  firstNameUsedAt: string | null;
+  lastUsedAt: string | null;
 };
 
-const MIN = 60_000;
-const DAY = 24 * 60 * MIN;
-
-function provider(id: string): Provider | undefined {
-  return PROVIDERS.find((p) => p.id === id);
+function provider(id: string | undefined): Provider | undefined {
+  return id ? PROVIDERS.find((p) => p.id === id) : undefined;
 }
 
 /** The catalog entry behind a connected app, for pages that show its loss line. */
 export function providerFor(id: string | undefined): Provider | undefined {
-  return id ? provider(id) : undefined;
+  return provider(id);
 }
 
-function newId() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+function at(iso: string | null): number | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? null : ms;
 }
 
-function toApp(p: Provider, connectedAt: number, lastUsedAt: number): ConnectedApp {
+function toApp(row: ConnectionRow, p: Provider): ConnectedApp {
   return {
     id: p.id,
     name: p.name,
-    account: p.account,
+    account: row.accountId,
     access: p.access,
     scopes: p.scopes,
-    connectedAt,
-    lastUsedAt,
+    // Prefer the link date the callback filed; a link from before that
+    // machinery existed still shows its first real sign-in.
+    connectedAt: at(row.linkedAt) ?? at(row.firstNameUsedAt),
+    lastUsedAt: at(row.lastUsedAt),
   };
 }
 
-function seed(): ConnectedApp[] {
-  const now = Date.now();
-  const plan: [string, number, number][] = [
-    ["google", 40 * DAY, 3 * MIN],
-  ];
-  return plan
-    .map(([id, connected, used]) => {
-      const p = provider(id);
-      return p ? toApp(p, now - connected, now - used) : null;
+/** Every link the account holds, newest use first. An app that has left the
+    catalog is dropped rather than rendered as half a row. */
+export async function readConnected(): Promise<ConnectedApp[]> {
+  const rows = await apiJson<ConnectionRow[]>("/api/integrations");
+  // Newest use first; a link that has never signed anyone in keeps its place
+  // at the end rather than jumping to the top with a zero.
+  const apps = rows
+    .filter((row) => row.connected)
+    .map((row) => {
+      const p = provider(row.provider);
+      return p ? toApp(row, p) : null;
     })
     .filter((a): a is ConnectedApp => a !== null);
-}
-
-export function readConnected(): ConnectedApp[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORE);
-    if (!raw) {
-      const seeded = seed();
-      writeConnected(seeded);
-      return seeded;
-    }
-    const parsed = JSON.parse(raw) as Partial<ConnectedApp>[];
-    if (!Array.isArray(parsed)) return [];
-    // A list saved before apps carried the fields today's pages read off
-    // them can't fill those lines in, so it starts over from the seed.
-    if (!parsed.every(isApp)) {
-      const seeded = seed();
-      writeConnected(seeded);
-      return seeded;
-    }
-    const apps = parsed.filter(isApp).map(normalize).filter((a): a is ConnectedApp => a !== null);
-    // Nothing left means the record predates the current catalog entirely, so
-    // it's stale rather than an honest empty list — and a stored id that no
-    // longer resolves never reaches a page.
-    if (!apps.length && parsed.length) {
-      const seeded = seed();
-      writeConnected(seeded);
-      return seeded;
-    }
-    return apps.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-  } catch {
-    return [];
-  }
-}
-
-/** Re-reads a stored row off the catalog, or drops it if no provider matches. */
-function normalize(app: ConnectedApp): ConnectedApp | null {
-  const p = provider(app.id);
-  if (!p) return null;
-  return {
-    id: p.id,
-    name: app.name || p.name,
-    account: app.account || p.account,
-    access: p.access,
-    scopes: p.scopes,
-    connectedAt: app.connectedAt,
-    lastUsedAt: app.lastUsedAt,
-  };
-}
-
-function isApp(value: Partial<ConnectedApp>): value is ConnectedApp {
-  return (
-    typeof value?.id === "string" &&
-    typeof value?.name === "string" &&
-    typeof value?.account === "string" &&
-    typeof value?.access === "string" &&
-    Array.isArray(value?.scopes) &&
-    value.scopes.every((s) => typeof s === "string") &&
-    typeof value?.connectedAt === "number" &&
-    typeof value?.lastUsedAt === "number"
+  return apps.sort(
+    (a, b) =>
+      (b.lastUsedAt ?? -1) - (a.lastUsedAt ?? -1) ||
+      (b.connectedAt ?? -1) - (a.connectedAt ?? -1),
   );
 }
 
 /** One connected app by id, for the page that shows nothing but it. */
-export function findConnected(id: string | undefined): ConnectedApp | null {
+export async function findConnected(id: string | undefined): Promise<ConnectedApp | null> {
   if (!id) return null;
-  return readConnected().find((app) => app.id === id) ?? null;
-}
-
-function writeConnected(apps: ConnectedApp[]) {
-  try {
-    localStorage.setItem(STORE, JSON.stringify(apps));
-  } catch {
-    /* private mode — the change still holds for this session */
-  }
-}
-
-export function readHistory(): DisconnectEvent[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(HISTORY_STORE);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Partial<DisconnectEvent>[];
-    if (!Array.isArray(parsed)) return [];
-    // An event for an app no longer offered says nothing a reader can act on.
-    return parsed.filter(
-      (e): e is DisconnectEvent =>
-        typeof e?.name === "string" && (!e.provider || !!provider(e.provider)),
-    );
-  } catch {
-    return [];
-  }
-}
-
-export type ActionResult = { connected: ConnectedApp[]; history: DisconnectEvent[] };
-
-/** Revokes one app: it leaves the connected list and lands in history. */
-export function disconnect(id: string): ActionResult {
-  const apps = readConnected();
-  const target = apps.find((app) => app.id === id);
-  if (!target) return { connected: apps, history: readHistory() };
-  writeConnected(apps.filter((app) => app.id !== id));
-  const history = [
-    { id: newId(), provider: target.id, name: target.name, at: Date.now() },
-    ...readHistory(),
-  ].slice(0, MAX_LOG);
-  try {
-    localStorage.setItem(HISTORY_STORE, JSON.stringify(history));
-  } catch {
-    /* private mode — history simply isn't kept between visits */
-  }
-  return { connected: readConnected(), history };
-}
-
-export type ConnectResult = { ok: true } | { ok: false; reason: "limit" | "unknown" };
-
-/** Grants an app from the catalog its scopes again. */
-export function connect(id: string): ConnectResult {
-  const p = provider(id);
-  if (!p) return { ok: false, reason: "unknown" };
-  const apps = readConnected();
-  if (apps.some((app) => app.id === id)) return { ok: true };
-  if (apps.length >= MAX_CONNECTED) return { ok: false, reason: "limit" };
-  const now = Date.now();
-  writeConnected([toApp(p, now, now), ...apps]);
-  return { ok: true };
+  const apps = await readConnected();
+  return apps.find((app) => app.id === id) ?? null;
 }
 
 /** Providers not currently connected — what the "could connect" list offers. */
-export function available(): Provider[] {
-  const connected = new Set(readConnected().map((app) => app.id));
+export function available(apps: ConnectedApp[]): Provider[] {
+  const connected = new Set(apps.map((app) => app.id));
   return PROVIDERS.filter((p) => !connected.has(p.id));
+}
+
+/**
+ * Revokes a link. The brain refuses when it would leave the account with no
+ * way to sign in, and that refusal is what reaches the page as an error.
+ * Removing a way back in is a sensitive action, so the call carries the proof
+ * the shared sheet collected.
+ */
+export async function disconnect(id: string, proof: ReauthProof = {}): Promise<void> {
+  await apiSend("/api/integrations", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(withProof({ provider: id }, proof)),
+  });
+}
+
+/**
+ * Starts the authorisation hop. Returns the provider's URL; the caller leaves
+ * the app for it, and the link only exists when the round trip lands back here.
+ */
+export async function connect(id: string): Promise<string> {
+  const reply = await apiJson<{ ok: boolean; redirectUrl: string }>("/api/integrations", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ provider: id }),
+  });
+  return reply.redirectUrl;
+}
+
+/**
+ * The links the account holds. `failed` distinguishes "the account service
+ * didn't answer" from "there is nothing connected", which the page says out
+ * loud rather than showing an empty list.
+ */
+export function useConnectedApps(): {
+  apps: ConnectedApp[] | null;
+  failed: boolean;
+  refresh: () => void;
+} {
+  const [apps, setApps] = useState<ConnectedApp[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    readConnected()
+      .then((next) => {
+        if (!live) return;
+        setApps(next);
+        setFailed(false);
+      })
+      .catch(() => {
+        if (live) setFailed(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [nonce]);
+
+  const refresh = useCallback(() => setNonce((n) => n + 1), []);
+  return { apps, failed, refresh };
 }

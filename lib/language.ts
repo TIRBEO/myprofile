@@ -23,6 +23,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { read, write } from "@/lib/prefs";
+import { reloadSettings } from "@/lib/remote-store";
+import { usePageRefresh } from "@/lib/page-refresh";
 
 export const LANGUAGE_KEY = "tirbeo:language";
 
@@ -135,6 +137,13 @@ export function useLanguage() {
     applyLanguage(next);
     setId(next);
   }, []);
+
+  // The choice lives on the account bag; a pull-to-refresh asks the account
+  // again and re-reads the resolved id when the bag lands.
+  usePageRefresh(async () => {
+    await reloadSettings();
+    setId(readLanguageId());
+  });
 
   return { id, lang: langFor(id), choose };
 }

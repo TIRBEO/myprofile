@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bars, Trend, TrendAll, useCountUp, type ChartPoint, type ChartSeries } from "@/components/charts";
-import { cn } from "@/components/ig-ui";
+import { Chip, cn } from "@/components/ig-ui";
 import {
   Group,
   Helper,
@@ -12,22 +12,24 @@ import {
   SectionTitle,
   SettingsPage,
 } from "@/components/settings-shell";
+import { LoadFailed } from "@/components/page-loading";
+import { usePageRefresh } from "@/lib/page-refresh";
 import {
-  ACTIVITIES,
-  KEEP_DAYS,
+  GROUPS,
   TREND_DAYS,
   WEEK_DAYS,
-  activityByDay,
-  activityTotal,
   busiestDay,
-  formatDuration,
+  byDayForGroup,
+  formatCount,
+  groupTotal,
   lastDays,
-  readFigures,
-  weekMinutes,
-  type ActivityKey,
-  type DayMinutes,
-  type Figures,
+  readSummary,
+  weekTotal,
+  type ActivitySummary,
+  type DayRow,
+  type GroupKey,
 } from "@/lib/your-activity";
+import { KEEP_DAYS } from "@/lib/deleted-items";
 import { formatShortDate, longDay, todayWord, weekdayShort } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 
@@ -35,109 +37,130 @@ import { haptic } from "@/lib/haptics";
 /* ═══════════════════════════════════════════════════════════════════
    Your activity — the numbers, drawn
 
-   Time gets a bar per day and a 30-day curve, because both answers
-   matter: "how was this week" and "has it been trending up". Both are
-   touchable — slide a finger along and the bubble follows it to the day
-   under it. The curve can be pulled apart by activity, and each activity
-   keeps one colour so the picture says what it's showing before the
-   words do. Everything else that lives here is a list of its own, so it
-   gets a page rather than a sheet.
+   These are rows the account actually recorded, counted per day in this
+   device's timezone, and both answers matter: "how was this week" and "has
+   it been trending up". Both charts are touchable — slide a finger along
+   and the bubble follows it to the day under it. The curve can be pulled
+   apart by group, and each group keeps one colour so the picture says what
+   it's showing before the words do.
+
+   A day with no rows is drawn as a zero. Nothing here is estimated: an
+   empty stretch means the account has no record of that day, not a guess
+   about it.
    ═══════════════════════════════════════════════════════════════════ */
 
-type Filter = ActivityKey | "all";
+type Filter = GroupKey | "all";
 
 /** Every colour at once, so "Everything" is recognisable by the same dot
-    the individual activities use. */
-const RAINBOW = `conic-gradient(${ACTIVITIES.map((a) => a.color).join(", ")}, ${ACTIVITIES[0].color})`;
+    the individual groups use. */
+const RAINBOW = `conic-gradient(${GROUPS.map((g) => g.color).join(", ")}, ${GROUPS[0].color})`;
+
+const sayCount = (value: number) => formatCount(value);
 
 export default function YourActivityPage() {
-  const [figures, setFigures] = useState<Figures | null>(null);
+  const [summary, setSummary] = useState<ActivitySummary | null>(null);
+  const [failed, setFailed] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
-    setFigures(readFigures());
+    load();
   }, []);
 
-  if (figures === null) return <PageSkeleton title="Your activity" sections={2} />;
+  const load = () => {
+    setFailed(false);
+    readSummary()
+      .then(setSummary)
+      .catch(() => setFailed(true));
+  };
 
-  const week = weekMinutes(figures);
-  const peak = busiestDay(figures);
+  usePageRefresh(load);
 
-  const weekDays = lastDays(figures);
+  if (failed)
+    return (
+      <LoadFailed
+        title="Your activity"
+        message="The counts couldn't be read from the account. Nothing has been lost — the account just didn't answer. Try again."
+        onRetry={load}
+      />
+    );
+
+  if (summary === null) return <PageSkeleton title="Your activity" sections={2} />;
+
+  const week = weekTotal(summary);
+  const peak = busiestDay(summary);
+
+  const weekDays = lastDays(summary);
   const bars = toPoints(
     weekDays,
-    weekDays.map((day) => day.minutes),
+    weekDays.map((day) => day.total),
     WEEK_DAYS,
     (day, isLast) => (isLast ? todayWord() : weekdayShort(day.at)),
   );
 
-  const days = lastDays(figures, TREND_DAYS);
-  const activity = ACTIVITIES.find((row) => row.key === filter);
-  const minutes = activity
-    ? activityByDay(figures, activity)
-    : days.map((day) => day.minutes);
-  const total = minutes.reduce((sum, value) => sum + value, 0);
-  const grandTotal = days.reduce((sum, day) => sum + day.minutes, 0);
-  const color = activity?.color ?? "var(--accent)";
+  const group = GROUPS.find((row) => row.key === filter);
+  const counts = group ? byDayForGroup(summary, group.key) : summary.days.map((day) => day.total);
+  const total = counts.reduce((sum, value) => sum + value, 0);
+  const grandTotal = summary.total;
+  const color = group?.color ?? "var(--accent)";
 
-  const dayLabel = (day: DayMinutes, isLast: boolean) =>
+  const dayLabel = (day: DayRow, isLast: boolean) =>
     isLast ? todayWord() : formatShortDate(day.at);
-  const curve = toPoints(days, minutes, TREND_DAYS, dayLabel);
+  const curve = toPoints(summary.days, counts, TREND_DAYS, dayLabel);
 
-  /* Every activity on one set of axes, so a big day in one line and a small
+  /* Every group on one set of axes, so a busy day in one line and a quiet
      one in another don't look the same size. */
-  const allSeries: ChartSeries[] = ACTIVITIES.map((row) => ({
+  const allSeries: ChartSeries[] = GROUPS.map((row) => ({
     label: row.label,
     color: row.color,
-    points: toPoints(days, activityByDay(figures, row), TREND_DAYS, dayLabel),
+    points: toPoints(summary.days, byDayForGroup(summary, row.key), TREND_DAYS, dayLabel),
   }));
 
   return (
     <SettingsPage title="Your activity">
-      <SectionTitle>Time on Tirbeo</SectionTitle>
+      <SectionTitle>Recorded this week</SectionTitle>
       <p className="-mt-2 flex items-baseline gap-2">
         <span className="text-[30px] leading-none font-bold tracking-tight tabular-nums">
-          <Counter minutes={week} />
+          <Counter value={week} />
         </span>
-        <span className="text-[14px] text-muted">this week</span>
+        <span className="text-[14px] text-muted">{week === 1 ? "thing" : "things"}</span>
       </p>
       <p className="mt-2 text-[13.5px] leading-relaxed text-muted">
-        About {formatDuration(Math.round(week / WEEK_DAYS))} a day
-        {peak ? ` · busiest on ${weekdayShort(peak.at)}, ${formatDuration(peak.minutes)}` : ""}
+        About {Math.round(week / WEEK_DAYS)} a day
+        {peak ? ` · busiest on ${weekdayShort(peak.at)}, ${formatCount(peak.total)}` : ""}
       </p>
 
       <div className="mt-4">
-        <Bars points={bars} say={(point) => formatDuration(point.value)} />
+        <Bars points={bars} say={(point) => sayCount(point.value)} />
       </div>
       <Helper>
-        Each bar is one day, in minutes. The dashed line is your average day — tap a bar, or slide
-        along the row, to read that day.
+        Each bar is one day, counted in your timezone. The dashed line is your average day — tap a
+        bar, or slide along the row, to read that day.
       </Helper>
 
       <SectionTitle>
-        Last {TREND_DAYS} days{activity ? ` · ${activity.label.toLowerCase()}` : ""}
+        Last {TREND_DAYS} days{group ? ` · ${group.label.toLowerCase()}` : ""}
       </SectionTitle>
 
       {/* One row you swipe rather than a grid that wraps: the labels are short
           enough to read whole when nothing has to share a line with them, and
           each one carries the number it stands for, so picking a colour and
-          learning what it cost are the same action. */}
+          learning what it counted are the same action. */}
       <div className="scrollbar-none -mx-4 mt-1 flex snap-x gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
         <FilterChip
           on={filter === "all"}
           color={RAINBOW}
           label="Everything"
-          value={formatDuration(grandTotal)}
-          title={`Everything you've done here in the last ${TREND_DAYS} days`}
+          value={grandTotal}
+          title={`Everything recorded here in the last ${TREND_DAYS} days`}
           onClick={() => setFilter("all")}
         />
-        {ACTIVITIES.map((row) => (
+        {GROUPS.map((row) => (
           <FilterChip
             key={row.key}
             on={filter === row.key}
             color={row.color}
             label={row.label}
-            value={formatDuration(activityTotal(figures, row))}
+            value={groupTotal(summary, row.key)}
             title={`${row.label} in ${TREND_DAYS} days`}
             onClick={() => setFilter(row.key)}
           />
@@ -146,35 +169,35 @@ export default function YourActivityPage() {
 
       <p className="mt-5 flex items-baseline gap-2">
         <span className="text-[24px] leading-none font-bold tracking-tight tabular-nums">
-          {/* Keyed by the filter so switching activity recounts the number
+          {/* Keyed by the filter so switching group recounts the number
               instead of swapping it. */}
-          <Counter key={filter} minutes={total} />
+          <Counter key={filter} value={total} />
         </span>
         <span className="text-[13px] text-muted">
-          {activity ? `${activity.label.toLowerCase()} in ${TREND_DAYS} days` : `all of it in ${TREND_DAYS} days`}
+          {group ? `${group.label.toLowerCase()} in ${TREND_DAYS} days` : `all of it in ${TREND_DAYS} days`}
         </span>
       </p>
 
       {/* Remounted per filter so the marker re-finds the busiest day of the
           series it's actually being shown. */}
       <div className="mt-3">
-        {activity ? (
+        {group ? (
           <Trend
             key={filter}
             points={curve}
             color={color}
-            say={(point) => formatDuration(point.value)}
+            say={(point) => sayCount(point.value)}
           />
         ) : (
-          <TrendAll series={allSeries} say={formatDuration} />
+          <TrendAll series={allSeries} say={sayCount} />
         )}
       </div>
       <Helper>
-        {activity
-          ? `Drawn in the colour of ${activity.label.toLowerCase()} — ${formatDuration(
-              activityTotal(figures, activity),
-            )} of your ${TREND_DAYS} days went there.`
-          : `Stacked, so the height of the picture is that day and each colour is the part it went to. Slide a finger along it, or pick a colour above for one activity.`}
+        {group
+          ? `Drawn in the colour of ${group.label.toLowerCase()} — that line is the ${formatCount(
+              groupTotal(summary, group.key),
+            )} your ${TREND_DAYS} days left behind.`
+          : `Stacked, so the height of the picture is that day and each colour is the part it was. Slide a finger along it, or pick a colour above for one group.`}
       </Helper>
 
       <SectionTitle>Your records</SectionTitle>
@@ -193,7 +216,11 @@ export default function YourActivityPage() {
       <Helper>
         <Link
           href="/settings/download-data"
-          className="font-medium text-link underline underline-offset-2"
+          /* The line box of an inline link is about 15px tall, which is half
+             what a finger can reliably hit. Negative margin keeps the padding
+             from changing the paragraph's leading, so the hit area grows
+             without the sentence moving. */
+          className="-m-2.5 inline-block p-2.5 font-medium text-link underline underline-offset-2"
         >
           Download your data
         </Link>{" "}
@@ -205,11 +232,11 @@ export default function YourActivityPage() {
 
 /* ── The filter ────────────────────────────────────────────────── */
 
-/** The big number above a chart. It carries the unit, so it owns the
-    wording; the count-up is the only thing it adds. */
-function Counter({ minutes }: { minutes: number }) {
-  const shown = useCountUp(minutes);
-  return <>{formatDuration(shown)}</>;
+/** The big number above a chart. It carries only the count; the unit is
+    written beside it, and the count-up is the only thing it adds. */
+function Counter({ value }: { value: number }) {
+  const shown = useCountUp(value);
+  return <>{shown}</>;
 }
 
 function FilterChip({
@@ -223,36 +250,38 @@ function FilterChip({
   on: boolean;
   color: string;
   label: string;
-  value: string;
+  value: number;
   title: string;
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Chip
+      active={on}
       onClick={onClick}
       onPointerDown={() => haptic("light")}
-      aria-pressed={on}
       title={title}
-      className={cn(
-        "flex min-h-10 shrink-0 snap-start items-center gap-2 rounded-full py-2 pr-3.5 pl-3 text-[12.5px] font-semibold whitespace-nowrap transition-colors",
-        on ? "bg-fg text-bg" : "bg-surface-2 text-muted hover:bg-surface-3 hover:text-fg",
-      )}
+      className="min-h-10 shrink-0 snap-start"
+      dot={
+        <span
+          aria-hidden
+          className="size-[9px] shrink-0 rounded-full"
+          style={{ background: color }}
+        />
+      }
     >
-      <span aria-hidden className="size-[9px] shrink-0 rounded-full" style={{ background: color }} />
       {label}
-      <span className={cn("tabular-nums", on ? "text-bg/65" : "text-fg/55")}>{value}</span>
-    </button>
+      <span className={cn("tabular-nums", on ? "text-accent-fg/75" : "text-fg/55")}>{value}</span>
+    </Chip>
   );
 }
 
 /** Day records become chart points: short label on the axis, the full date
     in the bubble, and "Today" on the last one instead of either. */
 function toPoints(
-  days: DayMinutes[],
+  days: DayRow[],
   values: number[],
   total: number,
-  label: (day: DayMinutes, isLast: boolean) => string,
+  label: (day: DayRow, isLast: boolean) => string,
 ): ChartPoint[] {
   return days.map((day, i) => {
     const isLast = i === total - 1;

@@ -1,193 +1,182 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Segmented } from "@/components/ig-ui";
+import { useCallback, useEffect, useState } from "react";
 import {
-  ActionRow,
   Group,
   Helper,
   LinkRow,
+  OptionRow,
   PageSkeleton,
+  PillButton,
+  PillStack,
   SectionTitle,
   SettingsPage,
 } from "@/components/settings-shell";
-import {
-  FORMATS,
-  MAX_REQUESTS,
-  PREP_MS,
-  TICK_MS,
-  cooldownLabel,
-  cooldownMs,
-  formatLabel,
-  isReady,
-  progressOf,
-  resaveClosed,
-  readRequests,
-  requestArchive,
-  scopeLabel,
-  type ArchiveRequest,
-  type Format,
-  type RequestResult,
-} from "@/lib/download-data";
-import { ago } from "@/lib/dates";
-import { usePrefs } from "@/lib/prefs";
+import { formatBytes } from "@/lib/download-data";
+import { ago, formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
-
+import { usePageRefresh } from "@/lib/page-refresh";
+import {
+  EXPORT_FORMATS,
+  formatName,
+  readDownloadPage,
+  requestArchive,
+  statusName,
+  type DownloadPage,
+  type ExportFormat,
+  type ExportRequestRow,
+} from "./export-format";
 
 /* ═══════════════════════════════════════════════════════════════════
    Download your data
 
-   One request, and it always holds everything — there's nothing to pick,
-   because the archive is the whole account. Ask for it and you're carried
-   to the page for that one request, which counts the build up and hands
-   over the file when it's ready. There's no server here, so nothing is
-   emailed and nothing is uploaded. Three requests a day keeps the work
-   reasonable, and the wait is counted down rather than hidden.
+   One paragraph, one button, one honest status line. The account writes the
+   file the moment you press it and your browser saves it; Tirbeo keeps no
+   copy, so "status" here is the account's real record of past requests —
+   nothing is simulated and there is no fake progress bar.
+
+   Requests are recorded by POST /api/user/export-data and the file is
+   written by GET /api/user/export-data?request=<id>; both live reads come
+   from GET /api/user/export-data?summary=1, so this page says the same
+   thing from any device.
    ═══════════════════════════════════════════════════════════════════ */
 
-const STORE = "tirbeo:download-data";
-
-type Picks = { format: Format };
-
-const DEFAULTS: Picks = { format: "json" };
-
 export default function DownloadDataPage() {
-  const { values: picks, set } = usePrefs(STORE, DEFAULTS);
-  const [requests, setRequests] = useState<ArchiveRequest[] | null>(null);
-  const [wait, setWait] = useState(0);
-  const [tick, setTick] = useState(0);
-  const router = useRouter();
+  /* undefined: still reading. null: the account wouldn't answer. */
+  const [summary, setSummary] = useState<DownloadPage | null | undefined>(undefined);
+  const [failedRead, setFailedRead] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [format, setFormat] = useState<ExportFormat>("json");
   const toast = useToast();
 
-  useEffect(() => {
-    setRequests(readRequests());
-    setWait(cooldownMs());
+  const refresh = useCallback(async () => {
+    try {
+      setSummary(await readDownloadPage());
+    } catch (err: any) {
+      setSummary(null);
+      setFailedRead(err?.message || "The account service didn't answer.");
+    }
   }, []);
 
-  // The clock is re-read on each tick, so progress moves without re-rendering
-  // for anything else.
-  const now = useMemo(() => Date.now(), [tick]);
-  const newest = requests?.[0] ?? null;
-  const pending = newest && !isReady(newest, now) ? newest : null;
-
-  // Only a request that is still preparing needs a second-by-second clock.
   useEffect(() => {
-    if (!pending) return;
-    const id = window.setInterval(() => setTick((t) => t + 1), TICK_MS);
-    return () => window.clearInterval(id);
-  }, [pending]);
+    refresh();
+  }, [refresh]);
 
-  // The cooldown outlives any one request, so it gets a slower check of its own.
-  useEffect(() => {
-    if (!wait) return;
-    const id = window.setInterval(() => setWait(cooldownMs()), 30_000);
-    return () => window.clearInterval(id);
-  }, [wait]);
+  usePageRefresh(refresh);
 
-  if (!picks || requests === null) return <PageSkeleton title="Download your data" sections={3} />;
-
-  const { format } = picks;
-  const limited = wait > 0;
-
-  function blocked() {
-    haptic("error");
-    toast.error(`Limit reached — you can request another archive in ${cooldownLabel(wait)}`);
-  }
-
-  function request() {
-    const result: RequestResult = requestArchive(format, "everything");
-    if (!result.ok) {
-      setWait(result.retryInMs);
+  /** One press: the request is written on the account in the chosen format,
+      and the file it produces is handed to the browser. */
+  async function requestMyData() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const archive = await requestArchive(format);
+      // Re-read the account rather than patching the list by hand: the
+      // request it just wrote is the authority on what came out.
+      const fresh = await readDownloadPage().catch(() => null);
+      if (fresh) setSummary(fresh);
+      haptic("success");
+      toast.success(`${archive.fileName} saved — ${formatBytes(archive.bytes)}`);
+    } catch (err: any) {
       haptic("error");
-      toast.error(`Limit reached — try again in ${cooldownLabel(result.retryInMs)}`);
-      return;
+      toast.error(err?.message || "Your data couldn't be gathered. Nothing was downloaded.");
+      await refresh();
+    } finally {
+      setBusy(false);
     }
-    setRequests(result.requests);
-    setWait(cooldownMs());
-    haptic("success");
-    /* The build is a thing with a state, so it gets a page: the progress, the
-       file name, and everything that went into it are all answered there. */
-    const fresh = result.requests[0];
-    if (fresh) router.push(`/settings/download-data/${fresh.id}`);
   }
 
-  const secondsLeft = pending
-    ? Math.max(0, Math.round((PREP_MS - (now - pending.requestedAt)) / 1000))
-    : 0;
+  if (summary === undefined) return <PageSkeleton title="Download your data" sections={2} />;
+
+  if (summary === null) {
+    return (
+      <SettingsPage title="Download your data">
+        <Helper lead tone="danger">
+          {failedRead} Nothing was downloaded — the file is written by your account, so it
+          can&apos;t be produced while the account isn&apos;t answering.
+        </Helper>
+        <PillStack>
+          <PillButton tone="outline" label="Try again" onClick={refresh} />
+        </PillStack>
+      </SettingsPage>
+    );
+  }
+
+  const latest = summary.recent[0] ?? null;
 
   return (
     <SettingsPage title="Download your data">
-      <SectionTitle>Format</SectionTitle>
-      <Segmented
-        label="File format"
-        value={format}
-        options={FORMATS}
-        onChange={(next) => set({ format: next })}
-      />
-      <Helper>{FORMATS.find((option) => option.value === format)?.sub}</Helper>
-
-      <SectionTitle desc="The archive is built from what this browser holds — your details, saved choices, sign-ins, devices and the changes you've made. Nothing is emailed to you, and a password never appears in it.">
-        Request
+      <SectionTitle desc="The account holds everything below in one file — your profile, your saved choices, your sign-ins, your sessions and your activity. Press the button and the account writes it right then; your browser saves it and Tirbeo keeps no copy. Passwords, authenticator secrets, recovery codes and passkeys are never included.">
+        Pick your format
       </SectionTitle>
-      <Group>
-        <ActionRow
-          title="Download all my data"
-          sub={
-            limited
-              ? `Try again in ${cooldownLabel(wait)}.`
-              : `Everything, as ${formatLabel(format)}, written on this device.`
-          }
-          disabled={limited}
-          blockedHint={blocked}
-          onClick={request}
-        />
+      <Group label="Export format">
+        {EXPORT_FORMATS.map((choice) => (
+          <OptionRow
+            key={choice.value}
+            title={choice.label}
+            sub={choice.sub}
+            selected={format === choice.value}
+            onSelect={() => setFormat(choice.value)}
+          />
+        ))}
       </Group>
 
-      {pending ? (
-        <Helper>
-          An archive is being prepared — {secondsLeft} second{secondsLeft === 1 ? "" : "s"} left.{" "}
-          <Link
-            href={`/settings/download-data/${pending.id}`}
-            className="font-semibold text-link underline underline-offset-2"
-          >
-            Watch it build
-          </Link>
-          .
-        </Helper>
-      ) : null}
+      <PillStack>
+        <PillButton
+          label={busy ? "Preparing your file…" : "Request my data"}
+          sub={busy ? "Reading every part of the account." : `Downloads one ${formatName(format)} with everything your account holds.`}
+          onClick={requestMyData}
+          disabled={busy}
+        />
+      </PillStack>
 
-      <SectionTitle desc="Each request keeps its own page: the format it was filed as, when it was built, and what was inside it at the time.">
-        Requests
-      </SectionTitle>
-      {requests.length ? (
-        <Group>
-          {requests.map((request) => (
-            <LinkRow
-              key={request.id}
-              href={`/settings/download-data/${request.id}`}
-              title={`${scopeLabel(request.scope)} · ${formatLabel(request.format)}`}
-              sub={`Requested ${ago(request.requestedAt)}`}
-              right={
-                isReady(request, now)
-                  ? resaveClosed(request, now)
-                    ? "Expired"
-                    : request.savedAt
-                      ? "Saved"
-                      : "Ready"
-                  : `${progressOf(request, now)}%`
-              }
-            />
-          ))}
-        </Group>
-      ) : (
-        <Helper>
-          No archive has been requested from this device. The {MAX_REQUESTS} most recent requests
-          stay listed here with their dates.
-        </Helper>
-      )}
+      {latest ? <StatusLine row={latest} /> : null}
+
+      {summary.recent.length > 1 ? (
+        <>
+          <SectionTitle desc="Each press writes a fresh file. Tirbeo doesn't keep old ones — opening a request shows what it said and lets you take it again.">
+            Previous requests
+          </SectionTitle>
+          <div className="list-divide">
+            {summary.recent.slice(1, 6).map((record) => (
+              <LinkRow
+                key={record.id}
+                href={`/settings/download-data/${record.id}`}
+                title={formatStamp(record.at)}
+                sub={formatName(record.format)}
+                right={record.status === "ready" && record.bytes !== null ? formatBytes(record.bytes) : statusName(record.status, record.at)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
     </SettingsPage>
+  );
+}
+
+/** The one status line: what the most recent request on the account says. */
+function StatusLine({ row }: { row: ExportRequestRow }) {
+  if (row.status === "ready") {
+    return (
+      <Helper tone="ok">
+        Last export {ago(row.at)}
+        {row.bytes !== null ? ` · ${formatBytes(row.bytes)}` : ""} — saved to your browser, not kept
+        by Tirbeo.
+      </Helper>
+    );
+  }
+  if (row.status === "failed") {
+    return (
+      <Helper tone="warn">
+        The last request couldn&apos;t be written. Nothing was downloaded — asking again starts
+        over.
+      </Helper>
+    );
+  }
+  return (
+    <Helper>
+      Your last request is waiting to be collected — open it below to take the file.
+    </Helper>
   );
 }

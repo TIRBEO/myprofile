@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Group,
@@ -22,9 +22,12 @@ import {
 } from "@/lib/account-history";
 import {
   appealFor,
-  decisionStatus,
   findItemById,
+  loadAccountChecks,
+  loadAppeals,
+  readAppeals,
   sections,
+  type Appeal,
   type StatusItem,
   type StatusSection,
 } from "@/lib/account-status";
@@ -36,14 +39,14 @@ import { ago, formatStamp } from "@/lib/dates";
 
    Everything on this page is something this account asked for and
    something this account then did something about — a pause ended, a close
-   called off, a review written out. Nothing here is a status somebody
-   guessed at: a row says "still in force" because it is, and "reversed"
-   because someone reversed it, at a minute that was recorded when they did.
+   called off, a review written out. The reviews come straight from the
+   account now, not from this browser: an appeal filed here is the same row
+   an admin answers, and the same row a second device will list.
 
    Under the log sits the other half of the question — the decisions that
    are still waiting on an answer from you. That's the list a good standing
    page can't show, because needing an answer and being in trouble aren't
-   the same thing.
+   the same thing. When both lists are empty, they say so quietly.
    ═══════════════════════════════════════════════════════════════════ */
 
 const OUTCOME_TONE = {
@@ -53,18 +56,40 @@ const OUTCOME_TONE = {
   reviewed: "text-muted",
 };
 
+const APPEAL_STATUS: Record<string, { word: string; tone: "warn" | "muted" | "ok" }> = {
+  pending: { word: "Under review", tone: "warn" },
+  upheld: { word: "Decision stands", tone: "muted" },
+  overturned: { word: "Lifted", tone: "ok" },
+};
+
+const APPEAL_TONE = {
+  warn: "text-warn-text",
+  muted: "text-muted",
+  ok: "text-success-text",
+};
+
 export default function AccountHistoryPage() {
   const requests = useRequests();
   const [waiting, setWaiting] = useState<Pending[] | null>(null);
+  const [appeals, setAppeals] = useState<Appeal[]>([]);
 
-  useEffect(() => {
-    const look = () => setWaiting(decisionsAwaitingAnswer());
-    look();
-    window.addEventListener(ACCOUNT_EVENT, look);
-    return () => window.removeEventListener(ACCOUNT_EVENT, look);
+  const look = useCallback(() => {
+    setWaiting(decisionsAwaitingAnswer());
+    setAppeals(readAppeals());
   }, []);
 
-  const open = requests.filter((row) => row.closedAt === null);
+  useEffect(() => {
+    look();
+    // Read the account's own answers first, then paint from them.
+    Promise.all([loadAccountChecks(), loadAppeals().catch(() => [] as Appeal[])])
+      .then(look)
+      .catch(look);
+    window.addEventListener(ACCOUNT_EVENT, look);
+    return () => window.removeEventListener(ACCOUNT_EVENT, look);
+  }, [look]);
+
+  const open = requests.filter((row) => row.closedAt === null && row.kind !== "appeal");
+  const ownRequests = requests.filter((row) => row.kind !== "appeal");
 
   if (!waiting) return <PageSkeleton title="Requests and history" sections={3} />;
 
@@ -77,19 +102,29 @@ export default function AccountHistoryPage() {
       </Helper>
 
       <SectionTitle>What you&apos;ve asked for</SectionTitle>
-      {requests.length ? (
+      {ownRequests.length ? (
         <Group>
-          {requests.map((row) => (
+          {ownRequests.map((row) => (
             <RequestRow key={`${row.kind}-${row.id}-${row.at}`} row={row} />
           ))}
         </Group>
       ) : (
+        <p className="max-w-[58ch] text-[14px] leading-relaxed text-muted">
+          Nothing asked for yet — pausing the account or closing it leaves a row here.
+        </p>
+      )}
+
+      <SectionTitle>Appeals</SectionTitle>
+      {appeals.length ? (
         <Group>
-          <EmptyState
-            title="Nothing asked for yet"
-            description="Pausing the account, closing it, and appealing a decision all leave a row here, with what became of them."
-          />
+          {appeals.map((row) => (
+            <AppealRow key={row.id} row={row} />
+          ))}
         </Group>
+      ) : (
+        <p className="max-w-[58ch] text-[14px] leading-relaxed text-muted">
+          You haven&apos;t asked anyone to review a decision.
+        </p>
       )}
 
       <SectionTitle>Waiting on an answer from you</SectionTitle>
@@ -106,31 +141,25 @@ export default function AccountHistoryPage() {
           ))}
         </Group>
       ) : (
-        <Group>
-          <StaticRow
-            title="Every decision has been appealed"
-            sub="Anything you've set aside without appealing is still listed under Account status, and still open to a review request."
-          />
-        </Group>
+        <p className="max-w-[58ch] text-[14px] leading-relaxed text-muted">
+          Nothing is waiting on an answer from you.
+        </p>
       )}
 
       <Helper>
-        Only what you did from these pages is kept, and only on this device. The decisions
-        themselves come from the account, so the list of them is under{" "}
+        Decisions and appeals live on the account —{" "}
         <Link href="/settings/account-status" className="text-link">
           Account status
-        </Link>
-        .
+        </Link>{" "}
+        lists them.
       </Helper>
     </SettingsPage>
   );
 }
 
 /* ── One row of the log ───────────────────────────────────────────
-   An appeal is a means to a page, not a page: the note itself, the rule and
-   the three things that happen next all live with the decision it argues
-   with, so this row goes there. A pause or a close has nowhere else to be,
-   so its own line carries the whole story.                          */
+   A pause or a close has nowhere else to be, so its own line carries the
+   whole story. Appeals live with the account now — see the Appeals list. */
 
 function RequestRow({ row }: { row: AccountRequest }) {
   const label = OUTCOME_LABEL[row.outcome];
@@ -138,28 +167,32 @@ function RequestRow({ row }: { row: AccountRequest }) {
   const when = `${formatStamp(row.at)} · ${ago(row.at)}`;
   const closed = row.closedAt ? ` · closed ${formatStamp(row.closedAt)}` : "";
 
-  if (row.kind === "appeal") {
-    const found = findItemById(row.id);
-    const status = found ? decisionStatus(found.item, appealFor(found.item.id)) : null;
-    return (
-      <LinkRow
-        href={
-          found
-            ? `/settings/account-status/${found.section.id}/${found.item.id}`
-            : "/settings/account-status"
-        }
-        title={`Appeal — ${found?.item.title ?? "a decision no longer on your account"}`}
-        sub={`${when} · ${OUTCOME_SENTENCE[row.outcome]}`}
-        right={status?.word ?? label}
-      />
-    );
-  }
-
   return (
     <StaticRow
       title={KIND_LABEL[row.kind]}
       sub={`${when}${closed} — ${OUTCOME_SENTENCE[row.outcome]}`}
       right={<span className={tone}>{label}</span>}
+    />
+  );
+}
+
+/* ── An appeal, as the account holds it ─────────────────────────
+   The note went in; the answer comes back to this list and to the page of
+   the decision it argues with. */
+
+function AppealRow({ row }: { row: Appeal }) {
+  const status = APPEAL_STATUS[row.decision ?? "pending"] ?? APPEAL_STATUS.pending;
+  const found = findItemById(row.restrictionId);
+  return (
+    <LinkRow
+      href={
+        found
+          ? `/settings/account-status/${found.section.id}/${found.item.id}`
+          : "/settings/account-status"
+      }
+      title={`Appeal — ${found?.item.title ?? "a decision no longer on your account"}`}
+      sub={`${formatStamp(row.at)} · ${ago(row.at)}`}
+      right={<span className={APPEAL_TONE[status.tone]}>{status.word}</span>}
     />
   );
 }

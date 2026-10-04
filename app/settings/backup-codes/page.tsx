@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Sheet, SheetActions } from "@/components/ig-ui";
 import {
   ActionRow,
@@ -12,68 +12,54 @@ import {
   StaticRow,
 } from "@/components/settings-shell";
 import { BackupCodesSheet } from "@/components/backup-codes-sheet";
-import {
-  CODE_COUNT,
-  type CodeSet,
-  RATE_MAX,
-  cooldownLabel,
-  cooldownMs,
-  generate,
-  readSets,
-  twoFactorEnabled,
-} from "@/lib/backup-codes";
+import { useReauthGuard } from "@/components/reauth-sheet";
+import { wasDeclined } from "@/lib/reauth";
+import { CODE_COUNT, MINTS_PER_HOUR, type RevealedCodes, regenerateCodes, useTwoFactorState } from "@/lib/two-factor";
 import { ago, formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
-
+import { usePageRefresh } from "@/lib/page-refresh";
 
 /* ═══════════════════════════════════════════════════════════════════
    Backup codes — reached from Two-factor, not the sidebar.
 
-   The page never prints a code. Sets appear in a sheet the moment they
-   are created and disappear with it, so this screen is status plus a
-   record of when each set was made. Lost them? Generate again — the new
-   set replaces the old one.
+   The page never prints a code. The account service hands out the
+   plaintext in the reply that mints a set and keeps only hashes after
+   that, so a set is readable exactly once, in the sheet that opens the
+   moment it is issued. What survives here is the record of when each set
+   was made and how many of its codes are still unspent.
+
+   Whether a code has been used isn't something this browser gets to
+   remember: signing in with one marks it spent on the server, and that is
+   what this page reads back.
    ═══════════════════════════════════════════════════════════════════ */
 
 export default function BackupCodesPage() {
-  const [sets, setSets] = useState<CodeSet[] | null>(null);
-  const [twoFaOn, setTwoFaOn] = useState(true);
-  const [wait, setWait] = useState(0);
+  const { state, failed, refresh } = useTwoFactorState();
   const [confirming, setConfirming] = useState(false);
-  const [codes, setCodes] = useState<CodeSet | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [codes, setCodes] = useState<RevealedCodes | null>(null);
   const toast = useToast();
+  const { guard, reauthDialog } = useReauthGuard();
 
-  useEffect(() => {
-    setTwoFaOn(twoFactorEnabled());
-    setSets(readSets());
-  }, []);
+  usePageRefresh(refresh);
 
-  // Re-checked on a tick, so the cooldown lifts without a reload.
-  useEffect(() => {
-    setWait(cooldownMs());
-    const id = window.setInterval(() => setWait(cooldownMs()), 30_000);
-    return () => window.clearInterval(id);
-  }, [sets]);
-
-  const latest = sets?.[0] ?? null;
-  const limited = wait > 0;
-
-  function blocked() {
-    toast.error(`Code limit reached — try again in ${cooldownLabel(wait)}`);
+  if (failed) {
+    return (
+      <SettingsPage title="Backup codes">
+        <Helper lead tone="danger">
+          The account service didn’t answer, so the codes on this account are unknown.{" "}
+          <button type="button" className="font-semibold underline" onClick={refresh}>
+            Try again
+          </button>
+          .
+        </Helper>
+      </SettingsPage>
+    );
   }
 
-  function regenerate() {
-    const result = generate();
-    setConfirming(false);
-    if (!result.ok) {
-      blocked();
-      return;
-    }
-    setSets(readSets());
-    setCodes(result.fresh);
-  }
+  if (!state) return <PageSkeleton title="Backup codes" />;
 
-  if (!twoFaOn) {
+  if (!state.authenticator) {
     return (
       <SettingsPage title="Backup codes">
         <Helper>
@@ -83,21 +69,43 @@ export default function BackupCodesPage() {
     );
   }
 
-  if (!sets) return <PageSkeleton title="Backup codes" />;
+  const sets = state.codes.sets;
+  const latest = sets[0] ?? null;
+
+  async function regenerate() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      // The brain refuses a bare session, so the guard asks once and the retry
+      // carries the answer. Cancelled means nothing was generated.
+      setCodes(await guard((proof) => regenerateCodes(proof)));
+      setConfirming(false);
+      refresh();
+    } catch (err) {
+      // Backing out of the check leaves the old set alone, and the question on
+      // screen, so it can be answered again.
+      if (wasDeclined(err)) return;
+      setConfirming(false);
+      toast.error(err instanceof Error ? err.message : "Couldn’t reach the account service");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <SettingsPage title="Backup codes">
       <Helper className="mt-6">
         {latest
-          ? `Newest set generated ${formatStamp(latest.createdAt)}, ${ago(latest.createdAt)}.`
+          ? `${latest.remaining} of ${latest.total} codes from the set generated ${formatStamp(latest.createdAt)} are still unused — ${ago(latest.createdAt)}.`
           : "Generate a set so you can still sign in without your app."}
       </Helper>
 
       <SectionTitle
         desc={
           <>
-            Codes are shown once, straight after they&apos;re created. Each one can be used once, and
-            generating a new set replaces everything before it. Up to {RATE_MAX} sets an hour.
+            Codes are shown once, straight after they&apos;re created — the account keeps only an
+            unrecoverable copy. Each one can be used once, and generating a new set replaces
+            everything before it. No more than {MINTS_PER_HOUR} sets an hour.
           </>
         }
       >
@@ -106,18 +114,10 @@ export default function BackupCodesPage() {
       <Group>
         <ActionRow
           title={latest ? "Generate new codes" : "Generate codes"}
-          sub={
-            limited
-              ? `Try again in ${cooldownLabel(wait)}.`
-              : latest
-                ? "The old set stops working."
-                : `${CODE_COUNT} one-time codes.`
-          }
+          sub={latest ? "The old set stops working." : `${CODE_COUNT} one-time codes.`}
           /* Red only when it throws a working set away — issuing the very
              first one takes nothing back. */
           danger={Boolean(latest)}
-          disabled={limited}
-          blockedHint={blocked}
           onClick={() => setConfirming(true)}
         />
       </Group>
@@ -127,16 +127,20 @@ export default function BackupCodesPage() {
         <Group>
           {sets.map((set) => (
             <StaticRow
-              key={set.id}
-              title={formatStamp(set.createdAt)}
-              sub={`${ago(set.createdAt)} · ${set.codes.length} one-time codes`}
+              key={set.createdAt || "undated"}
+              title={set.createdAt ? formatStamp(set.createdAt) : "Issued before this log began"}
+              sub={
+                set.createdAt
+                  ? `${ago(set.createdAt)} · ${set.remaining} of ${set.total} unused`
+                  : `${set.total} one-time codes, ${set.remaining} unused`
+              }
             />
           ))}
         </Group>
       ) : (
         <Helper className="mt-0">
-          Every set you generate is listed here with its date. The codes themselves aren&apos;t kept
-          on screen.
+          Every set you generate is listed here with its date and how much of it is left. The codes
+          themselves aren&apos;t kept on screen.
         </Helper>
       )}
 
@@ -145,7 +149,7 @@ export default function BackupCodesPage() {
           title={latest ? "Generate new codes?" : "Generate backup codes?"}
           description={
             latest
-              ? `Your ${CODE_COUNT} current codes stop working, including any you've saved or printed.`
+              ? `Your ${latest.remaining} unused codes stop working, including any you've saved or printed.`
               : `${CODE_COUNT} codes you can sign in with if you lose your app.`
           }
           onClose={() => setConfirming(false)}
@@ -156,6 +160,7 @@ export default function BackupCodesPage() {
               confirmLabel="Generate"
               confirmVariant={latest ? "danger" : "primary"}
               onConfirm={regenerate}
+              loading={busy}
             />
           }
         />
@@ -171,7 +176,8 @@ export default function BackupCodesPage() {
           }}
         />
       ) : null}
+
+      {reauthDialog}
     </SettingsPage>
   );
 }
-

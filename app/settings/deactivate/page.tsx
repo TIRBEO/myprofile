@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Disclosure, Field, Sheet, SheetActions, Textarea } from "@/components/ig-ui";
 import {
   Group,
@@ -15,17 +15,12 @@ import {
   SheetGroup,
   StaticRow,
 } from "@/components/settings-shell";
-import {
-  REASONS,
-  type Deactivation,
-  deactivate,
-  readDeactivation,
-  reactivate,
-} from "@/lib/deactivate";
+import { REASONS } from "@/lib/deactivate";
 import { GRACE_DAYS } from "@/lib/delete-account";
 import { formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { apiDeactivate, apiReactivate, useAccountState } from "@/lib/account-lifecycle";
 
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -58,20 +53,20 @@ const OTHER = "Something else";
 const NOTE_MAX = 240;
 
 export default function DeactivatePage() {
-  const [state, setState] = useState<{ record: Deactivation | null; ready: boolean }>({
-    record: null,
-    ready: false,
-  });
+  const { state, loading } = useAccountState();
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
 
-  useEffect(() => {
-    setState({ record: readDeactivation(), ready: true });
-  }, []);
+  /* The record is the brain's, not a flag left in this browser: a device that
+     never deactivated the account sees the same paused state. */
+  const record = state?.deactivated
+    ? { at: state.deactivatedAt ? Date.parse(state.deactivatedAt) : Date.now(), reason: state.deactivatedReason ?? "" }
+    : null;
 
-  if (!state.ready) return <PageSkeleton title="Deactivate account" sections={2} />;
+  if (loading) return <PageSkeleton title="Deactivate account" sections={2} />;
 
   /* A reason of "Something else" is a category with nothing in it, so that one
      waits for the note; every other reason stands on its own. */
@@ -84,18 +79,38 @@ export default function DeactivatePage() {
     return reason && extra ? `${reason} — ${extra}` : reason;
   }
 
-  function doDeactivate() {
+  async function doDeactivate() {
     setConfirm(false);
-    setState({ record: deactivate(given()), ready: true });
-    haptic("heavy");
-    toast.error("Your profile is now hidden");
+    setBusy(true);
+    try {
+      await apiDeactivate(given() || null);
+      haptic("heavy");
+      toast.error("Your profile is now hidden");
+    } catch {
+      toast.error("Couldn't deactivate the account — please try again");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (state.record) {
+  async function doReactivate() {
+    setBusy(true);
+    try {
+      await apiReactivate();
+      haptic("success");
+      toast.success("Welcome back — your profile is visible again");
+    } catch {
+      toast.error("Couldn't reactivate the account — please try again");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (record) {
     return (
       <SettingsPage title="Deactivate account">
         <p className="mt-3 px-1 text-[13px] leading-relaxed text-muted">
-          Your profile is hidden. Everything is still there — signing back in brings it straight
+          Your profile is hidden. Everything is still there — reactivating brings it straight
           back, and the {GRACE_DAYS}-day deletion clock never started.
         </p>
 
@@ -104,27 +119,19 @@ export default function DeactivatePage() {
           <StaticRow
             title="Hidden"
             sub="When the profile stopped being visible."
-            right={formatStamp(state.record.at)}
+            right={formatStamp(record.at)}
           />
-          <StaticRow
-            title={state.record.reason}
-            sub="Reason given — what you told us on the way out."
-          />
+          {record.reason ? (
+            <StaticRow title={record.reason} sub="Reason given — what you told us on the way out." />
+          ) : null}
         </Group>
 
         <PillStack>
-          <PillButton
-            label="Reactivate now"
-            onClick={() => {
-              setState({ record: reactivate(), ready: true });
-              haptic("success");
-              toast.success("Welcome back — your profile is visible again");
-            }}
-          />
+          <PillButton label="Reactivate now" disabled={busy} onClick={doReactivate} />
         </PillStack>
         <Helper>
-          Reactivating signs you back in here. Any other device still has to sign in again — they
-          were all ended when the profile went away.
+          Reactivating reopens the account here. Any other device was signed out when the profile
+          went away and will need to sign in again once it&apos;s back.
         </Helper>
 
         <DeleteInstead />

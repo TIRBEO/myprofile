@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 
 import { cn, Sheet, SheetActions } from "@/components/ig-ui";
 import { ActionRow, Group, Helper, PageSkeleton, PillButton, PillStack, SectionTitle, SettingsPage, StaticRow, TILE } from "@/components/settings-shell";
 import { type ConnectedApp, disconnect, findConnected, providerFor } from "@/lib/connected-apps";
+import { useReauthGuard } from "@/components/reauth-sheet";
+import { wasDeclined } from "@/lib/reauth";
+import { endSession, loginUrl } from "@/lib/session";
 import { ago, formatDate, formatStamp } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 import { useToast } from "@/lib/use-toast";
@@ -15,20 +18,53 @@ import { useToast } from "@/lib/use-toast";
 
    Tapping a tile opens a page rather than a sheet: there is a grant list
    to read, and that deserves the whole screen. The account and the dates
-   are fields under it. Disconnecting is the only decision here, and it
-   asks once in a sheet before it does anything.
+   are fields under it, and they are the account's own — the id the
+   provider issued and the sign-ins the ledger actually holds, so a link
+   that has never been used says that instead of a date it made up.
+   Disconnecting is the only decision here, and it asks once in a sheet
+   before it does anything.
    ═══════════════════════════════════════════════════════════════════ */
 
 export default function ConnectedAppDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const toast = useToast();
   const [app, setApp] = useState<ConnectedApp | null | undefined>(undefined);
+  const [failed, setFailed] = useState(false);
+  const [nonce, setNonce] = useState(0);
   const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const { guard, reauthDialog } = useReauthGuard();
 
   useEffect(() => {
-    setApp(findConnected(params.id));
-  }, [params.id]);
+    let live = true;
+    setApp(undefined);
+    setFailed(false);
+    findConnected(params.id)
+      .then((next) => live && setApp(next))
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [params.id, nonce]);
+
+  if (failed) {
+    return (
+      <SettingsPage title="Connected app">
+        <Helper lead tone="danger">
+          The account service didn’t answer, so nothing here is known to be true. Nothing was
+          changed —{" "}
+          <button
+            type="button"
+            className="font-semibold underline"
+            onClick={() => setNonce((n) => n + 1)}
+          >
+            Try again
+          </button>
+          .
+        </Helper>
+      </SettingsPage>
+    );
+  }
 
   if (app === undefined) return <PageSkeleton title="Connected app" />;
 
@@ -51,12 +87,27 @@ export default function ConnectedAppDetailPage() {
   const loss =
     catalog?.loss ?? `${app.name} will no longer be able to reach Tirbeo. Your Tirbeo account stays.`;
 
-  function eject() {
-    setConfirming(false);
-    disconnect(target.id);
-    haptic("success");
-    toast.error(`Disconnected ${target.name}`);
-    router.push("/settings/connected-apps");
+  async function eject() {
+    setBusy(true);
+    try {
+      // Revoking a way back in is a sensitive action, so the call goes through
+      // the guard: refused, it asks how to prove it's you and tries again.
+      await guard((proof) => disconnect(target.id, proof));
+      haptic("success");
+      toast.success(`Disconnected ${target.name}`);
+      // Losing the provider that signed you in ends the visit: revoke this
+      // session too and hand the browser to the accounts login, which is the
+      // only way back in now.
+      endSession();
+      window.location.replace(loginUrl());
+    } catch (err: any) {
+      setBusy(false);
+      // Backing out of the check leaves the link connected, and the question on
+      // screen, so it can be answered again.
+      if (wasDeclined(err)) return;
+      setConfirming(false);
+      toast.error(err?.message || `Couldn't disconnect ${target.name}.`);
+    }
   }
 
   return (
@@ -88,11 +139,21 @@ export default function ConnectedAppDetailPage() {
       </Group>
 
       {/* The dates were one sentence under the grants; as fields they answer
-          the two questions this page is really checked for. */}
+          the two questions this page is really checked for. Both come off the
+          sign-in ledger, so a link nobody has used yet says so. */}
       <Group>
-        <StaticRow title="Signed in as" sub={app.account} />
-        <StaticRow title="Connected" sub={`${formatDate(app.connectedAt)} · ${ago(app.connectedAt)}`} />
-        <StaticRow title="Last used" sub={`${formatStamp(app.lastUsedAt)} · ${ago(app.lastUsedAt)}`} />
+        {app.account ? <StaticRow title="Signed in as" sub={app.account} /> : null}
+        {app.lastUsedAt ? (
+          <>
+            <StaticRow
+              title="First signed in with it"
+              sub={`${formatDate(app.connectedAt ?? app.lastUsedAt)} · ${ago(app.connectedAt ?? app.lastUsedAt)}`}
+            />
+            <StaticRow title="Last used" sub={`${formatStamp(app.lastUsedAt)} · ${ago(app.lastUsedAt)}`} />
+          </>
+        ) : (
+          <StaticRow title="Used to sign in" sub="Not once since it was linked" />
+        )}
       </Group>
 
       <SectionTitle desc="Tirbeo forgets the grant straight away. Reconnecting later starts it over from the beginning.">
@@ -117,13 +178,16 @@ export default function ConnectedAppDetailPage() {
             <SheetActions
               cancelLabel="Keep it"
               onCancel={() => setConfirming(false)}
-              confirmLabel="Yes, disconnect"
+              confirmLabel={busy ? "Disconnecting…" : "Yes, disconnect"}
               confirmVariant="danger"
+              loading={busy}
               onConfirm={eject}
             />
           }
         />
       ) : null}
+
+      {reauthDialog}
     </SettingsPage>
   );
 }

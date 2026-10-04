@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Group, Helper, LinkRow, PageSkeleton, SettingsPage } from "@/components/settings-shell";
+import { Group, Helper, LinkRow, PageSkeleton, SettingsPage, StaticRow } from "@/components/settings-shell";
 import {
   KEEP_DAYS,
   daysLeft,
   readDeleted,
   type DeletedItem,
-} from "@/lib/your-activity";
+} from "@/lib/deleted-items";
 import { ago } from "@/lib/dates";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -22,6 +22,12 @@ import { ago } from "@/lib/dates";
 
    The rows carry no glyph: the kind is already the first word of the line
    under the title, so the picture said what the sentence had just said.
+
+   Honest about what it is: Tirbeo holds no notes, albums or files of
+   yours, so there is nothing server-side a deletion could have removed and
+   nothing a restore could bring back. Until a content model exists, this
+   tray is a stand-in kept in this browser, and the page says so instead of
+   implying the account keeps a recovery shelf it doesn't have.
    ═══════════════════════════════════════════════════════════════════ */
 
 export default function RecentlyDeletedPage() {
@@ -36,11 +42,16 @@ export default function RecentlyDeletedPage() {
   if (!items.length) {
     return (
       <SettingsPage title="Recently deleted">
-        <p className="text-[14px] leading-relaxed text-muted">
-          The tray is empty. Anything you delete lands here and waits out {KEEP_DAYS} days before it
-          goes for good — while it&apos;s here you can put it back, and after that there&apos;s
-          nothing left to restore, not even for support.
-        </p>
+        <Group>
+          <StaticRow
+            title="Nothing has been deleted"
+            sub={`Anything you delete lands here and waits out ${KEEP_DAYS} days before it goes for good — while it's here you can put it back.`}
+          />
+        </Group>
+        <Helper className="mt-4">
+          Tirbeo doesn&apos;t hold notes, files or albums of yours yet, and this tray is kept in
+          this browser — another device will not see what you delete here.
+        </Helper>
       </SettingsPage>
     );
   }
@@ -50,9 +61,15 @@ export default function RecentlyDeletedPage() {
   return (
     <SettingsPage title="Recently deleted">
       <Helper lead>
-        {items.length} {items.length === 1 ? "item" : "items"} can still be restored — the first of
-        them leaves for good in {soonest} {soonest === 1 ? "day" : "days"}. Restoring puts a thing
-        back where it came from; deleting it for good skips the countdown.
+        {items.length} {items.length === 1 ? "item" : "items"} in the tray, the first of them gone
+        for good in {soonest} {soonest === 1 ? "day" : "days"}. Restoring puts a thing back where it
+        came from; deleting it for good skips the countdown.
+      </Helper>
+
+      <Helper className="mt-4">
+        These rows are kept in this browser, not on the account — Tirbeo holds no content of yours
+        yet, so there&apos;s nothing server-side a restore could bring back. Another device, or a
+        cleared browser, will not see this tray.
       </Helper>
 
       {/* One list rather than a section per day: the tray holds few enough

@@ -5,6 +5,8 @@
    palette itself lives in globals.css keyed off <html data-theme>,
    so switching is a single attribute write — no inline var churn.  */
 
+import { getStored, pushSetting } from "@/lib/remote-store";
+
 export type ThemeId = "system" | "dark" | "light";
 
 export type ThemeDef = {
@@ -25,14 +27,14 @@ export const THEMES: ThemeDef[] = [
     label: "System",
     description: "Match your device's appearance",
     scheme: "dark",
-    swatch: { bg: "#2a2a30", bar: "#0a84ff", card: "#141417", line: "#27272c", ink: "#9b9ba4" },
+    swatch: { bg: "#000000", bar: "#0a84ff", card: "#0e0e10", line: "#212121", ink: "#a8a8a8" },
   },
   {
     id: "dark",
     label: "Dark",
-    description: "Deep charcoal, built for night",
+    description: "Black canvas, solid panels, built for night",
     scheme: "dark",
-    swatch: { bg: "#08080a", bar: "#0a84ff", card: "#141417", line: "#27272c", ink: "#9b9ba4" },
+    swatch: { bg: "#000000", bar: "#0a84ff", card: "#0e0e10", line: "#212121", ink: "#a8a8a8" },
   },
   {
     id: "light",
@@ -51,6 +53,10 @@ export function isThemeId(v: unknown): v is ThemeId {
 
 export function readTheme(): ThemeId {
   if (typeof window === "undefined") return "system";
+  // The account bag is the truth once it has landed; the raw localStorage slot
+  // is what the first-paint boot script wrote and the offline fallback.
+  const fromBag = getStored<string | null>(THEME_KEY, null);
+  if (isThemeId(fromBag)) return fromBag;
   try {
     const saved = window.localStorage.getItem(THEME_KEY);
     return isThemeId(saved) ? saved : "system";
@@ -72,8 +78,16 @@ export function resolveTheme(id: ThemeId): ResolvedTheme {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
-/** Writes the palette to <html> and persists the choice. */
-export function applyTheme(id: ThemeId) {
+/**
+ * Writes the palette to <html> and, for a real choice, persists it.
+ *
+ * `persist: false` is for the callers that are only *reflecting* a value the
+ * store already holds — the system-theme follower and the settings sync. Those
+ * run inside the store's own listener, and persisting there re-enters the
+ * listener through `pushSetting` → `emit()` → listener → `applyTheme` → …, a
+ * synchronous loop that overflows the stack on every page load.
+ */
+export function applyTheme(id: ThemeId, { persist = true }: { persist?: boolean } = {}) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
   const concrete = resolveTheme(id);
@@ -85,6 +99,9 @@ export function applyTheme(id: ThemeId) {
   } catch {
     /* private mode — palette still applies for this session */
   }
+  if (!persist) return;
+  // Mirror the choice onto the account too, so another device converges.
+  pushSetting(THEME_KEY, id);
 }
 
 /**

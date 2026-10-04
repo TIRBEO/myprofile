@@ -1,59 +1,120 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, SearchX } from "lucide-react";
-import { SearchField } from "@/components/ig-ui";
+import { Button, SearchField } from "@/components/ig-ui";
 import { SignOutSheet } from "@/components/settings-layout";
-import { ActionRow, LinkRow, Panel, SettingsPage } from "@/components/settings-shell";
+import { ActionRow, Group, LinkRow, SettingsPage } from "@/components/settings-shell";
+import { ProfilePicture } from "@/components/profile-picture";
+import { RowsSkeleton } from "@/components/page-loading";
 import { NAV_GROUPS, searchNav } from "@/lib/nav";
 import { useLanguage } from "@/lib/language";
 import { englishFor, useT } from "@/lib/i18n";
+import { useProfile, displayName } from "@/lib/profile";
+import { readEmailPrefs } from "@/lib/notification-prefs";
+import { useTwoFactorState } from "@/lib/two-factor";
+import { haptic } from "@/lib/haptics";
 
 /* ═══════════════════════════════════════════════════════════════════
    The hub.
 
-   The way a phone app draws its own settings: a title bar, a search box,
-   then one column of rows from edge to edge — a mark, a word, a chevron —
-   divided by nothing but a hairline. Groups are named by a line of text
-   inside the same column, not by a box around it, because a rounded panel
-   turns a list of ways out into a shelf of objects.
+   The way a phone app draws its own settings: your account at the top,
+   a search box, then one column of rows from edge to edge — a mark, a
+   word, a chevron — divided by nothing but a hairline. Groups are named
+   by a line of text above the column, not by a title welded to a form.
 
-   Once the screen is wide enough for the rail, the rail is this list — so
-   the page stops repeating it and opens the first real setting instead.
+   The hub is a phone screen. Once the viewport is wide enough for the
+   rail — the same lg width at which the shell starts showing it — the
+   list is redundant: the rail *is* the index. So on those screens this
+   page hands the visitor to the first real section instead of drawing.
+
+   The two rows that can answer without being opened — two-factor and
+   email — answer from the account. Until the account has answered, they
+   show nothing, because a guessed "Off" is a fact this app does not have.
    ═══════════════════════════════════════════════════════════════════ */
 
+/** What a row is already set to, printed before its chevron. */
+function badgeFor(href: string, values: Record<string, string | undefined>): string | undefined {
+  return values[href];
+}
+
+/** Where a wide screen is sent instead of the hub — the first real section
+    in the rail, so /settings always lands somewhere that exists. */
+const WIDE_HOME = NAV_GROUPS[0].items[0].href;
+/** The width at which settings-layout mounts the SideRail (`hidden lg:flex`
+    at Tailwind's 64rem). The redirect has to fire at exactly this width:
+    bounce earlier and the visitor is on edit-profile with no rail to jump
+    back with, bounce later and the hub is being indexed twice. */
+const WIDE_QUERY = "(min-width: 64rem)";
+
 export default function SettingsIndex() {
-  const router = useRouter();
   const [query, setQuery] = useState("");
   const [signOut, setSignOut] = useState(false);
+  const [wide, setWide] = useState(false);
+  const router = useRouter();
   const { lang } = useLanguage();
   const t = useT();
+  const profile = useProfile();
+  const { state: twoFactor } = useTwoFactorState();
+  const [emailPaused, setEmailPaused] = useState<boolean | null>(null);
 
-  /* On a wide screen the rail already is this list and its foot already holds
-     the sign-out, so the page would be an empty column with one row in it.
-     It opens the first real setting instead. */
   useEffect(() => {
-    if (window.matchMedia("(min-width: 1024px)").matches) {
-      router.replace("/settings/edit-profile");
-    }
-  }, [router]);
+    const mq = window.matchMedia(WIDE_QUERY);
+    const apply = () => setWide(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    if (wide) router.replace(WIDE_HOME);
+  }, [wide, router]);
+
+  useEffect(() => {
+    let live = true;
+    readEmailPrefs()
+      .then((prefs) => {
+        if (live) setEmailPaused(prefs.emailPaused === true);
+      })
+      .catch(() => {
+        if (live) setEmailPaused(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // A wide screen is mid-redirect: draw nothing rather than flash the list
+  // the rail already replaces.
+  if (wide) return null;
 
   const trimmed = query.trim();
-  /** Searching replaces the grouped list with a ranked one: once you've typed,
-      you want the best match first, not the section it happens to belong to.
-      Nothing matching every word still shows the closest ones rather than a
-      dead end — you can see what the machine heard. */
+  /* Searching replaces the grouped list with a ranked one: once you have typed,
+     you want the best match first, not the section it happens to belong to.
+     Nothing matching every word still shows the closest ones rather than a dead
+     end — you can see what the machine heard. */
   const hits = trimmed ? searchNav(englishFor(trimmed)) : null;
   const full = hits ? hits.filter((hit) => hit.exact) : null;
   const shown = hits ? (full?.length ? full : hits) : null;
 
+  const values: Record<string, string | undefined> = {
+    "/settings/language": lang.endonym,
+    "/settings/two-factor": twoFactor ? (twoFactor.authenticator ? t("On") : t("Off")) : undefined,
+    "/settings/notifications": emailPaused === null ? undefined : emailPaused ? t("Paused") : t("On"),
+  };
+
   return (
     <SettingsPage>
-      <div className="-mx-4 sm:-mx-6 lg:hidden">
-        <div className="sticky top-0 z-20 -mt-4 border-b border-divider bg-bg/92 px-4 py-3.5 backdrop-blur-md sm:-mt-9 sm:px-6">
-          <h1 className="text-center text-[16.5px] font-bold tracking-[-0.015em]">{t("Settings")}</h1>
+      <div className="-mx-4 sm:-mx-6">
+        <div className="sticky top-0 z-30 -mt-4 border-b border-divider bg-bg/85 py-2.5 backdrop-blur-xl sm:-mt-9">
+          <h1 className="text-center text-[16px] font-semibold tracking-[-0.01em]">{t("Settings")}</h1>
         </div>
+
+        {/* Your account, first — the settings screen belongs to somebody, and
+            which somebody is the first thing a phone app says. */}
+        <AccountHeader profile={profile} />
 
         <div className="px-4 pt-3.5 pb-1 sm:px-6">
           {/* The same pill the rest of the app searches from, at the height a
@@ -63,17 +124,17 @@ export default function SettingsIndex() {
           </div>
         </div>
 
-        {/* The boxes sit back inside the gutter the sticky bar and the search
-            pill deliberately break. */}
-        <div className="space-y-7 px-4 pt-1 pb-2 sm:px-5">
+        {/* The lists sit back inside the gutter the sticky bar, the account row
+            and the search pill deliberately break. */}
+        <div className="px-4 pt-1 pb-2 sm:px-5">
           {shown ? (
             shown.length ? (
-              <Panel
-                compact
-                title={`${shown.length} ${shown.length === 1 ? "match" : "matches"}${
-                  full?.length ? ` for “${trimmed}”` : ` — nothing matches every word in “${trimmed}”`
-                }`}
-              >
+              <Group>
+                <p className="px-4 pt-3 pb-1 text-[13px] font-semibold text-muted sm:px-5">
+                  {`${shown.length} ${shown.length === 1 ? t("match") : t("matches")}${
+                    full?.length ? ` for “${trimmed}”` : ` — ${t("nothing matches every word in")} “${trimmed}”`
+                  }`}
+                </p>
                 {shown.map(({ item }) => (
                   <LinkRow
                     key={item.href}
@@ -82,54 +143,58 @@ export default function SettingsIndex() {
                     icon={<item.icon strokeWidth={1.9} />}
                     title={t(item.label)}
                     sub={item.description}
+                    right={badgeFor(item.href, values)}
                   />
                 ))}
-              </Panel>
+              </Group>
             ) : (
               <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
                 <SearchX className="size-7 text-muted" strokeWidth={1.8} />
-                <p className="text-[15px] font-medium">Nothing matches “{trimmed}”</p>
+                <p className="text-[15px] font-medium">{`${t("Nothing matches")} “${trimmed}”`}</p>
                 <p className="text-[13px] text-muted">
-                  Try a shorter word — “dev” finds Devices, “two factor” finds two-factor
-                  authentication.
+                  {t("Try a shorter word — “dev” finds Devices, “two factor” finds two-factor authentication.")}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  className="mt-2 min-h-10 rounded-full bg-surface-3 px-4 py-2 text-[13.5px] font-semibold text-fg outline-none transition-colors hover:brightness-110 active:brightness-95"
-                >
-                  Clear search
-                </button>
+                <Button variant="ghost" className="mt-2" onClick={() => setQuery("")}>
+                  {t("Clear search")}
+                </Button>
               </div>
             )
           ) : (
             <>
               {NAV_GROUPS.map((group) => (
-                <Panel key={group.id} compact title={t(group.title)}>
-                  {group.items.map((item) => (
-                    <LinkRow
-                      key={item.href}
-                      href={item.href}
-                      compact
-                      icon={<item.icon strokeWidth={1.9} />}
-                      title={t(item.label)}
-                      sub={item.description}
-                      /* The one entry here that can say what it's set to without
-                         opening, because it's in use on every other page. */
-                      right={item.href === "/settings/language" ? lang.endonym : undefined}
-                    />
-                  ))}
-                </Panel>
+                <section key={group.id} className="mt-7 first:mt-2">
+                  <h2 className="mb-1 px-4 text-[13.5px] font-semibold tracking-[0.01em] text-muted sm:px-5">
+                    {t(group.title)}
+                  </h2>
+                  <Group>
+                    {group.items.map((item) => (
+                      <LinkRow
+                        key={item.href}
+                        href={item.href}
+                        compact
+                        icon={<item.icon strokeWidth={1.9} />}
+                        title={t(item.label)}
+                        sub={item.description}
+                        right={badgeFor(item.href, values)}
+                      />
+                    ))}
+                  </Group>
+                </section>
               ))}
-              <Panel compact title={t("Session")}>
-                <ActionRow
-                  danger
-                  icon={<LogOut strokeWidth={1.9} />}
-                  title={t("Log out")}
-                  opens={false}
-                  onClick={() => setSignOut(true)}
-                />
-              </Panel>
+              <section className="mt-7">
+                <h2 className="mb-1 px-4 text-[13.5px] font-semibold tracking-[0.01em] text-muted sm:px-5">
+                  {t("Session")}
+                </h2>
+                <Group>
+                  <ActionRow
+                    danger
+                    icon={<LogOut strokeWidth={1.9} />}
+                    title={t("Log out")}
+                    opens={false}
+                    onClick={() => setSignOut(true)}
+                  />
+                </Group>
+              </section>
             </>
           )}
         </div>
@@ -137,5 +202,41 @@ export default function SettingsIndex() {
 
       {signOut ? <SignOutSheet onClose={() => setSignOut(false)} /> : null}
     </SettingsPage>
+  );
+}
+
+/** The account row before the account is known: the same shape it will settle
+    into, so nothing jumps when the answer arrives. */
+function AccountHeader({ profile }: { profile: ReturnType<typeof useProfile> }) {
+  const t = useT();
+  if (!profile) {
+    return (
+      <div className="flex items-center gap-3.5 px-4 pt-4 pb-1 sm:px-6" aria-busy="true">
+        <span className="size-[58px] shrink-0 animate-pulse rounded-full bg-surface-2" />
+        <span className="min-w-0 flex-1 space-y-2">
+          <span className="block h-[16px] w-[46%] animate-pulse rounded-full bg-surface-2" />
+          <span className="block h-[13px] w-[30%] animate-pulse rounded-full bg-surface-2/80" />
+        </span>
+      </div>
+    );
+  }
+  const name = displayName(profile) || profile.email;
+  return (
+    <Link
+      href="/settings/edit-profile"
+      onClick={() => haptic("light")}
+      className="flex items-center gap-3.5 px-4 pt-4 pb-1 outline-none transition-colors hover:bg-surface-2/50 active:bg-surface-2/70 sm:px-6"
+    >
+      <ProfilePicture photo={profile.photo} seed={profile.username || profile.email} name={name} size={58} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[16px] font-semibold tracking-[-0.01em]">{name}</span>
+        {profile.username ? (
+          <span className="mt-0.5 block truncate text-[13.5px] text-muted">@{profile.username}</span>
+        ) : (
+          <span className="mt-0.5 block truncate text-[13.5px] text-muted">{profile.email}</span>
+        )}
+      </span>
+      <span className="shrink-0 text-[13px] font-semibold text-accent-text">{t("Edit")}</span>
+    </Link>
   );
 }

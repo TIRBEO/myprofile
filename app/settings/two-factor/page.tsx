@@ -1,104 +1,112 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Sheet, SheetActions, cn } from "@/components/ig-ui";
+import { useState } from "react";
+import { Button, Sheet, SheetActions, cn } from "@/components/ig-ui";
 import { OtpInput } from "@/components/otp-input";
 import {
   Group,
+  Helper,
   LinkRow,
+  PageSkeleton,
   SectionTitle,
   SettingsPage,
   ToggleRow,
 } from "@/components/settings-shell";
 import { BackupCodesSheet } from "@/components/backup-codes-sheet";
 import { TotpQr } from "@/components/totp-qr";
-import { type CodeSet, clearCodes, cooldownLabel, generate } from "@/lib/backup-codes";
-import { formatStamp } from "@/lib/dates";
+import { useReauthGuard } from "@/components/reauth-sheet";
+import { wasDeclined } from "@/lib/reauth";
 import {
-  clearSecret,
-  formatKey,
-  loadOrCreateSecret,
-  provisioningUri,
-  verifyCode,
-} from "@/lib/totp";
+  CODE_COUNT,
+  type RevealedCodes,
+  type TwoFactorState,
+  confirmSetup,
+  disableAuthenticator,
+  saveTwoFactorPrefs,
+  startSetup,
+  useTwoFactorState,
+} from "@/lib/two-factor";
+import { formatKey, secretFromUri } from "@/lib/totp";
+import { formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { usePageRefresh } from "@/lib/page-refresh";
 import { Check, Copy } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
    Two-factor authentication.
 
-   One card per group, same vocabulary as the rest of settings. The
-   status card and every row are a single tap target — the switch inside
-   them is decoration, never the only clickable part. Turning the
-   authenticator off asks first, because it also retires the backup
-   codes. Email codes show an on switch that can't be moved: a tap there
-   answers with an error toast instead of doing nothing.
+   One card per group, same vocabulary as the rest of settings. The status
+   card and every row are a single tap target — the switch inside them is
+   decoration, never the only clickable part.
 
-   Setup is one secret shown two ways — as the QR and as the key you can
-   type — and the 6 digits you enter are checked against it before
-   two-factor switches on. Finishing issues a set of backup codes and
-   reveals it right there, once.
+   The account service owns all of it: the secret, the codes, and whether
+   the authenticator is on. Because switching it on or off changes how the
+   real sign-in works, both are step-up actions: the shared "Confirm it's
+   you" sheet (components/reauth-sheet) asks for whatever this account can
+   actually offer, and turning off asks for a live code from the app as
+   well. A set of backup codes arrives in the same reply that switched the
+   authenticator on, is shown there once, and is never readable again.
    ═══════════════════════════════════════════════════════════════════ */
 
-const STORE = "tirbeo:two-factor";
-const RECOVERY_KEY = "tirbeo:recovery-email";
-
-type Prefs = {
-  authenticator: boolean;
-  requireForActions: boolean;
-  alertSuspicious: boolean;
-};
-
-const DEFAULT: Prefs = {
-  authenticator: true,
-  requireForActions: true,
-  alertSuspicious: true,
-};
-
 export default function TwoFactorPage() {
-  const [prefs, setPrefs] = useState<Prefs>(DEFAULT);
-  const [authSheet, setAuthSheet] = useState(false);
+  const { state, failed, refresh, set } = useTwoFactorState();
+  /* The provisioning URI doubles as "setup is underway": the sheet only exists
+     once the service has minted a secret, which happens after the proof. */
+  const [uri, setUri] = useState<string | null>(null);
   const [offSheet, setOffSheet] = useState(false);
-  const [codes, setCodes] = useState<CodeSet | null>(null);
-  const [account, setAccount] = useState("your Tirbeo account");
+  const [codes, setCodes] = useState<RevealedCodes | null>(null);
   const toast = useToast();
+  const { guard, reauthDialog } = useReauthGuard();
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORE);
-      if (raw) setPrefs({ ...DEFAULT, ...(JSON.parse(raw) as Partial<Prefs>) });
-      const email = localStorage.getItem(RECOVERY_KEY);
-      if (email) setAccount(email);
-    } catch {
-      /* unreadable blob — keep the defaults */
-    }
-  }, []);
+  usePageRefresh(refresh);
 
-  // Written straight through to localStorage, not inside the state updater:
-  // the backup-codes page reads this key the instant setup finishes.
-  function commit(next: Partial<Prefs>) {
-    const merged = { ...prefs, ...next };
-    setPrefs(merged);
-    try {
-      localStorage.setItem(STORE, JSON.stringify(merged));
-    } catch {
-      /* private mode — the change still holds for this session */
-    }
+  if (failed) {
+    return (
+      <SettingsPage title="Two-factor authentication">
+        <Helper lead tone="danger">
+          The account service didn’t answer, so nothing here is known to be true.{" "}
+          <button type="button" className="font-semibold underline" onClick={refresh}>
+            Try again
+          </button>
+          .
+        </Helper>
+      </SettingsPage>
+    );
   }
 
+  if (!state) return <PageSkeleton title="Two-factor authentication" />;
+
+  const on = state.authenticator;
+  const codesLeft = state.codes.remaining;
+
   // Tapping anywhere on the row lands here — the switch is a visual.
-  function toggleAuthenticator(on: boolean) {
-    if (on) setAuthSheet(true);
+  function toggleAuthenticator(next: boolean) {
+    if (next) void beginSetup();
     else setOffSheet(true);
   }
 
-  function turnOff() {
-    commit({ authenticator: false });
-    clearSecret();
-    clearCodes();
-    setOffSheet(false);
-    toast.error("Authenticator app turned off");
+  /** Proof first, secret second: a pending setup that nobody authorised would
+      sit on the account row as a half-installed authenticator. */
+  async function beginSetup() {
+    try {
+      setUri(await guard((proof) => startSetup(proof)));
+    } catch (err) {
+      if (wasDeclined(err)) return;
+      haptic("error");
+      toast.error(err instanceof Error ? err.message : "Couldn’t reach the account service");
+    }
+  }
+
+  async function savePref(next: Partial<Pick<TwoFactorState, "requireForActions" | "alertSuspicious">>) {
+    const prev = state!;
+    set({ ...prev, ...next });
+    try {
+      await saveTwoFactorPrefs(next);
+    } catch (err) {
+      set(prev);
+      toast.error(err instanceof Error ? err.message : "Couldn’t save that change");
+    }
   }
 
   return (
@@ -112,19 +120,21 @@ export default function TwoFactorPage() {
         <ToggleRow
           title="Authenticator app"
           sub="Codes from an app like Google Authenticator."
-          on={prefs.authenticator}
+          on={on}
           onChange={toggleAuthenticator}
           label="Authenticator app"
         />
         <LinkRow
           title="Backup codes"
           sub={
-            prefs.authenticator
-              ? "One-time codes, shown once each time you generate them."
-              : "Generated automatically when the authenticator app is on."
+            on
+              ? codesLeft
+                ? `${codesLeft} of ${state.codes.total} still unused.`
+                : "Every code in the current set is spent."
+              : "Turn on the authenticator app to get a set."
           }
           href="/settings/backup-codes"
-          disabled={!prefs.authenticator}
+          disabled={!on}
           blockedHint={() => toast.error("Turn on two-factor to get backup codes")}
         />
         <ToggleRow
@@ -143,35 +153,40 @@ export default function TwoFactorPage() {
         <ToggleRow
           title="Require 2FA for sensitive actions"
           sub="Ask for a code before changing password, email or payouts."
-          on={prefs.requireForActions}
-          onChange={(v) => commit({ requireForActions: v })}
+          on={state.requireForActions}
+          onChange={(v) => savePref({ requireForActions: v })}
           label="Require 2FA for sensitive actions"
         />
         <ToggleRow
           title="Alert on suspicious sign-in"
           sub="Email me if a sign-in looks unusual."
-          on={prefs.alertSuspicious}
-          onChange={(v) => commit({ alertSuspicious: v })}
+          on={state.alertSuspicious}
+          onChange={(v) => savePref({ alertSuspicious: v })}
           label="Alert on suspicious sign-in"
         />
       </Group>
 
-      {authSheet ? (
+      {uri ? (
         <AuthenticatorSheet
-          account={account}
-          onClose={() => setAuthSheet(false)}
-          onVerified={() => {
-            commit({ authenticator: true });
-            setAuthSheet(false);
-            const result = generate();
-            if (result.ok) setCodes(result.fresh);
-            else toast.error(`Code limit reached — try again in ${cooldownLabel(result.retryInMs)}`);
+          uri={uri}
+          onClose={() => setUri(null)}
+          onVerified={(fresh) => {
+            setUri(null);
+            setCodes(fresh);
+            refresh();
           }}
         />
       ) : null}
 
       {offSheet ? (
-        <TurnOffSheet onClose={() => setOffSheet(false)} onConfirm={turnOff} />
+        <TurnOffSheet
+          onClose={() => setOffSheet(false)}
+          onConfirm={() => {
+            setOffSheet(false);
+            refresh();
+            toast.success("Authenticator app turned off");
+          }}
+        />
       ) : null}
 
       {codes ? (
@@ -184,58 +199,142 @@ export default function TwoFactorPage() {
           }}
         />
       ) : null}
+
+      {reauthDialog}
     </SettingsPage>
   );
 }
 
-/* ── Turn-off confirmation ───────────────────────────────────────
-   Losing the app also retires the backup codes, so the consequences
-   are listed before the switch flips.                             */
-
-function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
+function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <Sheet
-      title="Turn off the authenticator app?"
-      onClose={onClose}
-      footer={
-        <SheetActions
-          cancelLabel="Keep it on"
-          onCancel={onClose}
-          confirmLabel="Turn off"
-          confirmVariant="danger"
-          onConfirm={onConfirm}
-        />
-      }
-    >
-      <ul className="-mx-4 space-y-2.5 px-5 text-[14px] leading-relaxed text-muted sm:-mx-5">
-        <li>· Sign-ins stop asking for a code from your app.</li>
-        <li>· Your current backup codes stop working.</li>
-        <li>· Email codes stay on.</li>
-      </ul>
-    </Sheet>
+    <span className="mb-2 block text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
+      {children}
+    </span>
   );
 }
 
-/* ── Authenticator setup sheet: scan → enter code ────────────────── */
+/* ── Turn-off confirmation: a live code ───────────────────────────
+   Losing the app also retires the backup codes, so the consequences are
+   listed before anything is asked for. The code from the app is the proof
+   the account service wanted — a stronger answer than a password, and the
+   sheet only asks once.                                 */
+
+function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
+  const [stage, setStage] = useState<"warn" | "proof">("warn");
+  const [code, setCode] = useState(["", "", "", "", "", ""]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { guard, reauthDialog } = useReauthGuard();
+  const ready = code.every((d) => d !== "");
+
+  async function confirm() {
+    if (!ready || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await guard((proof) => disableAuthenticator(code.join(""), proof));
+      onConfirm();
+    } catch (err) {
+      haptic("error");
+      // Walking away from the extra question changes nothing — the sheet stays
+      // up with the code already typed.
+      if (!wasDeclined(err)) setError(err instanceof Error ? err.message : "Couldn’t reach the account service");
+      setCode(["", "", "", "", "", ""]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (stage === "warn") {
+    return (
+      <Sheet
+        title="Turn off the authenticator app?"
+        onClose={onClose}
+        footer={
+          <SheetActions
+            cancelLabel="Keep it on"
+            onCancel={onClose}
+            confirmLabel="Turn off"
+            confirmVariant="danger"
+            onConfirm={() => setStage("proof")}
+          />
+        }
+      >
+        <ul className="-mx-4 space-y-2.5 px-5 text-[14px] leading-relaxed text-muted sm:-mx-5">
+          <li>· Sign-ins stop asking for a code from your app.</li>
+          <li>· Your current backup codes stop working.</li>
+          <li>· Email codes stay on.</li>
+        </ul>
+      </Sheet>
+    );
+  }
+
+  return (
+    <>
+      <Sheet
+        title="Confirm it’s you"
+        description="Turning the authenticator off is a change an intruder would want to make, so it wants a code from the app you’re about to switch off."
+        onClose={onClose}
+        footer={
+          <SheetActions
+            cancelLabel="Back"
+            onCancel={() => setStage("warn")}
+            confirmLabel="Turn off"
+            confirmVariant="danger"
+            onConfirm={confirm}
+            disabled={!ready}
+            loading={busy}
+          />
+        }
+      >
+        <div className="-mx-4 space-y-5 px-5 pb-2 pt-1 sm:-mx-5">
+          <div>
+            <FieldLabel>Code from your app</FieldLabel>
+            <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} />
+          </div>
+          {error ? <p className="text-[13px] leading-relaxed text-danger-text">{error}</p> : null}
+        </div>
+      </Sheet>
+      {reauthDialog}
+    </>
+  );
+}
+
+/* ── Authenticator setup: scan → enter code ───────────────────────── */
 
 function AuthenticatorSheet({
-  account,
+  uri,
   onClose,
   onVerified,
 }: {
-  account: string;
+  uri: string;
   onClose: () => void;
-  onVerified: () => void;
+  onVerified: (codes: RevealedCodes) => void;
 }) {
-  // One secret, two views: the QR carries it, the key prints it.
-  const [secret] = useState(loadOrCreateSecret);
   const [step, setStep] = useState<"qr" | "otp">("qr");
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [copied, setCopied] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [wrong, setWrong] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const codeFull = code.every((d) => d !== "");
-  const uri = provisioningUri(secret, account);
+  // The QR and the key below it are the same secret, which the service minted.
+  const secret = secretFromUri(uri);
+
+  async function confirm() {
+    if (!codeFull || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // The code IS the proof here, so this call goes straight through.
+      onVerified(await confirmSetup(code.join("")));
+    } catch (err) {
+      haptic("error");
+      setError(err instanceof Error ? err.message : "Couldn’t verify that code");
+      setCode(["", "", "", "", "", ""]);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function copyKey() {
     try {
@@ -244,20 +343,6 @@ function AuthenticatorSheet({
     } catch {
       /* clipboard blocked — the key is still readable on screen */
     }
-  }
-
-  async function confirm() {
-    if (!codeFull || checking) return;
-    setChecking(true);
-    const matched = await verifyCode(secret, code.join(""));
-    setChecking(false);
-    if (matched) {
-      onVerified();
-      return;
-    }
-    haptic("error");
-    setWrong(true);
-    setCode(["", "", "", "", "", ""]);
   }
 
   return (
@@ -277,12 +362,12 @@ function AuthenticatorSheet({
             cancelLabel="Back"
             onCancel={() => {
               setStep("qr");
-              setWrong(false);
+              setError(null);
             }}
             confirmLabel="Confirm"
             onConfirm={confirm}
             disabled={!codeFull}
-            loading={checking}
+            loading={busy}
           />
         )
       }
@@ -299,29 +384,30 @@ function AuthenticatorSheet({
               <span className="break-all font-mono text-[14.5px] font-semibold tracking-[0.08em] text-fg">
                 {formatKey(secret)}
               </span>
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
+                className="shrink-0"
+                icon={copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                 onClick={copyKey}
-                className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-[12.5px] font-semibold text-accent-fg transition hover:brightness-110 active:brightness-95"
               >
-                {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                 {copied ? "Copied" : "Copy"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       ) : (
         <div className="-mx-4 px-5 pb-2 pt-1 sm:-mx-5">
-          <OtpInput value={code} onChange={(next) => { setWrong(false); setCode(next); }} />
+          <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} />
           <p
             className={cn(
               "mt-4 text-center text-[13px] leading-relaxed",
-              wrong ? "text-danger-text" : "text-muted",
+              error ? "text-danger-text" : "text-muted",
             )}
           >
-            {wrong
-              ? "That code didn't match. Codes change every 30 seconds — try the one showing now."
-              : "The code rotates every 30 seconds, so send it right after it appears."}
+            {error
+              ? `${error} Codes change every 30 seconds — try the one showing now.`
+              : `The code rotates every 30 seconds, so send it right after it appears. A correct code switches two-factor on and issues ${CODE_COUNT} backup codes.`}
           </p>
         </div>
       )}

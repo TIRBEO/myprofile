@@ -2,9 +2,22 @@
 
 import type { ChangeEvent, KeyboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Input, PILL_BASE, PILL_FILL, Sheet, SheetActions, SheetOption, Textarea, cn } from "@/components/ig-ui";
+import {
+  Button,
+  Chip,
+  IconButton,
+  Input,
+  PILL_BASE,
+  PILL_FILL,
+  Sheet,
+  SheetActions,
+  SheetOption,
+  Textarea,
+  cn,
+} from "@/components/ig-ui";
 import {
   Group,
+  PageSkeleton,
   SectionTitle,
   SettingsPage,
   StaticRow,
@@ -12,17 +25,17 @@ import {
 import { RandomAvatar } from "@/components/random-avatar";
 import {
   DEFAULT_PROFILE,
-  NAME_PREFIXES,
   displayName,
-  liftTitle,
+  persistProfile,
   readProfile,
   slugOf,
-  writeProfile,
+  syncProfile,
   type Profile,
 } from "@/lib/profile";
 import { formatDate, monthNames, weekdayNames } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { usePageRefresh } from "@/lib/page-refresh";
 import {
   Calendar as CalendarIcon,
   ChevronDown,
@@ -46,6 +59,12 @@ import {
 
 const PHOTO_LIMIT = 5 * 1024 * 1024;
 
+/* The gender choices, in the words the signup wizard shows too:
+   `apps/accounts/src/lib/profile-fields.ts` mirrors this array byte-for-byte
+   and stores the *label* on the account row, so the answer a person picks at
+   signup is selected here rather than read back as blank. There is no package
+   both apps import, so the lists are kept identical by hand and
+   `apps/api/tests/work-fields.test.ts` fails if they drift. */
 const GENDERS = ["Female", "Male", "Non-binary", "Prefer not to say"];
 const PRONOUNS = ["Prefer not to say", "He/him", "She/her", "They/them"];
 /* A bio is a few sentences about a person, not a tweet: it runs to several
@@ -62,7 +81,7 @@ const prettyDate = (iso: string) => {
   return formatDate(d.getTime());
 };
 
-type Sub = "pronouns" | "gender" | "dob" | "prefix" | null;
+type Sub = "pronouns" | "gender" | "dob" | null;
 
 const REQUIRED = ["name", "username", "pronouns", "location", "dob", "gender"] as const;
 type ReqKey = (typeof REQUIRED)[number];
@@ -84,6 +103,15 @@ export default function EditProfilePage() {
   const [editor, setEditor] = useState<{ key: "photo" | "banner"; src: string } | null>(null);
   const [attempted, setAttempted] = useState(false);
   const [nudge, setNudge] = useState(0);
+  const [saving, setSaving] = useState(false);
+  /** A provider photo the browser blocked (OpaqueResponseBlocking) renders as
+      a dead black circle — the address that failed, so a fresh upload after
+      it gets its chance to load. The seeded face stands in while it's dead. */
+  const [brokenPhoto, setBrokenPhoto] = useState<string | null>(null);
+  /** The copy the last sync left — a save only sends what moved since it. */
+  const [baseline, setBaseline] = useState<Profile>(DEFAULT_PROFILE);
+  /** False while neither the cache nor the account has produced a profile. */
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!nudge) return;
@@ -105,15 +133,74 @@ export default function EditProfilePage() {
     el.style.height = `${Math.min(el.scrollHeight, 300)}px`;
   }, [draft.bio, editing]);
 
+  /* The server is the store; the local copy is what paints first. When the
+     sync lands it replaces the form — unless the reader is mid-edit, in
+     which case their draft is left alone and the sheet picks the new
+     baseline up the next time it opens. With no local copy to paint, the
+     page shows its skeleton until the account has answered — an empty
+     form is not a profile. */
   useEffect(() => {
-    setForm(readProfile());
+    let alive = true;
+    syncProfile().then((merged) => {
+      if (!alive) return;
+      setLoaded(true);
+      if (!merged) return;
+      setForm((current) => {
+        if (editing) return current;
+        setBaseline(merged);
+        return merged;
+      });
+    });
+    const cached = readProfile();
+    if (cached.name || cached.username || cached.photo) {
+      setForm((current) => (current === DEFAULT_PROFILE ? cached : current));
+      setLoaded(true);
+    }
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const load = () => {
+    setLoaded(false);
+    syncProfile().then((merged) => {
+      setLoaded(true);
+      if (!merged || editing) return;
+      setBaseline(merged);
+      setForm(merged);
+    });
+  };
+
+  usePageRefresh(load);
+
   /* One record for the whole app: what is saved here is what the rail prints
-     and what an archive exports, so the two can't drift apart. */
-  function commit(next: Profile) {
-    setForm(next);
-    writeProfile(next);
+     and what an archive exports, so the two can't drift apart. The write
+     goes through the profile endpoint; fields the account row can't hold
+     stay in the local copy and are reported in the save outcome. */
+  async function commit(next: Profile) {
+    setSaving(true);
+    const result = await persistProfile(baseline, next);
+    setSaving(false);
+    if (!result.ok) {
+      if (result.errors) {
+        toast.error(Object.values(result.errors)[0] ?? "Some fields need attention");
+      } else {
+        haptic("error");
+        toast.error(result.message ?? "The change could not be saved.");
+      }
+      return false;
+    }
+    setBaseline(result.outcome.profile);
+    setForm(result.outcome.profile);
+    if (result.outcome.unsupported.length > 0) {
+      toast.error(
+        `Saved — kept on this device only: ${result.outcome.unsupported.join(", ")}`,
+      );
+    } else {
+      toast.success("Profile saved");
+    }
+    return true;
   }
 
   /* ── Edit popup — all fields in one sheet ── */
@@ -121,8 +208,6 @@ export default function EditProfilePage() {
   function openEdit() {
     setDraft({
       name: form.name,
-      prefix: form.prefix,
-      suffix: form.suffix,
       username: form.username,
       pronouns: form.pronouns,
       location: form.location,
@@ -159,20 +244,14 @@ export default function EditProfilePage() {
     setEditing(false);
   }
 
-  function saveEdit() {
+  async function saveEdit(): Promise<boolean> {
     if (missing.length) {
       blockClose();
-      return;
+      return false;
     }
-    /* "Dr. Soham Dhitle" typed into the name box is a title and a name, so it
-       comes apart here — the handle and the initial read the name alone. */
-    const chosen = draft.prefix.trim();
-    const lifted = chosen ? { title: "", name: draft.name.trim() } : liftTitle(draft.name.trim());
-    commit({
+    const saved = await commit({
       ...form,
-      name: lifted.name,
-      prefix: chosen || lifted.title,
-      suffix: draft.suffix.trim().replace(/^,\s*/, ""),
+      name: draft.name.trim(),
       username: slugOf(draft.username ?? ""),
       pronouns: draft.pronouns.trim(),
       location: draft.location.trim(),
@@ -182,8 +261,8 @@ export default function EditProfilePage() {
       photo: draft.photo || null,
       banner: draft.banner || null,
     });
-    setEditing(false);
-    toast.success("Profile saved");
+    if (saved) setEditing(false);
+    return saved;
   }
 
   function pickImage(key: "photo" | "banner", e: ChangeEvent<HTMLInputElement>) {
@@ -207,17 +286,15 @@ export default function EditProfilePage() {
 
   const username = slugOf(form.username) || "username";
 
-  /* The pickers share one sheet, so the list is whatever the open one needs.
-     A title carries an empty option because it's the only one you can take
-     back off. */
+  /* The pickers share one sheet, so the list is whatever the open one needs. */
   const subOptions =
     sub === "pronouns"
       ? PRONOUNS
       : sub === "gender"
         ? GENDERS
-        : sub === "prefix"
-          ? ["", ...NAME_PREFIXES]
-          : [];
+        : [];
+
+  if (!loaded) return <PageSkeleton title="Edit profile" sections={2} />;
 
   return (
     <SettingsPage title="Edit profile">
@@ -233,8 +310,14 @@ export default function EditProfilePage() {
             ) : null}
           </div>
           <div className="absolute top-full left-1/2 z-10 flex size-40 -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full border-4 border-bg bg-surface-2">
-            {form.photo ? (
-              <img src={form.photo} alt="" className="size-full rounded-full object-cover" />
+            {form.photo && brokenPhoto !== form.photo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={form.photo}
+                alt=""
+                className="size-full rounded-full object-cover"
+                onError={() => setBrokenPhoto(form.photo)}
+              />
             ) : (
               <RandomAvatar seed={username} className="size-full" />
             )}
@@ -243,16 +326,9 @@ export default function EditProfilePage() {
 
         <div className="px-4 pt-24 pb-2 text-center sm:px-5">
           <p className="text-[24px] leading-tight font-bold tracking-[-0.01em] break-words">
-            {[form.prefix.trim(), form.name.trim()].filter(Boolean).join(" ") || (
-              <span className="text-muted">No name yet</span>
-            )}
+            {(form.name ?? "").trim() || <span className="text-muted">No name yet</span>}
           </p>
           <p className="mt-1 text-[15px] text-muted break-words">@{username}</p>
-          {/* Qualifications are a line of their own: at the size of the name a
-              string of post-nominals reads as shouting. */}
-          {form.suffix.trim() ? (
-            <p className="mt-1 text-[13.5px] text-muted break-words">{form.suffix.trim()}</p>
-          ) : null}
         </div>
       </section>
 
@@ -293,8 +369,9 @@ export default function EditProfilePage() {
             <SheetActions
               cancelLabel="Cancel"
               onCancel={tryClose}
-              confirmLabel="Save"
-              onConfirm={saveEdit}
+              confirmLabel={saving ? "Saving…" : "Save"}
+              disabled={saving}
+              onConfirm={() => void saveEdit()}
             />
           }
         >
@@ -304,11 +381,11 @@ export default function EditProfilePage() {
                 160px face was eating a third of the scrollable height. */}
             <div className="px-4 pt-1 pb-[38px] sm:px-5 sm:pb-24">
               <div className="relative">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
                   onClick={() => bannerRef.current?.click()}
                   aria-label="Change banner"
- className="block h-[92px] w-full overflow-hidden rounded-2xl bg-surface-2 outline-none sm:h-[141px]"
+                  className="h-[92px] w-full overflow-hidden bg-surface-2 ps-0 pe-0 sm:h-[141px]"
                 >
                   {draft.banner ? (
                     <img src={draft.banner} alt="" className="size-full object-cover" />
@@ -321,21 +398,27 @@ export default function EditProfilePage() {
                   <span className="pointer-events-none absolute top-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-scrim text-white">
                     <Pencil className="size-[15px]" />
                   </span>
-                </button>
+                </Button>
 
                 <div className="absolute top-full left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
-                  <button
-                    type="button"
+                  <IconButton
+                    label="Change profile photo"
                     onClick={() => photoRef.current?.click()}
-                    aria-label="Change profile photo"
-                    className="flex size-[76px] shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-surface bg-surface-2 transition-transform active:scale-95 sm:size-40"
-                  >
-                    {draft.photo ? (
-                      <img src={draft.photo} alt="" className="size-full rounded-full object-cover" />
-                    ) : (
-                      <RandomAvatar seed={slugOf(draft.username ?? "") || form.username} className="size-full" />
-                    )}
-                  </button>
+                    className="size-[76px] overflow-hidden border-4 border-surface bg-surface-2 transition-transform active:scale-95 sm:size-40"
+                    icon={
+                      draft.photo && brokenPhoto !== draft.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={draft.photo}
+                          alt=""
+                          className="size-full rounded-full object-cover"
+                          onError={() => setBrokenPhoto(draft.photo)}
+                        />
+                      ) : (
+                        <RandomAvatar seed={slugOf(draft.username ?? "") || form.username} className="size-full" />
+                      )
+                    }
+                  />
                   <span className="pointer-events-none absolute right-1 bottom-1.5 grid size-7 place-items-center rounded-full border-[3px] border-surface bg-surface-2 text-fg sm:size-8">
                     <Pencil className="size-3" />
                   </span>
@@ -354,10 +437,10 @@ export default function EditProfilePage() {
                     onChange={(e: ChangeEvent<HTMLInputElement>) =>
                       setDraft((d) => ({ ...d, [k]: e.target.value }))
                     }
-                    onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                    onKeyDown={async (e: KeyboardEvent<HTMLInputElement>) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        saveEdit();
+                        void (await saveEdit());
                       }
                     }}
                     placeholder={k === "username" ? "username" : "Your name"}
@@ -370,38 +453,6 @@ export default function EditProfilePage() {
                   <ReqNote show={attempted && missing.includes(k)} id={`req-${k}`} />
                 </div>
               ))}
-
-              {/* The optional pair that modifies the name just above it. They
-                  live apart from it on purpose: fold a title into the name and
-                  it follows you into the handle, the initial beside an avatar
-                  and the order of every list of people. */}
-              <PickerRow
-                label="Title"
-                value={draft.prefix ?? ""}
-                placeholder="None"
-                icon={<ChevronDown className="size-4 shrink-0 text-muted" />}
-                onClick={() => setSub("prefix")}
-              />
-
-              <div className="px-4 py-3 sm:px-5 sm:py-4">
-                <FieldLabel text="Qualifications" />
-                <Input
-                  aria-label="Qualifications"
-                  value={draft.suffix ?? ""}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setDraft((d) => ({ ...d, suffix: e.target.value }))
-                  }
-                  onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      saveEdit();
-                    }
-                  }}
-                  placeholder="MBBS, Ph.D."
-                  spellCheck={false}
-                  className="h-11"
-                />
-              </div>
 
               {/* Picker rows — each opens a sub-popup on top */}
               <PickerRow
@@ -421,10 +472,10 @@ export default function EditProfilePage() {
                   onChange={(e: ChangeEvent<HTMLInputElement>) =>
                     setDraft((d) => ({ ...d, location: e.target.value }))
                   }
-                  onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                  onKeyDown={async (e: KeyboardEvent<HTMLInputElement>) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      saveEdit();
+                      void (await saveEdit());
                     }
                   }}
                   placeholder="Kathmandu, Nepal"
@@ -481,12 +532,12 @@ export default function EditProfilePage() {
       ) : null}
 
       {/* ══ Sub-popups — sit on top of the edit popup ══ */}
-      {(sub === "pronouns" || sub === "gender" || sub === "prefix") && (
-        <Sheet
-          title={sub === "pronouns" ? "Pronouns" : sub === "gender" ? "Gender" : "Title"}
-          description="Choose one — it lands when you save."
-          onClose={() => setSub(null)}
-        >
+  {(sub === "pronouns" || sub === "gender") && (
+    <Sheet
+      title={sub === "pronouns" ? "Pronouns" : "Gender"}
+      description="Choose one — it lands when you save."
+      onClose={() => setSub(null)}
+    >
           <div className="-mx-4 list-divide sm:-mx-5">
             {subOptions.map((option) => (
               <SheetOption
@@ -612,44 +663,33 @@ function CalendarSheet({
       <div className="-mx-4 px-3 pb-4 sm:-mx-5 sm:px-4">
         {/* Month & year — centered between plain chevrons */}
         <div className="flex items-center justify-center gap-2">
-          <button
-            type="button"
-            aria-label="Previous month"
+          <IconButton
+            label="Previous month"
             disabled={atStart}
             onClick={() => shift(-1)}
-            className="grid size-10 place-items-center rounded-full bg-surface-2 text-fg transition-colors hover:bg-surface-3 disabled:pointer-events-none disabled:opacity-30"
-          >
-            <ChevronLeft className="size-[18px]" strokeWidth={2.25} />
-          </button>
-          <button
-            type="button"
+            className="bg-surface-2 hover:bg-surface-3"
+            icon={<ChevronLeft className="size-[18px]" strokeWidth={2.25} />}
+          />
+          <Chip
+            active={picker === "months"}
             onClick={() => setPicker((p) => (p === "months" ? "none" : "months"))}
-            className={cn(
-              "rounded-full px-3 py-1.5 text-[15px] font-bold tracking-tight transition-colors",
-              picker === "months" ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg hover:bg-surface-3",
-            )}
           >
             {months[view.m]}
-          </button>
-          <button
-            type="button"
+          </Chip>
+          <Chip
+            active={picker === "years"}
+            className="tabular-nums"
             onClick={() => setPicker((p) => (p === "years" ? "none" : "years"))}
-            className={cn(
-              "rounded-full px-3 py-1.5 text-[15px] font-bold text-fg tabular-nums transition-colors",
-              picker === "years" ? "bg-accent text-accent-fg" : "bg-surface-2 hover:bg-surface-3",
-            )}
           >
             {view.y}
-          </button>
-          <button
-            type="button"
-            aria-label="Next month"
+          </Chip>
+          <IconButton
+            label="Next month"
             disabled={atEnd}
             onClick={() => shift(1)}
-            className="grid size-10 place-items-center rounded-full bg-surface-2 text-fg transition-colors hover:bg-surface-3 disabled:pointer-events-none disabled:opacity-30"
-          >
-            <ChevronRight className="size-[18px]" strokeWidth={2.25} />
-          </button>
+            className="bg-surface-2 hover:bg-surface-3"
+            icon={<ChevronRight className="size-[18px]" strokeWidth={2.25} />}
+          />
         </div>
 
         {picker === "none" ? (
@@ -683,23 +723,24 @@ function CalendarSheet({
                 const isSaturday = new Date(view.y, view.m, day).getDay() === 6;
                 return (
                   <span key={iso} className="flex justify-center">
-                    <button
-                      type="button"
+                    <Chip
+                      active={selected}
                       disabled={disabled}
                       onClick={() => onPick(iso)}
-                      className={cn(
-                        "grid size-10 place-items-center rounded-full text-[14.5px] tabular-nums transition-colors",
-                        selected
-                          ? "bg-accent font-semibold text-accent-fg"
-                          : "text-fg hover:bg-surface-2",
-                        !selected && isSaturday && "text-danger-text",
-                        !selected && isToday && "font-bold text-accent-text",
-                        disabled && "pointer-events-none text-muted/25",
-                        disabled && isSaturday && "text-danger/25",
-                      )}
+                      className="size-10 justify-center border-transparent"
                     >
-                      {day}
-                    </button>
+                      <span
+                        className={cn(
+                          "text-[14.5px] tabular-nums",
+                          !selected && isSaturday && "text-danger-text",
+                          !selected && isToday && "font-bold text-accent-text",
+                          disabled && "text-muted/25",
+                          disabled && isSaturday && "text-danger/25",
+                        )}
+                      >
+                        {day}
+                      </span>
+                    </Chip>
                   </span>
                 );
               })}
@@ -708,43 +749,33 @@ function CalendarSheet({
         ) : picker === "months" ? (
           <div className="mt-3 grid grid-cols-4 gap-1.5">
             {months.map((m, i) => (
-              <button
+              <Chip
                 key={m}
-                type="button"
+                active={i === view.m}
+                className="border-transparent"
                 onClick={() => {
                   setView((v) => ({ ...v, m: i }));
                   setPicker("none");
                 }}
-                className={cn(
-                  "rounded-full py-2 text-[13.5px] font-medium transition-colors",
-                  i === view.m
-                    ? "bg-accent font-semibold text-accent-fg"
-                    : "text-fg hover:bg-surface-2",
-                )}
               >
                 {m.slice(0, 3)}
-              </button>
+              </Chip>
             ))}
           </div>
         ) : (
           <div className="mt-3 grid max-h-[300px] grid-cols-4 gap-1.5 overflow-y-auto pr-1">
             {years.map((y) => (
-              <button
+              <Chip
                 key={y}
-                type="button"
+                active={y === view.y}
+                className="border-transparent tabular-nums"
                 onClick={() => {
                   setView((v) => ({ ...v, y: Math.min(y, maxYear) }));
                   setPicker(value ? "none" : "months");
                 }}
-                className={cn(
-                  "rounded-full py-2 text-[13.5px] font-medium tabular-nums transition-colors",
-                  y === view.y
-                    ? "bg-accent font-semibold text-accent-fg"
-                    : "text-fg hover:bg-surface-2",
-                )}
               >
                 {y}
-              </button>
+              </Chip>
             ))}
           </div>
         )}
@@ -933,33 +964,30 @@ function EditorSheet({
 
         {/* Rotation + reset */}
         <div className="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Rotate left"
+          <IconButton
+            label="Rotate left"
             onClick={() => setRot((r) => (r + 270) % 360)}
-            className="grid size-10 place-items-center rounded-full bg-surface-2 text-fg transition-colors hover:bg-surface-3 active:bg-surface-3"
-          >
-            <RotateCcw className="size-[18px]" />
-          </button>
-          <button
-            type="button"
-            aria-label="Rotate right"
+            className="bg-surface-2 hover:bg-surface-3"
+            icon={<RotateCcw className="size-[18px]" />}
+          />
+          <IconButton
+            label="Rotate right"
             onClick={() => setRot((r) => (r + 90) % 360)}
-            className="grid size-10 place-items-center rounded-full bg-surface-2 text-fg transition-colors hover:bg-surface-3 active:bg-surface-3"
-          >
-            <RotateCw className="size-[18px]" />
-          </button>
-          <button
-            type="button"
+            className="bg-surface-2 hover:bg-surface-3"
+            icon={<RotateCw className="size-[18px]" />}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            className="ml-auto"
             onClick={() => {
               setZoom(1);
               setRot(0);
               setPan({ x: 0, y: 0 });
             }}
-            className="ml-auto rounded-full bg-surface-2 px-4 py-2 text-[13.5px] font-semibold text-fg transition-colors hover:bg-surface-3 active:bg-surface-3"
           >
             Reset
-          </button>
+          </Button>
         </div>
       </div>
     </Sheet>
@@ -972,8 +1000,12 @@ function EditorSheet({
    line breaks someone put in it are part of what it says — so it sits under the
    list of short fields, at the width a paragraph is read at, with its breaks
    kept and only its first few lines shown until the rest is asked for. */
-function BioBlock({ bio }: { bio: string }) {
-  const text = bio.trim();
+function BioBlock({ bio }: { bio: string | null }) {
+  // The endpoint answers `null` for a bio nobody has written, and `Profile`
+  // types the field as a string — so this is called with a value its own
+  // signature said could not happen. Normalising here as well as in the store
+  // means a page cannot be taken down by a missing optional field.
+  const text = (bio ?? "").trim();
   const body = useRef<HTMLParagraphElement>(null);
   const [open, setOpen] = useState(false);
   const [taller, setTaller] = useState(false);
@@ -1007,16 +1039,16 @@ function BioBlock({ bio }: { bio: string }) {
             {text}
           </p>
           {taller || open ? (
-            <button
-              type="button"
+            <Button
+              variant="link"
+              className="mt-2 px-1"
               onClick={() => {
                 haptic("light");
                 setOpen((o) => !o);
               }}
- className="mt-2 px-1 text-[13.5px] font-semibold text-accent-text outline-none transition-colors hover:brightness-110"
             >
               {open ? "Show less" : "Show the whole bio"}
-            </button>
+            </Button>
           ) : null}
         </>
       ) : (
@@ -1071,27 +1103,25 @@ function PickerRow({
   return (
     <div className="px-4 py-3 sm:px-5 sm:py-4">
       <FieldLabel text={label} />
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         onClick={onClick}
         aria-describedby={invalid ? noteId : undefined}
         className={cn(
-          "flex h-11 w-full items-center justify-between gap-3 rounded-2xl border bg-surface-2 px-4 text-left transition-colors",
-          invalid
-            ? "border-danger/70 hover:border-danger"
-            : "border-transparent hover:bg-surface-3",
+          "h-11 w-full gap-3 bg-surface-2 text-left",
+          invalid ? "border border-danger/70 hover:border-danger" : "border border-transparent hover:bg-surface-3",
         )}
       >
         <span
           className={cn(
-            "min-w-0 break-words text-[15px]",
+            "min-w-0 flex-1 break-words whitespace-normal text-[15px]",
             value ? "text-fg" : "text-muted/70 italic",
           )}
         >
           {value || placeholder}
         </span>
         {icon}
-      </button>
+      </Button>
       <ReqNote show={!!invalid} id={noteId} />
     </div>
   );

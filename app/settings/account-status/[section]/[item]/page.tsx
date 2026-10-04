@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Field, Sheet, SheetActions, Textarea, cn } from "@/components/ig-ui";
 import { Group, Helper, PageSkeleton, PillButton, PillStack, SectionTitle, SettingsPage, StaticRow } from "@/components/settings-shell";
+import { LoadFailed } from "@/components/page-loading";
+import { ApiError } from "@/lib/api";
 import {
   type Appeal,
   appeal,
   appealFor,
   decisionStatus,
   findItem,
+  loadAccountChecks,
+  loadAppeals,
 } from "@/lib/account-status";
 import { ago, formatDate } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
@@ -23,8 +27,9 @@ import { CircleAlert, Clock, ShieldQuestion } from "lucide-react";
    of what happened in a readable measure, every fact about it as a labelled
    line, then the single thing you can do: ask a person to look again. A
    review is a written explanation, so it opens a sheet with a box to type in
-   rather than deciding on its own. Once it's filed the request is shown here
-   and the button is gone — one request per decision.
+   rather than deciding on its own. The request goes to the account itself —
+   it lives there, not on this device — and once it's filed the request is
+   shown here and the button is gone: one request per decision.
    ═══════════════════════════════════════════════════════════════════ */
 
 /** One sentence in is enough to read, but not enough to review. */
@@ -49,12 +54,33 @@ export default function AccountStatusDetailPage() {
   const [found, setFound] = useState<ReturnType<typeof findItem> | null | undefined>(undefined);
   const [appealRow, setAppealRow] = useState<Appeal | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [filing, setFiling] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    setFound(undefined);
+    setLoadError(null);
+    Promise.all([loadAccountChecks(), loadAppeals().catch(() => [] as Appeal[])])
+      .then(() => {
+        const hit = findItem(params.section, params.item);
+        setFound(hit);
+        setAppealRow(hit ? appealFor(hit.item.id) : null);
+      })
+      .catch((err) => {
+        setLoadError(
+          err instanceof ApiError && err.message
+            ? err.message
+            : "This decision couldn't be read.",
+        );
+      });
+  }, [params.section, params.item]);
 
   useEffect(() => {
-    const hit = findItem(params.section, params.item);
-    setFound(hit);
-    setAppealRow(hit ? appealFor(hit.item.id) : null);
-  }, [params.section, params.item]);
+    refresh();
+  }, [refresh]);
+
+  if (loadError)
+    return <LoadFailed title="Account status" message={loadError} onRetry={refresh} />;
 
   if (found === undefined) return <PageSkeleton title="Account status" sections={2} />;
 
@@ -75,12 +101,25 @@ export default function AccountStatusDetailPage() {
   const { section, item } = found;
   const status = decisionStatus(item, appealRow);
 
-  function send(note: string) {
-    appeal(item.id, note);
-    setAppealRow(appealFor(item.id));
-    setSheetOpen(false);
-    haptic("success");
-    toast.success("Review requested — we'll answer on this page");
+  async function send(note: string) {
+    setFiling(true);
+    try {
+      const filed = await appeal(item.id, note);
+      setAppealRow(filed);
+      setSheetOpen(false);
+      haptic("success");
+      toast.success("Review requested — we'll answer on this page");
+      // The decision stops being appealable on the account now; re-read so
+      // the lists agree with what was just filed.
+      void loadAccountChecks().catch(() => {});
+    } catch (err) {
+      haptic("error");
+      toast.error(
+        err instanceof ApiError && err.message ? err.message : "The request couldn't be filed.",
+      );
+    } finally {
+      setFiling(false);
+    }
   }
 
   return (
@@ -205,7 +244,7 @@ export default function AccountStatusDetailPage() {
       )}
 
       {sheetOpen ? (
-        <ReviewSheet ask={item.ask} onClose={() => setSheetOpen(false)} onFiled={send} />
+        <ReviewSheet ask={item.ask} busy={filing} onClose={() => setSheetOpen(false)} onFiled={send} />
       ) : null}
     </SettingsPage>
   );
@@ -235,10 +274,12 @@ function Step({ n, title, sub }: { n: number; title: string; sub: string }) {
 
 function ReviewSheet({
   ask,
+  busy,
   onClose,
   onFiled,
 }: {
   ask: string;
+  busy: boolean;
   onClose: () => void;
   onFiled: (note: string) => void;
 }) {
@@ -255,9 +296,9 @@ function ReviewSheet({
         <SheetActions
           cancelLabel="Cancel"
           onCancel={onClose}
-          confirmLabel="Send request"
+          confirmLabel={busy ? "Sending…" : "Send request"}
           onConfirm={() => onFiled(trimmed)}
-          disabled={short}
+          disabled={short || busy}
         />
       }
     >

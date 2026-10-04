@@ -15,10 +15,16 @@
    unreachable while that state lasts.
    ═══════════════════════════════════════════════════════════════════ */
 
-import { useSyncExternalStore } from "react";
-import { readDeactivation } from "@/lib/deactivate";
-import { readPlan } from "@/lib/delete-account";
-import { readAppeals, sections, type StatusItem, type StatusSection } from "@/lib/account-status";
+import { useSyncExternalStore, useEffect } from "react";
+import { getAccountState, loadAccountState } from "@/lib/account-lifecycle";
+import {
+  loadAccountChecks,
+  loadAppeals,
+  readAppeals,
+  sections,
+  type StatusItem,
+  type StatusSection,
+} from "@/lib/account-status";
 import { ACCOUNT_EVENT, requestFor } from "@/lib/account-history";
 
 export type LockKind = "deletion" | "deactivated" | "restriction";
@@ -80,8 +86,12 @@ function openRestriction(): Lock["decision"] | null {
   for (const section of sections()) {
     if (section.severity === "ok") continue;
     for (const item of section.items) {
+      /* Every row here came from the account — a real restriction, a stopped
+         sign-in, a decision an admin made. The gate only holds on the ones
+         that ask something of the person: an appealable decision, until it's
+         appealed or set aside. */
       if (!item.appealable) continue;
-      if (appeals.some((appeal) => appeal.id === item.id)) continue;
+      if (appeals.some((appeal) => appeal.restrictionId === item.id)) continue;
       if (skipped.includes(item.id)) continue;
       return { section, item };
     }
@@ -89,10 +99,13 @@ function openRestriction(): Lock["decision"] | null {
   return null;
 }
 
-/** null while the account is open normally. */
+/** null while the account is open normally. Deletion and deactivation come
+    straight from the account on the brain — never a flag left in this browser,
+    which is what let a second device or a cleared cache disagree with reality. */
 export function readLock(): Lock | null {
-  const plan = readPlan();
-  if (plan) {
+  const account = getAccountState();
+
+  if (account?.deletionPending) {
     return {
       kind: "deletion",
       href: LOCK_HREF.deletion,
@@ -102,14 +115,13 @@ export function readLock(): Lock | null {
     };
   }
 
-  const pause = readDeactivation();
-  if (pause) {
+  if (account?.deactivated) {
     return {
       kind: "deactivated",
       href: LOCK_HREF.deactivated,
       skippable: false,
       title: "Your account is deactivated",
-      sub: "Everything is where you left it. Sign back in and it all comes back — until you do, this is the only page the account opens.",
+      sub: "Everything is where you left it. Reactivate it and it all comes back — until you do, this is the only page the account opens.",
     };
   }
 
@@ -250,9 +262,19 @@ function currentKey(): string {
   return key;
 }
 
-/** The lock in force, re-read whenever the route changes or a state is
-    announced. `null` means the account is open normally. */
+/** The lock in force, re-read whenever the route changes, a state is
+    announced, or a fresh read from the brain lands. `null` means the account
+    is open normally. The first mount pulls the real state so a page opened
+    cold reflects the account rather than an empty browser cache. */
 export function useAccountLock(): Lock | null {
   const key = useSyncExternalStore(subscribe, currentKey, () => "");
+  useEffect(() => {
+    void loadAccountState();
+    // The checks and the appeals are read from the account too, so the
+    // restriction lock reflects what the brain says — never a stale guess,
+    // and never anything invented.
+    void loadAccountChecks().catch(() => {});
+    void loadAppeals().catch(() => {});
+  }, []);
   return key ? (CACHE.get(key) ?? null) : null;
 }

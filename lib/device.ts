@@ -27,11 +27,12 @@ function browserFrom(ua: string): string {
   return "Browser";
 }
 
-export function guessDevice(): DeviceHint {
-  if (typeof navigator === "undefined") {
-    return { name: "This device", os: "", browser: "", kind: "computer" };
-  }
-  const ua = navigator.userAgent;
+/**
+ * Describe a device from a user-agent string alone. Shared by the session list
+ * (every machine's agent arrives on its own session row) and the local browser,
+ * so a stored agent string reads the same way as the one you're holding.
+ */
+export function describeUserAgent(ua: string): DeviceHint {
   const browser = browserFrom(ua);
 
   if (/iPhone/i.test(ua)) return { name: "iPhone", os: "iOS", browser, kind: "phone" };
@@ -55,4 +56,11 @@ export function guessDevice(): DeviceHint {
     return { name: "Linux computer", os: "Linux", browser, kind: "computer" };
   }
   return { name: "This device", os: "", browser, kind: "computer" };
+}
+
+export function guessDevice(): DeviceHint {
+  if (typeof navigator === "undefined") {
+    return { name: "This device", os: "", browser: "", kind: "computer" };
+  }
+  return describeUserAgent(navigator.userAgent);
 }

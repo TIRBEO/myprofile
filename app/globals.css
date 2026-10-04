@@ -2,40 +2,46 @@
 
 /* ═══════════════════════════════════════════════════════════════════
    Tirbeo — account app
-   Mobile-first app shell: translucent rails, grouped lists, sheets.
-   Two palettes: dark (default) and light. Applied by
-   <html data-theme="…">, always a concrete palette — "System" is
-   resolved to light or dark by lib/theme.ts before it is written, so
-   no prefers-color-scheme palette block is needed here.
+   Instagram-derived palette: true-black canvas, #262626 hairlines, one
+   blue (#0095f6) for every action, one red (#ed4956) for every
+   destructive one. Two palettes: dark (default) and light, applied by
+   <html data-theme="…"> — always a concrete palette, because "System"
+   is resolved to light or dark by lib/theme.ts before it is written.
    ═══════════════════════════════════════════════════════════════════ */
 
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Surfaces — the canvas is true black and everything else is a hairline
-     away from it. Depth comes from lines, not from washes of grey. */
+  /* Surfaces — the canvas is black and every panel is a solid step above it.
+     Depth comes from lines, not from seeing a photograph through the cards. */
   --bg: #000000;
-  --surface: #0d0d0f;
-  --surface-2: #161618;
-  --surface-3: #1f1f23;
+  --surface: #0e0e10;
+  --surface-2: rgba(255, 255, 255, 0.09);
+  --surface-3: rgba(255, 255, 255, 0.15);
 
   /* Text */
-  --fg: #f4f4f6;
-  --muted: #9b9ba4;
-  --link: #bcdcff;
+  --fg: #f5f5f5;
+  /* Secondary tone on solid black. #a8a8a8 clears 7.6:1 here, which is well
+     past AA — the brighter value it replaces was only needed to survive the
+     photograph that used to sit under it. */
+  --muted: #a8a8a8;
+  --link: #e0f1ff;
 
-  /* Lines. With the cards unfilled, these are the only thing separating a
-     block from the page and a row from the next row, so they carry more of
-     the structure than they used to. */
-  --border: #2a2a2f;
-  --divider: #212126;
+  /* Lines. The card and the row are separated by a hairline only. */
+  --border: rgba(255, 255, 255, 0.13);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --divider: rgba(255, 255, 255, 0.1);
 
   /* Brand + state */
-  --accent: #0095f6;
+  /* Action blue one step down the Instagram ramp: white label contrast goes
+     from 3.17:1 to 5.74:1, which 13–15px labels need. */
+  --accent: #0064c8;
+  --accent-hover: #0058b3;
   --accent-text: #5cb4f9;
   --accent-fg: #ffffff;
-  --danger: #e8384f;
+  /* Same reasoning for the destructive fill: #ed4956 carried white at 3.69:1. */
+  --danger: #c62f3b;
   --danger-text: #ff8a95;
   --success: #32d583;
   --success-text: #5ee0a1;
@@ -54,10 +60,10 @@
   /* Chrome. Rail and canvas are the same black; the rail is separated from
      the content by a hairline line, not by a different fill. */
   --rail: #000000;
-  --scrim: #000000b3;
-  --track: #2a2a2f;
+  --scrim: rgba(0, 0, 0, 0.72);
+  --track: rgba(255, 255, 255, 0.22);
   /* Solid ink for primary actions — the accent is reserved for selection. */
-  --ink: #f4f4f6;
+  --ink: #f5f5f5;
   --ink-fg: #000000;
 
   /* Soft, diffuse elevation. Sheets float above the page. */
@@ -87,25 +93,32 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* The page is white and the card is white; the line is the card. A grey
-     canvas under unfilled cards reads as a stack of nothing. */
+  /* Instagram light: a white page, off-white fills, #dbdbdb rules. The
+     card is white on white and the line is the card. */
   --bg: #ffffff;
-  --surface: #fafafb;
-  --surface-2: #f2f2f5;
-  --surface-3: #e8e8ed;
+  --surface: #ffffff;
+  --surface-2: #f4f4f4;
+  --surface-3: #e9e9e9;
 
-  --fg: #17171a;
-  --muted: #71717a;
-  --link: #0b4a8f;
+  --fg: #1a1a1a;
+  /* #737373 measured 3.90:1 on --surface-3 (#e9e9e9), which is where the
+     small-caps chips sit — below AA for body text at 10.5px. #696969 is the
+     step that clears 4.5:1 on the darkest surface this token ever lands on
+     (4.53:1) and therefore on every lighter one, at a shade difference nobody
+     reads as a different colour. */
+  --muted: #696969;
+  --link: #00376b;
 
-  --border: #e2e2e8;
-  --divider: #ededf1;
+  --border: #dbdbdb;
+  --border-strong: #c7c7c7;
+  --divider: #dbdbdb;
 
-  --accent: #0095f6;
+  --accent: #0064c8;
+  --accent-hover: #0058b3;
   --accent-text: #0064c9;
   --accent-fg: #ffffff;
-  --danger: #d92d3c;
-  --danger-text: #c02433;
+  --danger: #c62f3b;
+  --danger-text: #d32e3d;
   --success: #12874a;
   --success-text: #0f6d3d;
   --warn: #a45c00;
@@ -113,9 +126,9 @@
 
   --rail: #ffffff;
   --scrim: #0b0b1280;
-  --track: #d6d6dc;
+  --track: #c4c4c9;
 
-  --ink: #17171a;
+  --ink: #1a1a1a;
   --ink-fg: #ffffff;
 
   --shadow-sheet: 0 -18px 48px -12px rgb(24 20 14 / 0.18);
@@ -132,8 +145,10 @@
   --color-muted: var(--muted);
   --color-link: var(--link);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-divider: var(--divider);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
   --color-accent-text: var(--accent-text);
   --color-accent-fg: var(--accent-fg);
   --color-danger: var(--danger);
@@ -156,11 +171,12 @@
   --color-faint: var(--bg);
   --color-hover: var(--surface-3);
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --radius-2xl: 24px;
+  /* Instagram's radius scale: 8px controls, 10px pills, 14px cards. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 14px;
 
   /* Shadows are referenced as shadow-[var(--shadow-…)] rather than mapped
      here — a --shadow-* entry in this block would shadow the palette
@@ -409,6 +425,25 @@ input[type="number"]::-webkit-outer-spin-button {
   animation: spin 700ms linear infinite;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   Flat dark page
+
+   No backdrop layer of any kind: dark mode is the token palette in
+   :root[data-theme="dark"] sitting on #000, and a panel is a solid fill
+   with a hairline. Light mode is an intentional white page and was
+   already solid.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* No photograph and no frost. Dark mode is a black page with solid panels:
+   nothing behind them to blur, so a panel reads by its fill and its hairline
+   rather than by translucency. Light mode is unchanged — it was always solid. */
+
+/* The panels still carry Tailwind `backdrop-blur-*` utilities (Group/Panel in
+   settings-shell, the rail in settings-layout). Over a solid page they have
+   nothing to blur, so they're inert — they stay because the same classes are
+   correct in light mode and on any future layer, and removing them would only
+   change the bundle, not the picture. */
+
 /* ── Instagram-style utilities ───────────────────────────────── */
 
 /* The classic IG gradient — sunset orange → pink → purple. */
@@ -464,14 +499,14 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* Inset grouped list — the workhorse surface of the app.
-   The card is the page: no fill, no shadow, one hairline and a soft corner.
-   Filling it as well would put every row on a slab and make a settings page
-   read as a stack of boxes, which is exactly what the reference screens
-   don't do. */
+   Instagram's card: white on white (black on black at night), one
+   #dbdbdb hairline, a soft 14px corner, rows split by a full-width
+   divider. The line is the card; filling it as well would put every
+   row on a slab and make a settings page read as a stack of boxes. */
 .grouped {
-  border-radius: 20px;
+  border-radius: 14px;
   border: 1px solid var(--border);
-  background: transparent;
+  background: var(--surface);
   overflow: hidden;
 }
 
@@ -491,16 +526,17 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* ── Typographic utilities ──────────────────────────────────────
-   The section label is the main structural device: a small mono
-   caption with a hairline running off to the right edge.            */
+   The section caption: a small, grey, semi-bold sans line. Instagram
+   never sets its labels in mono or in tracked capitals — a settings
+   screen should read like a sentence, not like a spec sheet. */
 
 .label {
-  font-family: var(--stack-mono);
-  font-size: 10.5px;
-  line-height: 1;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--stack-sans);
+  font-size: 12.5px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--muted);
 }
 

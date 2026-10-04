@@ -17,6 +17,8 @@ import {
 import { type ActivityEvent, byDay, readEvents } from "@/lib/login-activity";
 import { ago, formatTime } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
+import { usePageRefresh } from "@/lib/page-refresh";
+import { LoadFailed } from "@/components/page-loading";
 
 /* ═══════════════════════════════════════════════════════════════════
    Login activity
@@ -50,10 +52,29 @@ function town(place: string) {
 
 export default function LoginActivityPage() {
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  const load = () => {
+    setFailed(false);
+    readEvents()
+      .then(setEvents)
+      .catch(() => setFailed(true));
+  };
+
+  usePageRefresh(load);
 
   useEffect(() => {
-    setEvents(readEvents());
+    load();
   }, []);
+
+  if (failed)
+    return (
+      <LoadFailed
+        title="Login activity"
+        message="The sign-in history couldn't be read from the account. Nothing has been deleted — the account just didn't answer."
+        onRetry={load}
+      />
+    );
 
   if (events === null) return <PageSkeleton title="Login activity" />;
 
@@ -89,16 +110,12 @@ export default function LoginActivityPage() {
         </div>
       ) : (
         <p className="mt-6 text-[13px] leading-relaxed text-muted">
-          Nothing has been logged yet. The first time you sign in from somewhere new it will appear
-          here, with the machine, the town its network address traced to and the exact minute.
+          Nothing has been logged yet. New sign-ins will appear here.
         </p>
       )}
 
       <Helper className="mt-8">
-        A location here is the town your network address resolves to, not the corner a device was
-        standing in. Mobile carriers and VPNs hand out addresses from somewhere other than where the
-        phone actually is, so a sign-in you made from home can be drawn fifty kilometres away — and
-        a traced city is never, on its own, proof of someone else.
+        Locations are traced from network addresses — they name a city, not a place.
       </Helper>
     </SettingsPage>
   );
