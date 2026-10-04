@@ -39,6 +39,17 @@ export const config = {
     and this app forwards (`api/config.ts`). */
 const SESSION_COOKIE = "__session";
 
+/**
+ * Pages that exist *before* a session does, so the gate must not touch them.
+ *
+ * `/oauth-complete` is the crux: a first social sign-in lands here with no
+ * `__session` cookie yet — the account row is only written when the form is
+ * submitted. Guarding it bounced the visitor to the accounts login with
+ * `redirect_to` pointing straight back here, and back again forever. `/login`
+ * is the signed-out fallback, so it is public by definition.
+ */
+const PUBLIC_PATHS = ["/login", "/oauth-complete"];
+
 function secretKey(): Uint8Array | null {
   const secret = process.env.JWT_SECRET;
   return secret ? new TextEncoder().encode(secret) : null;
@@ -58,6 +69,14 @@ function toLogin(request: NextRequest): NextResponse {
 }
 
 export async function proxy(request: NextRequest) {
+  // Pre-auth pages are never gated — see PUBLIC_PATHS.
+  const { pathname } = request.nextUrl;
+  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    const pass = NextResponse.next();
+    pass.headers.set("Cache-Control", "no-store");
+    return pass;
+  }
+
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return toLogin(request);
 
