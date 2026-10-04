@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3005",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -17,7 +17,7 @@
     "jose": "^6.2.6",
     "lucide-react": "^0.544.0",
     "mapbox-gl": "^3.32.0",
-    "next": "^16.3.6",
+    "next": "16.3.6",
     "pg": "^8.22.0",
     "prisma": "7.9.1",
     "qrcode.react": "^4.2.0",
