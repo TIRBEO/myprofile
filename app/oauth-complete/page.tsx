@@ -120,10 +120,12 @@ const LEGAL: Record<LegalKind, { title: string; intro: string; sections: { title
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   loading?: boolean;
   icon?: React.ReactNode;
+  /** Accessible name for icon-only buttons (maps to aria-label). */
+  label?: string;
 };
 
 /** Gradient pill button — violet → fuchsia, full-width by default. */
-export function GlassButton({
+function GlassButton({
   loading,
   icon,
   children,
@@ -131,11 +133,13 @@ export function GlassButton({
   disabled,
   onClick,
   type = "button",
+  label,
   ...rest
 }: ButtonProps) {
   return (
     <button
       type={type}
+      aria-label={label}
       onClick={onClick}
       disabled={disabled || loading}
       className={cn(
@@ -164,7 +168,7 @@ export function GlassButton({
 }
 
 /** Soft gradient link button for the legal text links. */
-export function GlassLink({
+function GlassLink({
   children,
   onClick,
   className,
