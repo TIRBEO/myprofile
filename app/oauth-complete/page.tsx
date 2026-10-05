@@ -937,9 +937,14 @@ function Complete() {
   if (signupToken) {
     return shell(
       <form onSubmit={submit}>
-        {/* The face, editable — the camera badge opens the file picker. */}
+        {/* The face, editable — tapping anywhere on it opens the file picker. */}
         <div className="relative mx-auto w-fit">
-          <div className="relative z-10">
+          <button
+            type="button"
+            onClick={() => { haptic("light"); photoRef.current?.click(); }}
+            className="relative z-10 block cursor-pointer rounded-full transition-transform hover:scale-[1.03] active:scale-95"
+            aria-label="Change photo"
+          >
             <ProfilePicture
               photo={photo}
               seed={pending?.email || name || "tirbeo"}
@@ -947,21 +952,18 @@ function Complete() {
               size={88}
               ring
             />
-          </div>
-          <button
-            type="button"
-            onClick={() => { haptic("light"); photoRef.current?.click(); }}
+          </button>
+          <span
+            aria-hidden
             className={cn(
-              "absolute -right-1 -bottom-1 z-20 size-9 rounded-full",
+              "pointer-events-none absolute -right-1 -bottom-1 z-20 size-9 rounded-full",
               "flex items-center justify-center",
-              "bg-[#0064c8] text-white hover:brightness-110",
+              "bg-[#0064c8] text-white",
               "border-[3px] border-[#101014]",
-              "transition",
             )}
-            aria-label="Change photo"
           >
             <Camera className="size-[17px]" strokeWidth={2.25} />
-          </button>
+          </span>
         </div>
 
         <h1 className="mt-4 text-center text-[21px] font-semibold tracking-[-0.025em] text-white/96">
