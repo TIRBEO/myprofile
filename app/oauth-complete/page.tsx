@@ -870,7 +870,7 @@ function Complete() {
         <p className="tb-sub mt-1.5">
           This page completes a Tirbeo sign-in started with Google, GitHub or Discord. Start the sign-in again and you'll land back here.
         </p>
-        <Button variant="secondary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
+        <Button variant="primary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
           Back to Tirbeo
         </Button>
       </>,
@@ -885,7 +885,7 @@ function Complete() {
         <p className="tb-sub mt-1.5">
           {loadError} The link lasts 15 minutes and is used once, so start the sign-in again — it takes a few seconds.
         </p>
-        <Button variant="secondary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
+        <Button variant="primary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
           Sign in again
         </Button>
       </>,
