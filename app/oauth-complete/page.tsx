@@ -208,23 +208,24 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 /** IG action button: 52px, rounded-xl. Primary is the one place the brand
     blue is a fill; secondary is a white/[0.07] hairline ghost. */
+const BUTTON_BASE =
+  "relative inline-flex w-full select-none items-center justify-center gap-2 overflow-hidden " +
+  "rounded-xl font-semibold normal-case tracking-[-0.01em] whitespace-nowrap " +
+  "h-[52px] px-6 text-[15px] " +
+  "transition-[background-color,color,border-color,opacity,transform] duration-150 " +
+  "active:scale-[0.97] disabled:pointer-events-none disabled:active:scale-100";
+
 function Button({loading, variant = "secondary", children, className, disabled, type = "button", ...rest}: ButtonProps) {
   return (
     <button
       type={type}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       className={cn(
-        "relative inline-flex w-full select-none items-center justify-center gap-2 overflow-hidden",
-        "rounded-xl font-semibold normal-case tracking-[-0.01em] whitespace-nowrap",
-        "h-[52px] px-6 text-[15px]",
-        "transition-[background-color,color,border-color,opacity,transform] duration-150",
-        "active:scale-[0.97]",
-        "disabled:pointer-events-none disabled:opacity-40",
-        "focus-visible:outline-none",
+        BUTTON_BASE,
         variant === "primary"
           ? cn(
-              "bg-[#0064c8] text-white",
-              "hover:bg-[#0058b3] active:bg-[#004f9e]",
+              "bg-ig text-white hover:bg-ig-hover active:bg-ig-press",
               "disabled:bg-white/[0.12] disabled:text-white/40",
             )
           : cn(
@@ -244,11 +245,12 @@ function Button({loading, variant = "secondary", children, className, disabled, 
 }
 
 /** Label above, hint/error below — no box around the control. */
-function Field({label, hint, error, required, children, className}: {
+function Field({label, hint, error, required, optional, children, className}: {
   label?: string;
   hint?: React.ReactNode;
   error?: string;
   required?: boolean;
+  optional?: boolean;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -258,6 +260,7 @@ function Field({label, hint, error, required, children, className}: {
         <label className="block text-[14px] font-medium text-white/76 mb-2">
           {label}
           {required ? <span className="text-[#ff7a7a]"> *</span> : null}
+          {optional ? <span className="font-normal text-white/45"> (optional)</span> : null}
         </label>
       ) : null}
       {children}
@@ -375,43 +378,42 @@ function PasswordField({
   );
 }
 
-/** IG consent checkbox — a white/[0.16] square that fills the white/96
-    when on, with the check mark in #0064c8. */
+/** IG consent checkbox — matches accounts ConsentCheck: a hairline square
+    that fills the white when on, with a black check mark SVG. */
 function Checkbox({checked, onChange, children}: {
   checked: boolean;
   onChange: (next: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
-    <div
+    <button
+      type="button"
       role="checkbox"
       aria-checked={checked}
-      tabIndex={0}
       onClick={() => {
         haptic("selection");
         onChange(!checked);
       }}
-      onKeyDown={(e) => {
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          haptic("selection");
-          onChange(!checked);
-        }
-      }}
-      className="mb-4 flex w-full cursor-pointer items-start gap-3 transition-colors"
+      className={cn(
+        "group flex w-full items-start gap-3 rounded-xl text-left transition-colors",
+        "disabled:pointer-events-none disabled:opacity-40",
+      )}
     >
       <span
+        aria-hidden
         className={cn(
-          "mt-[2px] flex size-[22px] shrink-0 items-center justify-center rounded-[6px] border transition-all duration-150",
-          checked
-            ? "border-[#0064c8] bg-[#0064c8] text-white"
-            : "border-white/[0.4] bg-black/40 hover:border-white/60",
+          "mt-[1px] grid size-5 shrink-0 place-items-center rounded-[6px] border-2 transition-colors duration-150",
+          checked ? "border-white bg-white" : "border-white/30 group-hover:border-white/60",
         )}
       >
-        {checked ? <Check className="size-[13px]" strokeWidth={3} /> : null}
+        {checked ? (
+          <svg viewBox="0 0 24 24" className="size-3.5 text-black" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        ) : null}
       </span>
-      <span className="text-[14.5px] leading-relaxed text-white/90">{children}</span>
-    </div>
+      <span className="min-w-0 flex-1 text-[14px] leading-relaxed text-white/80">{children}</span>
+    </button>
   );
 }
 
@@ -968,20 +970,14 @@ function Complete() {
           {name?.trim() ? `Welcome, ${name.trim().split(/\s+/)[0]}` : "Create account"}
         </h1>
 
-        <div className="mt-6 md:grid md:grid-cols-2 md:items-start md:gap-x-10">
+        <div className="mt-6 md:grid md:grid-cols-2 md:items-start md:gap-x-8">
           {/* Row 1 — username left, password right */}
           <div>
-            <Field
-              label="Username"
-              required
-              hint={username
-                ? undefined
-                : "This is your profile address — 3–30 characters: letters, numbers, - or _."}
-            >
+            <Field label="Username" required>
               <TextInput
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. bishnu.n"
+                placeholder="bishnu.n"
                 autoComplete="username"
                 spellCheck={false}
                 required
@@ -990,14 +986,13 @@ function Complete() {
               />
             </Field>
 
-            <UsernameStatus state={usernameState} message={usernameMsg} />
+            <div className="min-h-[20px]">
+              <UsernameStatus state={usernameState} message={usernameMsg} />
+            </div>
           </div>
 
           <div>
-            <Field
-              label="Password"
-              hint={`Optional — ${providerName} already gets you in.`}
-            >
+            <Field label="Password" optional>
               <PasswordField
                 value={password}
                 onChange={setPassword}
@@ -1010,7 +1005,7 @@ function Complete() {
 
           {/* Row 2 — display name spans the full card width */}
           <div className="md:col-span-2">
-            <Field label="Display name">
+            <Field label="Display name" optional className="mb-2">
               <TextInput
                 value={name}
                 onChange={(e) => setName(e.target.value)}
