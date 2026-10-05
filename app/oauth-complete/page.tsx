@@ -986,7 +986,7 @@ function Complete() {
               />
             </Field>
 
-            <div className="min-h-[20px]">
+            <div className="mb-2 min-h-[20px]">
               <UsernameStatus state={usernameState} message={usernameMsg} />
             </div>
           </div>

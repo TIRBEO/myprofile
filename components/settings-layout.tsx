@@ -399,11 +399,11 @@ function AccountChip() {
   const t = useT();
   if (!profile) {
     return (
-      <div className="mt-4 flex items-center gap-3 px-1" aria-busy="true">
-        <span className="size-9 shrink-0 animate-pulse rounded-full bg-surface-2" />
-        <span className="min-w-0 flex-1 space-y-1.5">
-          <span className="block h-[12px] w-[55%] animate-pulse rounded-full bg-surface-2" />
-          <span className="block h-[11px] w-[78%] animate-pulse rounded-full bg-surface-2/70" />
+      <div className="mt-5 flex items-center gap-3.5 px-1" aria-busy="true">
+        <span className="size-12 shrink-0 animate-pulse rounded-full bg-surface-2" />
+        <span className="min-w-0 flex-1 space-y-2">
+          <span className="block h-[14px] w-[55%] animate-pulse rounded-full bg-surface-2" />
+          <span className="block h-[12px] w-[78%] animate-pulse rounded-full bg-surface-2/70" />
         </span>
       </div>
     );
@@ -415,17 +415,17 @@ function AccountChip() {
       href="/settings/edit-profile"
       aria-label={`${role}: ${name}`}
       onClick={() => haptic("light")}
-      className="mt-4 flex w-full items-center gap-3 rounded-xl px-1 py-1 outline-none transition-colors hover:bg-surface-2/60 active:bg-surface-2/80"
+      className="mt-5 flex w-full items-center gap-3.5 rounded-xl px-1 py-1 outline-none transition-colors hover:bg-surface-2/60 active:bg-surface-2/80"
     >
       <ProfilePicture
         photo={profile.photo}
         seed={profile.username || profile.email}
         name={name}
-        size={36}
+        size={48}
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] leading-tight font-semibold">{name}</span>
-        <span className="mt-0.5 block truncate text-[12px] leading-tight text-muted">{profile.email}</span>
+        <span className="block truncate text-[15.5px] leading-tight font-semibold">{name}</span>
+        <span className="mt-1 block truncate text-[13px] leading-tight text-muted">{profile.email}</span>
       </span>
     </Link>
   );
