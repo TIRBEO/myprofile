@@ -11,9 +11,9 @@
  * scoping) between two services the user is signed into as one session.
  *
  * Deliberately narrow: only the prefixes a settings screen needs are allowed,
- * so this can't be pointed at the brain's admin surface. `/api/profile` keeps
- * its own richer route (direct Redis/DB read + token write) — Next resolves
- * that more-specific file first, so it never lands here.
+ * so this can't be pointed at the brain's admin surface. `/api/profile` is the
+ * one locally-served exception — the richer direct read (Redis/DB + ETag)
+ * delegated to from here, so the API surface stays one function.
  */
 
 import { NextResponse } from "next/server";
@@ -42,6 +42,7 @@ const ALLOWED = new Set([
 const ALLOWED_AUTH = new Set(["reauth/verify", "reauth/send-code"]);
 
 function permitted(slug: string[]): boolean {
+  if (slug.length === 1 && slug[0] === "profile") return true; // served locally, see forward()
   if (slug[0] === "auth") return ALLOWED_AUTH.has(slug.slice(1).join("/"));
   return ALLOWED.has(slug[0]);
 }
@@ -60,6 +61,25 @@ async function forward(
   const { path } = await context.params;
   const slug = (path ?? []).filter(Boolean);
   if (slug.length === 0 || !permitted(slug)) return notFound();
+
+  /* /api/profile is served locally (direct Redis/DB read + token write, ETag
+     304s), not forwarded to the brain — it lives in this module so the whole
+     API surface stays one serverless function (Hobby plan counts functions
+     per region against a low cap). */
+  if (slug.length === 1 && slug[0] === "profile") {
+    const { profileGET, profilePATCH, profilePUT } = await import("../../../api/profile-route");
+    switch (request.method) {
+      case "GET":
+      case "HEAD":
+        return profileGET(request);
+      case "PATCH":
+        return profilePATCH(request);
+      case "PUT":
+        return profilePUT(request);
+      default:
+        return notFound();
+    }
+  }
 
   const config = loadConfig();
   const target = new URL(`${config.mainApiBaseUrl}/api/${slug.join("/")}`);

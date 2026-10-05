@@ -9,18 +9,19 @@
  *   - A read that has not changed costs no database work. The `ETag` is a
  *     digest of the record this service is already holding, so a reload within
  *     the cache window answers 304 without touching the account service.
+ *
+ * Lives as a module rather than a route file so /api/[...path] can delegate
+ * to it — one serverless function for the whole API surface instead of two.
  */
 
 import { NextResponse } from "next/server";
-import { etagOf, matchesEtag } from "../../../api/cache";
-import { getProfile, patchProfile, type ProfileResult } from "../../../api/profile";
-import { originFacts } from "../../../api/transport";
-import { resolveIdentity } from "../../../api/instance";
-import { stripPrivilegedHeaders } from "../../../api/session";
+import { etagOf, matchesEtag } from "./cache";
+import { getProfile, patchProfile, type ProfileResult } from "./profile";
+import { originFacts } from "./transport";
+import { resolveIdentity } from "./instance";
+import { stripPrivilegedHeaders } from "./session";
 
-export const dynamic = "force-dynamic";
-
-export async function GET(request: Request) {
+export async function profileGET(request: Request) {
   const identity = await resolveIdentity(stripPrivilegedHeaders(request.headers));
   if (!identity) return unauthorized();
 
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
   return json(result.data, 200, { etag, "cache-control": "private, max-age=0, must-revalidate" });
 }
 
-export async function PATCH(request: Request) {
+export async function profilePATCH(request: Request) {
   const identity = await resolveIdentity(stripPrivilegedHeaders(request.headers));
   if (!identity) return unauthorized();
 
@@ -57,7 +58,7 @@ export async function PATCH(request: Request) {
     sends is validated and written, and any field it omits is left alone rather
     than cleared. Clearing on omission would turn a partial client into a
     data-loss event. */
-export const PUT = PATCH;
+export const profilePUT = profilePATCH;
 
 function readJson(request: Request): Promise<Record<string, unknown> | null> {
   return request
