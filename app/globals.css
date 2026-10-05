@@ -19,8 +19,9 @@
   --bg: #101014;
   --card: rgba(18, 18, 21, 0.72);
   --surface: #0e0e10;
-  --surface-2: rgba(255, 255, 255, 0.09);
-  --surface-3: rgba(255, 255, 255, 0.18);
+  /* Controls sit on near-black plates, not milky white-alpha gray. */
+  --surface-2: #19191d;
+  --surface-3: #26262c;
 
   /* Text */
   --fg: rgba(255, 255, 255, 0.96);
@@ -54,8 +55,9 @@
   --accent-soft: rgba(255, 255, 255, 0.14);
   --accent-text: #5cb4f9;
   --accent-fg: #ffffff;
-  /* Same reasoning for the destructive fill: #ed4956 carried white at 3.69:1. */
-  --danger: #ff7a7a;
+  /* Same reasoning for the destructive fill: a real red that carries white
+     text, with the softer pink kept for danger *text* on dark plates. */
+  --danger: #e64c56;
   --danger-text: #ff8a95;
   --success: #6fd68a;
   --success-text: #5ee0a1;
