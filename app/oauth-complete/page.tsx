@@ -805,7 +805,7 @@ function Complete() {
           style={{backgroundImage: GRAIN_SVG, opacity: 0.035, backgroundSize: "160px 160px"}}
         />
 
-        <div className={cn("relative z-10 w-full", wide ? "max-w-[820px]" : "max-w-[560px]")}>
+        <div className={cn("relative z-10 w-full", wide ? "max-w-[560px]" : "max-w-[560px]")}>
           {/* Card — IG glass plate: rgba(18,18,21,0.72), white/[0.09] hairline */}
           <div
             className={cn(
@@ -940,7 +940,7 @@ function Complete() {
               photo={photo}
               seed={pending?.email || name || "tirbeo"}
               name={name || undefined}
-              size={104}
+              size={88}
               ring
             />
           </div>
@@ -960,7 +960,9 @@ function Complete() {
           </button>
         </div>
 
-        <h1 className="mt-5 text-center text-[24px] font-semibold tracking-[-0.02em] text-white/96">Create account</h1>
+        <h1 className="mt-4 text-center text-[21px] font-semibold tracking-[-0.025em] text-white/96">
+          {name?.trim() ? `Welcome, ${name.trim().split(/\s+/)[0]}` : "Create account"}
+        </h1>
 
         <div className="mt-6 md:grid md:grid-cols-2 md:items-start md:gap-x-10">
           {/* Row 1 — username left, password right */}
