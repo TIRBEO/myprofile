@@ -25,7 +25,7 @@ export default function LoginPage() {
     <main className="flex min-h-dvh flex-col items-center justify-center bg-bg px-5 text-center">
       <div className="w-full max-w-[380px]">
         <h1 className="text-[24px] font-extrabold tracking-[-0.03em]">
-          Tirbeo <span className="text-muted">MyProfile</span>
+          Tirbeo <span className="text-white/45">MyProfile</span>
         </h1>
         <p className="mt-3 text-[15px] leading-relaxed text-muted">
           {base

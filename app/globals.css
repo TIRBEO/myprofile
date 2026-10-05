@@ -13,39 +13,53 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Surfaces — the canvas is black and every panel is a solid step above it.
-     Depth comes from lines, not from seeing a photograph through the cards. */
-  --bg: #000000;
+  /* ── Canvas ──
+     The page is the photograph, not a black plate — --bg only paints the
+     one frame before the backdrop image decodes. */
+  --bg: #101014;
+  --card: rgba(18, 18, 21, 0.72);
   --surface: #0e0e10;
   --surface-2: rgba(255, 255, 255, 0.09);
-  --surface-3: rgba(255, 255, 255, 0.15);
+  --surface-3: rgba(255, 255, 255, 0.18);
 
   /* Text */
-  --fg: #f5f5f5;
-  /* Secondary tone on solid black. #a8a8a8 clears 7.6:1 here, which is well
-     past AA — the brighter value it replaces was only needed to survive the
-     photograph that used to sit under it. */
-  --muted: #a8a8a8;
-  --link: #e0f1ff;
+  --fg: rgba(255, 255, 255, 0.96);
+  /* Secondary tone on the canvas. */
+  --muted: var(--text-2);
+  --link: var(--text-2);
+
+  /* Quiet-dark text steps — mirrors accounts app */
+  --text-2: rgba(255, 255, 255, 0.76);
+  --text-3: rgba(255, 255, 255, 0.62);
+  --text-4: rgba(255, 255, 255, 0.48);
+  --placeholder: rgba(255, 255, 255, 0.45);
 
   /* Lines. The card and the row are separated by a hairline only. */
-  --border: rgba(255, 255, 255, 0.13);
-  --border-strong: rgba(255, 255, 255, 0.22);
-  --divider: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.15);
+  --border-strong: #ffffff;
+  --divider: rgba(255, 255, 255, 0.12);
+  --hover: rgba(255, 255, 255, 0.08);
 
   /* Brand + state */
-  /* Action blue one step down the Instagram ramp: white label contrast goes
-     from 3.17:1 to 5.74:1, which 13–15px labels need. */
+  /* The canvas stays black and white — blue is the one fill, and it belongs
+     to the buttons and switches that ask for an action. */
   --accent: #0064c8;
   --accent-hover: #0058b3;
+  --ig: #0064c8;
+  --ig-hover: #0058b3;
+  --ig-press: #004f9e;
+  --accent-2: #0064c8;
+  --accent-2-hover: #0058b3;
+  --accent-2-press: #004f9e;
+  --accent-soft: rgba(255, 255, 255, 0.14);
   --accent-text: #5cb4f9;
   --accent-fg: #ffffff;
   /* Same reasoning for the destructive fill: #ed4956 carried white at 3.69:1. */
-  --danger: #c62f3b;
+  --danger: #ff7a7a;
   --danger-text: #ff8a95;
-  --success: #32d583;
+  --success: #6fd68a;
   --success-text: #5ee0a1;
-  --warn: #ffb224;
+  --warn: #f0c674;
   --warn-text: #ffc45c;
 
   /* Type. No webfont — a system grotesque carries the voice on its own,
@@ -57,11 +71,17 @@
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
     monospace;
 
-  /* Chrome. Rail and canvas are the same black; the rail is separated from
+  /* Chrome. Rail and canvas are the same; the rail is separated from
      the content by a hairline line, not by a different fill. */
-  --rail: #000000;
+  --rail: #101014;
   --scrim: rgba(0, 0, 0, 0.72);
   --track: rgba(255, 255, 255, 0.22);
+
+  /* Focus */
+  --focus-ring: #ffffff;
+
+  /* Autofill coverage — must stay opaque and dark */
+  --autofill-fill: #0e0e10;
   /* Solid ink for primary actions — the accent is reserved for selection. */
   --ink: #f5f5f5;
   --ink-fg: #000000;
@@ -278,8 +298,8 @@ a,
      Keyboard focus only: a pointer click still matches `:not(:focus-visible)`
      below, so the underline fields keep their clean look under a mouse. */
   :focus-visible {
-    outline: 2px solid var(--accent) !important;
-    outline-offset: 2px !important;
+    outline: 1px solid var(--focus-ring) !important;
+    outline-offset: 3px !important;
   }
 
   /* Pointer clicks must never leave an outline — keyboard focus only. */
@@ -294,8 +314,8 @@ a,
 }
 
 ::selection {
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: rgba(255, 255, 255, 0.26);
+  color: #fff;
 }
 
 input,
@@ -456,6 +476,52 @@ input[type="number"]::-webkit-outer-spin-button {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* ── IG quiet-dark typography (mirrors accounts index.css) ────────── */
+
+.tb-heading {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  text-align: center;
+  color: var(--fg);
+}
+
+.tb-sub {
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-3);
+}
+
+.tb-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.tb-hint {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+/* Glass panels — translucent black card with subtle white border.
+   Mirrors accounts index.css .glass / .glass-soft. */
+.glass {
+  background: rgba(18, 18, 21, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.glass-soft {
+  background: rgba(18, 18, 21, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* Gradient story ring: gradient padding ring around a 2px bg gap. */

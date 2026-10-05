@@ -370,7 +370,7 @@ function SideRail({
         <button
           type="button"
           onClick={onSignOut}
-          className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-danger px-3.5 text-[14px] font-semibold text-white outline-none transition-colors hover:brightness-105 active:brightness-95"
+          className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-surface-2 px-3.5 text-[14px] font-semibold text-fg outline-none transition-colors hover:bg-surface-3 active:brightness-95"
         >
           <LogOut className="size-[18px] shrink-0" strokeWidth={2.2} />
           {t("Log out")}
@@ -384,7 +384,7 @@ function Wordmark() {
   return (
     <span className="flex items-baseline gap-2 px-1 leading-none tracking-tight">
       <span className="text-[24px] leading-none font-extrabold tracking-[-0.03em]">Tirbeo</span>
-      <span className="text-[24px] leading-none font-bold tracking-[-0.02em] text-muted">MyProfile</span>
+      <span className="text-[24px] leading-none font-bold tracking-[-0.02em] text-white/45">MyProfile</span>
     </span>
   );
 }
