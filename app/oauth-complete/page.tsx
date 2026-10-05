@@ -975,10 +975,7 @@ function Complete() {
 
             <UsernameStatus state={usernameState} message={usernameMsg} />
 
-            <Field
-              label="Display name"
-              hint="How your name appears. You can change it later."
-            >
+            <Field label="Display name">
               <TextInput
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -1033,15 +1030,11 @@ function Complete() {
               />
             </div>
 
-            <div className="mt-4">
-              {error ? (
-                <p className="rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
-                  {error}
-                </p>
-              ) : !accepted ? (
-                <p className="text-[13.5px] text-white/62">Tick that line to finish.</p>
-              ) : null}
-            </div>
+            {error ? (
+              <p className="mt-4 rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
+                {error}
+              </p>
+            ) : null}
 
             <Button
               type="submit"
@@ -1094,15 +1087,11 @@ function Complete() {
           onChange={setStaffAccess}
         />
 
-        <div className="mt-4">
-          {error ? (
-            <p className="rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
-              {error}
-            </p>
-          ) : !accepted ? (
-            <p className="text-[13.5px] text-white/62">Tick that line to finish.</p>
-          ) : null}
-        </div>
+        {error ? (
+          <p className="mt-4 rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
+            {error}
+          </p>
+        ) : null}
 
         <Button
           type="submit"
