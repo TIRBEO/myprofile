@@ -542,15 +542,14 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
       {/* Panel — IG glass card: transparent plate, white/[0.09] hairline */}
       <div
         className={cn(
-          "relative z-[91] w-full max-w-lg",
-          "rounded-2xl border border-white/[0.09] bg-[rgba(18,18,21,0.72)] text-white",
-          "flex flex-col shadow-[0_24px_80px_rgba(0,0,0,0.6)]",
-          "backdrop-blur-[40px] backdrop-saturate-150",
+          "relative z-[91] flex w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl glass text-fg sm:max-w-3xl sm:rounded-3xl",
+          "shadow-[0_32px_100px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.07),inset_0_0_80px_rgba(0,0,0,0.55)]",
+          "backdrop-blur-[40px] backdrop-saturate-150 max-sm:backdrop-blur-none max-sm:backdrop-saturate-100",
         )}
         onClick={(e) => e.stopPropagation()}
         style={{maxHeight: "80dvh"}}
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.12] px-6 py-4">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-divider px-5 py-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/12 text-white/70">
               {kind === "terms" ? (
@@ -568,7 +567,7 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="grid size-9 shrink-0 place-items-center rounded-full border-none bg-transparent text-white/62 hover:bg-white/[0.06] hover:text-white transition-colors"
+            className="grid size-9 shrink-0 place-items-center rounded-full border-none bg-transparent text-muted transition-colors hover:bg-hover hover:text-fg"
           >
             <X className="size-[18px]" />
           </button>
@@ -578,22 +577,21 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
           <div className="space-y-5 py-1">
             {doc.sections.map((section) => (
               <section key={section.title}>
-                <h3 className="text-[15px] font-semibold text-white">{section.title}</h3>
-                <p className="mt-1.5 text-[14px] leading-relaxed text-white/62">{section.body}</p>
+              <h3 className="text-[15px] font-semibold text-white">{section.title}</h3>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-white/70">{section.body}</p>
               </section>
             ))}
           </div>
         </div>
 
-        <div className="border-t border-white/[0.09] p-6">
+        <div className="border-t border-divider p-6">
           <button
             type="button"
             onClick={onClose}
             className={cn(
-              "flex min-h-[48px] w-full items-center justify-center rounded-xl",
-              "px-4 text-center text-[15px] font-semibold text-white/85",
-              "transition hover:bg-white/[0.04]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffffff80] focus-visible:ring-offset-2 focus-visible:ring-offset-[#101014]",
+              BUTTON_BASE,
+              "bg-ig text-white hover:bg-ig-hover active:bg-ig-press",
+              "disabled:bg-white/[0.12] disabled:text-white/40",
             )}
           >
             I understand
@@ -815,11 +813,11 @@ function Complete() {
           {/* Card — IG glass plate: rgba(18,18,21,0.72), white/[0.09] hairline */}
           <div
             className={cn(
-              "border border-white/[0.09] bg-[rgba(18,18,21,0.72)] p-6 sm:p-8",
-              "backdrop-blur-[40px] backdrop-saturate-150",
+              "animate-fade-in relative w-full rounded-3xl border border-white/[0.09] bg-black/75 p-6 sm:p-8",
               "shadow-[0_32px_100px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.07),inset_0_0_80px_rgba(0,0,0,0.55)]",
               "max-sm:backdrop-blur-none max-sm:backdrop-saturate-100",
-              "rounded-3xl",
+              "backdrop-blur-[40px] backdrop-saturate-150",
+              "w-full",
               wide && "md:px-10 md:py-10",
             )}
           >
@@ -977,7 +975,7 @@ function Complete() {
               <TextInput
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="bishnu.n"
+                placeholder="bishnuneupane"
                 autoComplete="username"
                 spellCheck={false}
                 required
