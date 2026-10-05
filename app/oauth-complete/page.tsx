@@ -244,17 +244,21 @@ function Button({loading, variant = "secondary", children, className, disabled, 
 }
 
 /** Label above, hint/error below — no box around the control. */
-function Field({label, hint, error, children, className}: {
+function Field({label, hint, error, required, children, className}: {
   label?: string;
   hint?: React.ReactNode;
   error?: string;
+  required?: boolean;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn("mb-4", className)}>
       {label ? (
-        <label className="block text-[14px] font-medium text-white/76 mb-2">{label}</label>
+        <label className="block text-[14px] font-medium text-white/76 mb-2">
+          {label}
+          {required ? <span className="text-[#ff7a7a]"> *</span> : null}
+        </label>
       ) : null}
       {children}
       {error ? (
@@ -969,6 +973,7 @@ function Complete() {
           <div>
             <Field
               label="Username"
+              required
               hint={username
                 ? undefined
                 : "This is your profile address — 3–30 characters: letters, numbers, - or _."}
