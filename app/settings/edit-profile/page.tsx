@@ -355,6 +355,9 @@ export default function EditProfilePage() {
   return (
     <SettingsPage title="Edit profile">
 
+      {/* One click region: the banner, the face, the name, the rows, the bio —
+          and every gap between them — all open the same edit popup. */}
+      <div onClick={openEditFromPart} className="-mx-1 cursor-pointer rounded-2xl px-1">
       {/* ══ Preview — read-only. Every change happens in the sheet below it,
              so the picture, the name and the fields all edit through exactly
              one control instead of three that open the same thing. ══ */}
@@ -429,6 +432,7 @@ export default function EditProfilePage() {
       </Group>
 
       <BioBlock bio={form.bio} onEdit={openEditFromPart} />
+      </div>
 
       {/* ══ Edit popup — every field, both uploads ══ */}
       {editing ? (
@@ -1137,7 +1141,8 @@ function BioBlock({ bio, onEdit }: { bio: string | null; onEdit?: () => void }) 
             <Button
               variant="link"
               className="mt-2 px-1"
-              onClick={() => {
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
                 haptic("light");
                 setOpen((o) => !o);
               }}
