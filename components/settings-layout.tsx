@@ -384,7 +384,7 @@ function Wordmark() {
   return (
     <span className="flex items-baseline gap-2 px-1 leading-none tracking-tight">
       <span className="text-[24px] leading-none font-extrabold tracking-[-0.03em]">Tirbeo</span>
-      <span className="text-[24px] leading-none font-bold tracking-[-0.02em] text-white/45">MyProfile</span>
+      <span className="text-[24px] leading-none font-bold tracking-[-0.02em] text-fg/45">MyProfile</span>
     </span>
   );
 }
