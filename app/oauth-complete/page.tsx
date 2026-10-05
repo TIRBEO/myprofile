@@ -1057,7 +1057,14 @@ function Complete() {
           type="submit"
           variant="primary"
           loading={busy}
-          disabled={!accepted || busy || usernameState !== "available"}
+          disabled={
+            !accepted
+            || busy
+            || !username.trim()
+            || usernameState === "taken"
+            || usernameState === "reserved"
+            || usernameState === "invalid"
+          }
           className="mt-3"
         >
           {busy ? "Working…" : "Create account"}
