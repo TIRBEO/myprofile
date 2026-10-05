@@ -243,25 +243,6 @@ function Button({loading, variant = "secondary", children, className, disabled, 
   );
 }
 
-/** Plain text link — IG muted white, lifting to full white on hover. */
-function TextLink({children, onClick, className}: {children: React.ReactNode; onClick?: () => void; className?: string}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "inline-flex min-h-10 items-center gap-1.5 rounded-xl px-1 text-[15px] font-semibold text-white/75",
-        "transition-colors hover:text-white active:text-white/70",
-        "focus-visible:outline-none focus-visible:text-white",
-        "disabled:pointer-events-none disabled:opacity-40",
-        className,
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 /** Label above, hint/error below — no box around the control. */
 function Field({label, hint, error, children, className}: {
   label?: string;
@@ -814,7 +795,7 @@ function Complete() {
           style={{backgroundImage: GRAIN_SVG, opacity: 0.035, backgroundSize: "160px 160px"}}
         />
 
-        <div className={cn("relative z-10 w-full", wide ? "max-w-[940px]" : "max-w-[520px]")}>
+        <div className={cn("relative z-10 w-full", wide ? "max-w-[820px]" : "max-w-[520px]")}>
           {/* Card — IG glass plate: rgba(18,18,21,0.72), white/[0.09] hairline */}
           <div
             className={cn(
@@ -822,7 +803,7 @@ function Complete() {
               "backdrop-blur-[40px] backdrop-saturate-150",
               "shadow-[0_24px_80px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)]",
               "rounded-3xl",
-              wide && "md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-start md:gap-12 md:px-10 md:py-10",
+              wide && "md:px-10 md:py-10",
             )}
           >
             {wide ? children : (
@@ -937,143 +918,181 @@ function Complete() {
     );
   }
 
-  /* ──────────────── Main form ──────────────── */
-  return shell(
-    <>
-      {/* Left — brand, headline, the identity it arrived with */}
-      <div className="md:self-center">
-        <a
-          href="/"
-          aria-label="Tirbeo home"
-          className="flex justify-center py-1 transition-opacity duration-200 hover:opacity-80 md:justify-start"
-        >
-          <BrandMark />
-        </a>
-
-        <h1 className="mt-6 text-center text-[24px] font-bold tracking-[-0.025em] text-white md:mt-8 md:text-left md:text-[26px] md:leading-[1.2]">
-          {signupToken ? "Create your Tirbeo account" : "One thing left"}
-        </h1>
-
-        <p className="mx-auto mt-2 max-w-[36ch] text-center text-[14px] leading-relaxed text-white/62 md:mx-0 md:max-w-none md:text-left">
-          {signupToken ? (
-            <>
-              Signed in with {providerName} as{" "}
-              <span className="font-medium text-white">{pending?.email}</span>
-            </>
-          ) : (
-            "Tirbeo hasn't got your agreement on record yet. Tick it below to keep going."
-          )}
-        </p>
-      </div>
-
-      {/* Right — the face, then the fields */}
-      <div className="mt-8 md:mt-0">
-      {/* The face, editable — the provider's thumbnail is a starting point,
-          not a verdict. The camera badge opens the file picker; the crop
-          happens in the sheet the editor draws. */}
-      <div className="relative mx-auto w-fit md:mx-0">
-        <div className="relative z-10">
-          <ProfilePicture
-            photo={photo}
-            seed={pending?.email || name || "tirbeo"}
-            name={name || undefined}
-            size={104}
-            ring
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => { haptic("light"); photoRef.current?.click(); }}
-          className={cn(
-            "absolute -right-1 -bottom-1 size-9 rounded-full",
-            "flex items-center justify-center",
-            "bg-[#0064c8] text-white hover:brightness-110",
-            "border-2 border-[rgba(18,18,21,0.72)]",
-            "transition",
-          )}
-          aria-label="Change photo"
-        >
-          <Camera className="size-[17px]" strokeWidth={2.25} />
-        </button>
-      </div>
-
-      <form onSubmit={submit} className="mt-6">
-        {signupToken ? (
-          <section>
-            {/* Profile section with divider */}
-            <div className="mb-6">
-              <Field
-                label="Username"
-                hint={username
-                  ? undefined
-                  : "This is your profile address — 3–30 characters: letters, numbers, - or _."}
-              >
-                <TextInput
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. bishnu.n"
-                  autoComplete="username"
-                  spellCheck={false}
-                  required
-                  invalid={usernameState === "taken" || usernameState === "reserved" || usernameState === "invalid"}
-                  id="username-field"
-                />
-              </Field>
-
-              <UsernameStatus state={usernameState} message={usernameMsg} />
-
-              <Field
-                label="Display name"
-                hint="How your name appears. You can change it later."
-              >
-                <TextInput
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Bishnu Neupane"
-                  autoComplete="name"
-                  id="display-name-field"
-                />
-              </Field>
-
-              <Field
-                label="Password"
-                hint={`Optional — ${providerName} already gets you in.`}
-              >
-                <PasswordField
-                  value={password}
-                  onChange={setPassword}
-                  placeholder="At least 8 characters"
-                  autoComplete="new-password"
-                  id="password-field"
-                />
-              </Field>
-            </div>
-          </section>
-        ) : null}
-
-        {/* Agreement section */}
-        <section className="mb-6">
-          <div className="mb-5 border-t border-white/[0.08] pt-5">
-            <Checkbox checked={accepted} onChange={setAccepted}>
-              I agree to the <span className="font-semibold text-white">Terms of Service</span> and the{" "}
-              <span className="font-semibold text-white">Privacy Policy</span>, and confirm the details above are
-              mine.
-            </Checkbox>
-
-            <ToggleRow
-              title="Let Tirbeo support see my account"
-              sub="For troubleshooting when you ask for help. Optional."
-              on={staffAccess}
-              onChange={setStaffAccess}
+  /* ──────────────── Main form ────────────────
+     Signup: no marketing column — the card is the form itself, and on a
+     PC the fields split into two columns. Consent-only finish: the narrow
+     card with its headline. */
+  if (signupToken) {
+    return shell(
+      <form onSubmit={submit}>
+        {/* The face, editable — the camera badge opens the file picker. */}
+        <div className="relative mx-auto w-fit">
+          <div className="relative z-10">
+            <ProfilePicture
+              photo={photo}
+              seed={pending?.email || name || "tirbeo"}
+              name={name || undefined}
+              size={104}
+              ring
             />
           </div>
+          <button
+            type="button"
+            onClick={() => { haptic("light"); photoRef.current?.click(); }}
+            className={cn(
+              "absolute -right-1 -bottom-1 size-9 rounded-full",
+              "flex items-center justify-center",
+              "bg-[#0064c8] text-white hover:brightness-110",
+              "border-2 border-[rgba(18,18,21,0.72)]",
+              "transition",
+            )}
+            aria-label="Change photo"
+          >
+            <Camera className="size-[17px]" strokeWidth={2.25} />
+          </button>
+        </div>
 
-          <div className="mt-3 flex items-center justify-center gap-1.5">
-            <TextLink onClick={() => { haptic("light"); setLegal("terms"); }}>Read the terms</TextLink>
-            <span aria-hidden className="text-white/48">·</span>
-            <TextLink onClick={() => { haptic("light"); setLegal("privacy"); }}>Read the privacy policy</TextLink>
+        <div className="mt-6 md:grid md:grid-cols-2 md:items-start md:gap-x-10">
+          {/* Left — the name fields */}
+          <div>
+            <Field
+              label="Username"
+              hint={username
+                ? undefined
+                : "This is your profile address — 3–30 characters: letters, numbers, - or _."}
+            >
+              <TextInput
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. bishnu.n"
+                autoComplete="username"
+                spellCheck={false}
+                required
+                invalid={usernameState === "taken" || usernameState === "reserved" || usernameState === "invalid"}
+                id="username-field"
+              />
+            </Field>
+
+            <UsernameStatus state={usernameState} message={usernameMsg} />
+
+            <Field
+              label="Display name"
+              hint="How your name appears. You can change it later."
+            >
+              <TextInput
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Bishnu Neupane"
+                autoComplete="name"
+                id="display-name-field"
+              />
+            </Field>
           </div>
-        </section>
+
+          {/* Right — the password and the agreement */}
+          <div>
+            <Field
+              label="Password"
+              hint={`Optional — ${providerName} already gets you in.`}
+            >
+              <PasswordField
+                value={password}
+                onChange={setPassword}
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                id="password-field"
+              />
+            </Field>
+
+            <div className="mt-2 border-t border-white/[0.08] pt-5">
+              <Checkbox checked={accepted} onChange={setAccepted}>
+                I agree to the{" "}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("terms"); }}
+                  className="font-semibold text-white underline-offset-2 hover:underline"
+                >
+                  Terms of Service
+                </button>{" "}
+                and the{" "}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("privacy"); }}
+                  className="font-semibold text-white underline-offset-2 hover:underline"
+                >
+                  Privacy Policy
+                </button>
+                , and confirm the details above are mine.
+              </Checkbox>
+
+              <ToggleRow
+                title="Let Tirbeo support see my account"
+                sub="For troubleshooting when you ask for help. Optional."
+                on={staffAccess}
+                onChange={setStaffAccess}
+              />
+            </div>
+
+            <div className="mt-4">
+              {error ? (
+                <p className="rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
+                  {error}
+                </p>
+              ) : !accepted ? (
+                <p className="text-[13.5px] text-white/62">Tick that line to finish.</p>
+              ) : null}
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              loading={busy}
+              disabled={!accepted || busy || usernameState !== "available"}
+              className="mt-3"
+            >
+              {busy ? "Working…" : "Create account"}
+            </Button>
+          </div>
+        </div>
+      </form>,
+      true,
+    );
+  }
+
+  return shell(
+    <>
+      <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">One thing left</h1>
+      <p className="mt-3 text-[14px] leading-relaxed text-white/62">
+        Tirbeo hasn&apos;t got your agreement on record yet. Tick it below to keep going.
+      </p>
+
+      <form onSubmit={submit} className="mt-6">
+        <Checkbox checked={accepted} onChange={setAccepted}>
+          I agree to the{" "}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("terms"); }}
+            className="font-semibold text-white underline-offset-2 hover:underline"
+          >
+            Terms of Service
+          </button>{" "}
+          and the{" "}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("privacy"); }}
+            className="font-semibold text-white underline-offset-2 hover:underline"
+          >
+            Privacy Policy
+          </button>
+          , and confirm the details above are mine.
+        </Checkbox>
+
+        <ToggleRow
+          title="Let Tirbeo support see my account"
+          sub="For troubleshooting when you ask for help. Optional."
+          on={staffAccess}
+          onChange={setStaffAccess}
+        />
 
         <div className="mt-4">
           {error ? (
@@ -1089,15 +1108,13 @@ function Complete() {
           type="submit"
           variant="primary"
           loading={busy}
-          disabled={!accepted || busy || (signupToken ? usernameState !== "available" : false)}
+          disabled={!accepted || busy}
           className="mt-3"
         >
-          {busy ? "Working…" : signupToken ? "Create account" : "Continue"}
+          {busy ? "Working…" : "Continue"}
         </Button>
       </form>
-      </div>
     </>,
-    true,
   );
 }
 
