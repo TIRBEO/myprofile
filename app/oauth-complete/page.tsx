@@ -941,7 +941,7 @@ function Complete() {
   return shell(
     <>
       {/* Left — brand, headline, the identity it arrived with */}
-      <div>
+      <div className="md:self-center">
         <a
           href="/"
           aria-label="Tirbeo home"
@@ -959,36 +959,11 @@ function Complete() {
             <>
               Signed in with {providerName} as{" "}
               <span className="font-medium text-white">{pending?.email}</span>
-              {" · "}
-              <button
-                type="button"
-                onClick={() => { haptic("light"); photoRef.current?.click(); }}
-                className="font-medium text-[#0064c8] transition hover:brightness-110 hover:underline"
-              >
-                change photo
-              </button>
             </>
           ) : (
             "Tirbeo hasn't got your agreement on record yet. Tick it below to keep going."
           )}
         </p>
-
-        {signupToken ? (
-          <ul className="mt-6 space-y-2.5 text-[13.5px] leading-relaxed text-white/62 md:mt-8">
-            <li className="flex items-start gap-2.5">
-              <Check className="mt-0.5 size-4 shrink-0 text-[#0064c8]" aria-hidden />
-              <span>{providerName} stays connected — sign in with either, any time.</span>
-            </li>
-            <li className="flex items-start gap-2.5">
-              <Check className="mt-0.5 size-4 shrink-0 text-[#0064c8]" aria-hidden />
-              <span>Username, photo and display name can all be changed later in Settings.</span>
-            </li>
-            <li className="flex items-start gap-2.5">
-              <Check className="mt-0.5 size-4 shrink-0 text-[#0064c8]" aria-hidden />
-              <span>Add a password for a second way in — and for account recovery.</span>
-            </li>
-          </ul>
-        ) : null}
       </div>
 
       {/* Right — the face, then the fields */}
@@ -1062,12 +1037,7 @@ function Complete() {
 
               <Field
                 label="Password"
-                hint={
-                  <>
-                    Optional — {providerName} already gets you in. Adding a password gives the
-                    account a second way in, and lets you change it later without going back through {providerName}.
-                  </>
-                }
+                hint={`Optional — ${providerName} already gets you in.`}
               >
                 <PasswordField
                   value={password}
@@ -1124,12 +1094,6 @@ function Complete() {
         >
           {busy ? "Working…" : signupToken ? "Create account" : "Continue"}
         </Button>
-
-        {signupToken ? (
-          <p className="mt-3 text-center text-[12.5px] leading-relaxed text-white/55">
-            Nothing is created until you press that. Close this page and the account is never made.
-          </p>
-        ) : null}
       </form>
       </div>
     </>,
