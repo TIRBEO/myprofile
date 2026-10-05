@@ -12,7 +12,7 @@
    Nothing here rewires a screen yet. It is the seam the pages move onto.
    ═══════════════════════════════════════════════════════════════════ */
 
-import type { ProfileResponse } from "../api/contract";
+import type { ProfileResponse } from "../bridge/contract";
 import { announceServiceDown, answered } from "@/lib/service-events";
 
 export type ProfilePatchResult =

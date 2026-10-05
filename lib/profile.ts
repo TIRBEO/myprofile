@@ -212,7 +212,7 @@ const WIRE_TO_LOCAL: Record<string, keyof Profile> = {
  *
  * `/api/profile` answers in the keys the screens use — it maps the account
  * row's column names (`companyRole`, `birthday`, `photoUrl`) on the way out,
- * in `api/contract.ts`. `WIRE_TO_LOCAL` is kept so a payload that still
+ * in `bridge/contract.ts`. `WIRE_TO_LOCAL` is kept so a payload that still
  * speaks in column names (an older cache entry, a direct read) lands in the
  * same place instead of being silently dropped: reading `companyRole` only
  * here is how the Work sheet showed a blank job title for a row that had one.
@@ -238,7 +238,7 @@ function mergeWithServer(local: Profile, server: Record<string, unknown>): Profi
   return normalise(out);
 }
 
-/** Fields with no editable column — mirrored from api/contract.ts
+/** Fields with no editable column — mirrored from bridge/contract.ts
     UNSUPPORTED_FIELDS. The clean rebuild moved pronouns, location, banner,
     job place and skills onto real columns; what remains is the follower
     counts. */
@@ -261,7 +261,7 @@ export type SaveOutcome = {
     nothing sends nothing.
 
     Keyed in the screen's own field names on purpose: `/api/profile` validates
-    and maps by those names (`api/validation.ts`, `api/contract.ts`
+    and maps by those names (`bridge/validation.ts`, `bridge/contract.ts`
     PROFILE_FIELDS) and converts to the account row's wire names itself.
     Sending the wire names here got them mapped a second time — nothing matched,
     so the endpoint found an empty change record and reported a successful save

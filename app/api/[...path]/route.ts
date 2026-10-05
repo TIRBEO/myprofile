@@ -17,7 +17,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { loadConfig } from "@/api/config";
+import { loadConfig } from "@/bridge/config";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +67,7 @@ async function forward(
      API surface stays one serverless function (Hobby plan counts functions
      per region against a low cap). */
   if (slug.length === 1 && slug[0] === "profile") {
-    const { profileGET, profilePATCH, profilePUT } = await import("../../../api/profile-route");
+    const { profileGET, profilePATCH, profilePUT } = await import("../../../bridge/profile-route");
     switch (request.method) {
       case "GET":
       case "HEAD":

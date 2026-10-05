@@ -13,3 +13,5 @@ out/
 *.log
 .vscode/
 .idea/
+.vercel
+.env*

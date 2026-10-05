@@ -36,7 +36,7 @@ export const config = {
 };
 
 /** Mirrors the cookie name the account service sets (`features/auth/jwt.ts`)
-    and this app forwards (`api/config.ts`). */
+    and this app forwards (`bridge/config.ts`). */
 const SESSION_COOKIE = "__session";
 
 /**
