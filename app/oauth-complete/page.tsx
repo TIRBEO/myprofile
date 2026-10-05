@@ -20,7 +20,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Camera, Check, Loader2, X, Eye, EyeOff } from "lucide-react";
+import { Camera, Check, Loader2, X, Eye, EyeOff, FileText, ShieldCheck } from "lucide-react";
 import { createPortal } from "react-dom";
 import { ProfilePicture } from "@/components/profile-picture";
 import { AvatarEditor } from "@/components/avatar-editor";
@@ -544,10 +544,29 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
         onClick={(e) => e.stopPropagation()}
         style={{maxHeight: "80dvh"}}
       >
-        <div className="px-6 pt-6 pb-4">
-          <h2 className="text-[22px] font-bold tracking-[-0.02em] text-white">{doc.title}</h2>
-          <p className="mt-1.5 text-[14px] leading-relaxed text-white/62">{doc.intro}</p>
-        </div>
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.12] px-6 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/12 text-white/70">
+              {kind === "terms" ? (
+                <FileText className="size-[18px]" />
+              ) : (
+                <ShieldCheck className="size-[18px]" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-[22px] text-white/90">{doc.title}</h2>
+              <p className="text-[15px] text-white/45">Tirbeo</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid size-9 shrink-0 place-items-center rounded-full border-none bg-transparent text-white/62 hover:bg-white/[0.06] hover:text-white transition-colors"
+          >
+            <X className="size-[18px]" />
+          </button>
+        </header>
 
         <div className="flex-1 overflow-y-auto px-6 pb-2">
           <div className="space-y-5 py-1">
@@ -574,15 +593,6 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
             I understand
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-3 right-3 rounded p-2 text-white/62 hover:text-white hover:bg-white/[0.06] transition-colors"
-          aria-label="Close"
-        >
-          <X className="size-[19px]" strokeWidth={2} />
-        </button>
       </div>
     </div>,
     document.body,
@@ -795,13 +805,14 @@ function Complete() {
           style={{backgroundImage: GRAIN_SVG, opacity: 0.035, backgroundSize: "160px 160px"}}
         />
 
-        <div className={cn("relative z-10 w-full", wide ? "max-w-[820px]" : "max-w-[520px]")}>
+        <div className={cn("relative z-10 w-full", wide ? "max-w-[820px]" : "max-w-[560px]")}>
           {/* Card — IG glass plate: rgba(18,18,21,0.72), white/[0.09] hairline */}
           <div
             className={cn(
-              "border border-white/[0.09] bg-[rgba(18,18,21,0.72)] p-7 sm:p-9",
+              "border border-white/[0.09] bg-[rgba(18,18,21,0.72)] p-6 sm:p-8",
               "backdrop-blur-[40px] backdrop-saturate-150",
-              "shadow-[0_24px_80px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)]",
+              "shadow-[0_32px_100px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.07),inset_0_0_80px_rgba(0,0,0,0.55)]",
+              "max-sm:backdrop-blur-none max-sm:backdrop-saturate-100",
               "rounded-3xl",
               wide && "md:px-10 md:py-10",
             )}
@@ -851,8 +862,8 @@ function Complete() {
   if (!signupToken && !finishing) {
     return shell(
       <>
-        <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">Nothing to finish</h1>
-        <p className="mt-3 text-[14px] leading-relaxed text-white/62">
+        <h1 className="tb-heading">Nothing to finish</h1>
+        <p className="tb-sub mt-1.5">
           This page completes a Tirbeo sign-in started with Google, GitHub or Discord. Start the sign-in again and you'll land back here.
         </p>
         <Button variant="secondary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
@@ -866,8 +877,8 @@ function Complete() {
   if (signupToken && loadError) {
     return shell(
       <>
-        <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">That sign-in link has expired</h1>
-        <p className="mt-3 text-[14px] leading-relaxed text-white/62">
+        <h1 className="tb-heading">That sign-in link has expired</h1>
+        <p className="tb-sub mt-1.5">
           {loadError} The link lasts 15 minutes and is used once, so start the sign-in again — it takes a few seconds.
         </p>
         <Button variant="secondary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
@@ -886,11 +897,8 @@ function Complete() {
      app, and after sign-in the pending provider gets linked to it. */
   if (signupToken && pending && (pending.existingAccount || pending.existingLink)) {
     return shell(
-      <>
-        <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">
-          You already have a Tirbeo account
-        </h1>
-        <p className="mt-3 text-[14px] leading-relaxed text-white/62">
+      <><h1 className="tb-heading">You already have a Tirbeo account</h1>
+        <p className="tb-sub mt-1.5">
           {providerName} signed in as{" "}
           <span className="font-medium text-white">{pending.email}</span>, and that
           belongs to an account Tirbeo already knows. Rather than make a second one,
@@ -910,7 +918,7 @@ function Complete() {
         <button
           type="button"
           onClick={() => { haptic("light"); window.location.href = finishTarget; }}
-          className="mt-4 block w-full text-center text-[13.5px] text-white/62 hover:text-white/96 transition-colors"
+          className="mt-4 block w-full text-center text-[13.5px] text-white/55 hover:text-white/96 transition-colors"
         >
           Not my account — go back
         </button>
@@ -952,8 +960,10 @@ function Complete() {
           </button>
         </div>
 
+        <h1 className="mt-5 text-center text-[24px] font-semibold tracking-[-0.02em] text-white/96">Create account</h1>
+
         <div className="mt-6 md:grid md:grid-cols-2 md:items-start md:gap-x-10">
-          {/* Left — the name fields */}
+          {/* Row 1 — username left, password right */}
           <div>
             <Field
               label="Username"
@@ -974,19 +984,8 @@ function Complete() {
             </Field>
 
             <UsernameStatus state={usernameState} message={usernameMsg} />
-
-            <Field label="Display name">
-              <TextInput
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Bishnu Neupane"
-                autoComplete="name"
-                id="display-name-field"
-              />
-            </Field>
           </div>
 
-          {/* Right — the password and the agreement */}
           <div>
             <Field
               label="Password"
@@ -1000,53 +999,67 @@ function Complete() {
                 id="password-field"
               />
             </Field>
+          </div>
 
-            <div className="mt-2 border-t border-white/[0.08] pt-5">
-              <Checkbox checked={accepted} onChange={setAccepted}>
-                I agree to the{" "}
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("terms"); }}
-                  className="font-semibold text-white underline-offset-2 hover:underline"
-                >
-                  Terms of Service
-                </button>{" "}
-                and the{" "}
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("privacy"); }}
-                  className="font-semibold text-white underline-offset-2 hover:underline"
-                >
-                  Privacy Policy
-                </button>
-                , and confirm the details above are mine.
-              </Checkbox>
-
-              <ToggleRow
-                title="Let Tirbeo support see my account"
-                sub="For troubleshooting when you ask for help. Optional."
-                on={staffAccess}
-                onChange={setStaffAccess}
+          {/* Row 2 — display name spans the full card width */}
+          <div className="md:col-span-2">
+            <Field label="Display name">
+              <TextInput
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Bishnu Neupane"
+                autoComplete="name"
+                id="display-name-field"
               />
-            </div>
-
-            {error ? (
-              <p className="mt-4 rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
-                {error}
-              </p>
-            ) : null}
-
-            <Button
-              type="submit"
-              variant="primary"
-              loading={busy}
-              disabled={!accepted || busy || usernameState !== "available"}
-              className="mt-3"
-            >
-              {busy ? "Working…" : "Create account"}
-            </Button>
+            </Field>
           </div>
         </div>
+
+        {/* Agreement, support toggle, and the create button — full width */}
+        <div className="mt-1 border-t border-white/[0.08] pt-5">
+          <Checkbox checked={accepted} onChange={setAccepted}>
+            I agree to the{" "}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("terms"); }}
+              className="font-semibold text-white underline-offset-2 hover:underline"
+            >
+              Terms of Service
+            </button>{" "}
+            and the{" "}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("privacy"); }}
+              className="font-semibold text-white underline-offset-2 hover:underline"
+            >
+              Privacy Policy
+            </button>
+            , and confirm the details above are mine.
+          </Checkbox>
+
+          <ToggleRow
+            title="Let Tirbeo support see my account"
+            sub="For troubleshooting when you ask for help. Optional."
+            on={staffAccess}
+            onChange={setStaffAccess}
+          />
+        </div>
+
+        {error ? (
+          <p className="mt-4 rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
+            {error}
+          </p>
+        ) : null}
+
+        <Button
+          type="submit"
+          variant="primary"
+          loading={busy}
+          disabled={!accepted || busy || usernameState !== "available"}
+          className="mt-3"
+        >
+          {busy ? "Working…" : "Create account"}
+        </Button>
       </form>,
       true,
     );
@@ -1054,8 +1067,8 @@ function Complete() {
 
   return shell(
     <>
-      <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">One thing left</h1>
-      <p className="mt-3 text-[14px] leading-relaxed text-white/62">
+      <h1 className="tb-heading">One thing left</h1>
+      <p className="tb-sub mt-1.5">
         Tirbeo hasn&apos;t got your agreement on record yet. Tick it below to keep going.
       </p>
 
