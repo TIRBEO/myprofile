@@ -82,7 +82,8 @@ export function loginUrl(): string {
     if (parent) return `${window.location.protocol}//accounts.${parent[1].toLowerCase()}/login`;
   }
   const base = process.env.NEXT_PUBLIC_ACCOUNTS_URL;
-  return base ? `${base.replace(/\/+$/, "")}/login` : "/login";
+  const usable = base && (process.env.NODE_ENV !== "production" || !/localhost|127\.0\.0\.1/.test(base));
+  return usable ? `${base!.replace(/\/+$/, "")}/login` : "/login";
 }
 
 /** The accounts API origin — the app that owns the session cookies. Derived
@@ -94,7 +95,9 @@ function apiBaseUrl(): string {
     if (parent) return `${window.location.protocol}//api.${parent[1].toLowerCase()}`;
   }
   const fromEnv = process.env.NEXT_PUBLIC_API_URL;
-  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+  if (fromEnv && (process.env.NODE_ENV !== "production" || !/localhost|127\.0\.0\.1/.test(fromEnv))) {
+    return fromEnv.replace(/\/+$/, "");
+  }
   return process.env.NODE_ENV === "development"
     ? "http://localhost:3000"
     : "https://api.tirbeo.com";

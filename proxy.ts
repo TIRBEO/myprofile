@@ -119,8 +119,16 @@ function accountsOrigin(request: NextRequest): string | null {
     return `${proto}accounts.${parent[1].toLowerCase()}`;
   }
   const explicit = process.env.NEXT_PUBLIC_ACCOUNTS_URL?.replace(/\/+$/, "");
-  if (explicit) return explicit;
+  // A stale loopback NEXT_PUBLIC_ACCOUNTS_URL (from a dev .env.local) must never
+  // send a production visitor to localhost.
+  if (explicit && !(process.env.NODE_ENV === "production" && /localhost|127\.0\.0\.1/.test(explicit))) {
+    return explicit;
+  }
   if (hostname === "localhost" || hostname === "127.0.0.1") return "http://localhost:3002";
+  // Unknown host in production (preview/alias domain): the canonical accounts
+  // app — returning null here would send toLogin to same-origin /settings,
+  // which is itself gated, and the redirect would loop.
+  if (process.env.NODE_ENV === "production") return "https://accounts.tirbeo.com";
   return null;
 }
 

@@ -13,7 +13,13 @@
 import { Button, PILL_BASE, PILL_FILL, cn } from "@/components/ig-ui";
 
 export default function LoginPage() {
-  const base = process.env.NEXT_PUBLIC_ACCOUNTS_URL;
+  const raw = process.env.NEXT_PUBLIC_ACCOUNTS_URL;
+  const isLoopback = !!raw && /localhost|127\.0\.0\.1/.test(raw);
+  // A dirty .env.local baked into a prod build must not put a localhost link
+  // on the sign-in page.
+  const base = isLoopback && process.env.NODE_ENV === "production"
+    ? "https://accounts.tirbeo.com"
+    : raw;
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center bg-bg px-5 text-center">

@@ -1,7 +1,7 @@
 "use client";
 
 /* ═══════════════════════════════════════════════════════════════════
-   OAuth completion screen
+   OAuth completion screen — Glassmorphism redesign
 
    The API hands off here in two cases:
    • ?signup=<token>   — first social sign-in. The provider vouched for the
@@ -17,26 +17,38 @@
    the brain refuses a password it has seen in a breach list, so the box
    can answer back with a real reason rather than a shrug.
 
-   The terms and the privacy policy are read here, in a sheet, because the
+   The terms and the privacy policy are read here, in a modal, because the
    person agreeing to them has no account yet and no settings area to
    navigate to. A link that sends them to a page which isn't there would
    make the tick mean nothing.
+
+   ─────────────────────────────────────────────────────────────
+   Visual design: Soft glassmorphism with a pastel gradient
+   background. Every surface is a frosted-glass layer with
+   backdrop-blur, rounded corners, and a soft shadow. The accent
+   is a violet→fuchsia gradient, replacing Instagram's #0064c8
+   blue block-for-block. This is an intentional departure from the
+   Instagram-derived palette (#000 canvas, #262626 hairlines,
+   #0095f6 blue, #ed4956 red) used elsewhere in the app.
    ═══════════════════════════════════════════════════════════════════ */
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Camera, Check, Loader2, X } from "lucide-react";
-import { Button, Field, IconButton, Input, PasswordField, Sheet, cn } from "@/components/ig-ui";
-import { Group, Helper, SectionTitle, ToggleRow } from "@/components/settings-shell";
+import { Camera, Check, Loader2, X, Eye, EyeOff } from "lucide-react";
+import { createPortal } from "react-dom";
 import { ProfilePicture } from "@/components/profile-picture";
 import { AvatarEditor } from "@/components/avatar-editor";
 import { haptic } from "@/lib/haptics";
+
+function cn(...parts: (string | false | null | undefined)[]) {
+  return parts.filter(Boolean).join(" ");
+}
 
 function apiBase(): string {
   // On a tirbeo domain, hit api.<parent> so a production sign-up never calls a
   // localhost address; env + local default cover development and other hosts.
   if (typeof window !== "undefined") {
-    const parent = window.location.hostname.match(/(?:^|\.)(tirbeo\.(?:com|app))$/i);
+    const parent = window.location.hostname.match(/(?:^|\\.)(tirbeo\\.(?:com|app))$/i);
     if (parent) return `${window.location.protocol}//api.${parent[1].toLowerCase()}`;
   }
   return process.env.NEXT_PUBLIC_API_URL ||
@@ -99,34 +111,219 @@ const LEGAL: Record<LegalKind, { title: string; intro: string; sections: { title
   },
 };
 
-function LegalSheet({ kind, onClose }: { kind: LegalKind; onClose: () => void }) {
-  const doc = LEGAL[kind];
+/* ──────────────────────────────────────────────────────────────
+   Design primitives — self-contained, scoped to this page.
+   These replace ig-ui.tsx's Instagram-derived Button / Field /
+   Input / Sheet / etc. with a soft glassmorphism language.
+   ═══════════════════════════════════════════════════════════ */
+
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  loading?: boolean;
+  icon?: React.ReactNode;
+};
+
+/** Gradient pill button — violet → fuchsia, full-width by default. */
+export function GlassButton({
+  loading,
+  icon,
+  children,
+  className,
+  disabled,
+  onClick,
+  type = "button",
+  ...rest
+}: ButtonProps) {
   return (
-    <Sheet
-      title={doc.title}
-      description={doc.intro}
-      onClose={onClose}
-      width="lg"
-      footer={
-        <Button variant="primary" block onClick={onClose}>
-          I understand
-        </Button>
-      }
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled || loading}
+      className={cn(
+        "relative inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5",
+        "text-[15px] font-semibold text-white",
+        "bg-gradient-to-r from-violet-500 to-fuchsia-500",
+        "shadow-lg shadow-violet-200/40",
+        "transition-all duration-200",
+        "hover:brightness-110 hover:shadow-xl hover:shadow-violet-300/40",
+        "active:scale-[0.97]",
+        "disabled:cursor-not-allowed disabled:opacity-60 disabled:scale-100",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+        "focus-visible:ring-violet-400/50",
+        className,
+      )}
+      {...rest}
     >
-      <div className="space-y-5 py-1">
-        {doc.sections.map((section) => (
-          <section key={section.title}>
-            <h3 className="text-[14.5px] font-semibold">{section.title}</h3>
-            <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">{section.body}</p>
-          </section>
-        ))}
-      </div>
-    </Sheet>
+      {loading ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : icon ? (
+        <span className="flex items-center justify-center">{icon}</span>
+      ) : null}
+      {children}
+    </button>
   );
 }
 
-/** The agreement itself: a tick box, not a dim button. */
-function AgreeRow({
+/** Soft gradient link button for the legal text links. */
+export function GlassLink({
+  children,
+  onClick,
+  className,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "text-[14px] font-medium text-violet-600",
+        "hover:text-fuchsia-600 hover:underline",
+        "transition-colors",
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Frosted-glass input — rounded-2xl, soft border, pastel focus ring. */
+function GlassInput({
+  label,
+  hint,
+  error,
+  children,
+  className,
+}: {
+  label?: string;
+  hint?: string;
+  error?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("mb-4", className)}>
+      {label ? (
+        <label className="block text-[13px] font-medium text-slate-600 mb-1.5">
+          {label}
+        </label>
+      ) : null}
+      {children}
+      {error ? (
+        <p className="mt-1.5 text-[12px] text-rose-500 font-medium">{error}</p>
+      ) : hint ? (
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-500">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function GlassTextInput({
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  autoComplete,
+  spellCheck,
+  required,
+  invalid,
+  className,
+  id,
+  onKeyDown,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  type?: string;
+  autoComplete?: string;
+  spellCheck?: boolean;
+  required?: boolean;
+  invalid?: boolean;
+  className?: string;
+  id?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <input
+      id={id}
+      type={type}
+      value={value}
+      onChange={onChange}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      autoComplete={autoComplete}
+      spellCheck={spellCheck}
+      required={required}
+      aria-invalid={invalid}
+      className={cn(
+        "w-full rounded-2xl border bg-white/60 px-4 py-3 text-[15px] text-slate-800",
+        "placeholder:text-slate-400/70",
+        "transition-all duration-200",
+        "border-white/30",
+        "focus:outline-none focus:ring-2 focus:ring-violet-300/50 focus:border-transparent",
+        "focus:bg-white/80",
+        invalid && "border-rose-400 focus:ring-rose-300/50",
+        className,
+      )}
+    />
+  );
+}
+
+function GlassPasswordField({
+  value,
+  onChange,
+  placeholder = "At least 8 characters",
+  autoComplete = "new-password",
+  className,
+  id,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  autoComplete?: "current-password" | "new-password";
+  className?: string;
+  id?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        className={cn(
+          "w-full rounded-2xl border bg-white/60 px-4 py-3 pr-12 text-[15px] text-slate-800",
+          "placeholder:text-slate-400/70",
+          "transition-all duration-200",
+          "border-white/30",
+          "focus:outline-none focus:ring-2 focus:ring-violet-300/50 focus:border-transparent",
+          "focus:bg-white/80",
+          className,
+        )}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setVisible((v) => !v)}
+        className={cn(
+          "absolute top-1/2 right-3 -translate-y-1/2 rounded-xl p-1.5 text-slate-400",
+          "hover:bg-white/40 hover:text-slate-600 transition-colors",
+        )}
+        aria-label={visible ? "Hide password" : "Show password"}
+      >
+        {visible ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
+      </button>
+    </div>
+  );
+}
+
+/** Custom rounded checkbox — fills with gradient when checked. */
+function GlassCheckbox({
   checked,
   onChange,
   children,
@@ -145,41 +342,74 @@ function AgreeRow({
         onChange(!checked);
       }}
       className={cn(
-        "flex w-full items-start gap-3.5 px-4 py-4 text-left outline-none transition-colors sm:px-5",
-        checked ? "bg-accent/8" : "hover:bg-surface-2/50 active:bg-surface-2/70",
+        "group flex w-full items-start gap-3.5 rounded-2xl px-4 py-3.5 text-left",
+        "transition-all duration-200",
+        checked
+          ? "bg-gradient-to-r from-violet-500/15 to-fuchsia-500/15 border border-violet-200/50"
+          : "hover:bg-white/40 border border-white/30",
       )}
     >
       <span
-        aria-hidden
         className={cn(
-          "mt-[1px] flex size-[22px] shrink-0 items-center justify-center rounded-lg border transition-colors",
-          checked ? "border-accent bg-accent text-accent-fg" : "border-border",
+          "mt-[2px] flex size-[24px] shrink-0 items-center justify-center",
+          "rounded-xl border-2 transition-all duration-200",
+          checked
+            ? "border-violet-500 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white"
+            : "border-slate-300 bg-white/70",
         )}
       >
-        {checked ? <Check className="size-[14px]" strokeWidth={3} /> : null}
+        {checked ? <Check className="size-[13px]" strokeWidth={3} /> : null}
       </span>
-      <span className="text-[14px] leading-relaxed">{children}</span>
+      <span className="text-[14px] leading-relaxed text-slate-700">{children}</span>
     </button>
   );
 }
 
-function PanelSkeleton() {
+/** Toggle row for the staff-access option. */
+function GlassToggleRow({
+  title,
+  sub,
+  on,
+  onChange,
+}: {
+  title: string;
+  sub: string;
+  on: boolean;
+  onChange: (next: boolean) => void;
+}) {
   return (
-    <div className="space-y-4" aria-busy="true">
-      <div className="flex flex-col items-center gap-3">
-        <span className="size-24 animate-pulse rounded-full bg-surface-2" />
-        <span className="block h-[18px] w-[60%] animate-pulse rounded-full bg-surface-2" />
-        <span className="block h-[13px] w-[80%] animate-pulse rounded-full bg-surface-2/70" />
+    <div className="flex items-center justify-between rounded-2xl border border-white/30 bg-white/30 px-4 py-3.5">
+      <div className="min-w-0 flex-1 pr-4">
+        <span className="block text-[14.5px] font-medium text-slate-700">{title}</span>
+        <span className="mt-0.5 block text-[13px] leading-relaxed text-slate-500">{sub}</span>
       </div>
-      <span className="block h-[64px] animate-pulse rounded-2xl bg-surface-2" />
-      <span className="block h-[64px] animate-pulse rounded-2xl bg-surface-2/70" />
-      <span className="block h-[76px] animate-pulse rounded-2xl bg-surface-2/50" />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        onClick={() => {
+          haptic("light");
+          onChange(!on);
+        }}
+        className={cn(
+          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full",
+          "transition-colors duration-200",
+          on ? "bg-gradient-to-r from-violet-500 to-fuchsia-500" : "bg-slate-300",
+        )}
+      >
+        <span
+          className={cn(
+            "block size-[20px] rounded-full bg-white shadow",
+            "transition-transform duration-200 ease-out",
+            on ? "translate-x-[2px]" : "translate-x-[2px]",
+          )}
+        />
+      </button>
     </div>
   );
 }
 
-/** The line under the username box — the same words the account would answer
-    with on submit, shown while there is still time to change the name. */
+/** Username availability badge — shows below the username field. */
 function UsernameStatus({
   state,
   message,
@@ -188,25 +418,116 @@ function UsernameStatus({
   message: string;
 }) {
   if (state === "idle" || !message) return null;
-  const tone =
-    state === "available"
-      ? "text-success-text"
-      : state === "checking"
-        ? "text-muted"
-        : "text-danger-text";
+  let tone: string;
+  let icon: React.ReactNode;
+  if (state === "checking") {
+    tone = "text-slate-500";
+    icon = <Loader2 className="size-[13px] animate-spin" />;
+  } else if (state === "available") {
+    tone = "text-emerald-600";
+    icon = <Check className="size-[14px]" strokeWidth={3} />;
+  } else {
+    tone = "text-rose-500";
+    icon = <X className="size-[14px]" strokeWidth={3} />;
+  }
   return (
-    <p className={cn("flex items-center gap-1.5 px-4 pb-3 text-[12.5px] font-medium sm:px-5", tone)}>
-      {state === "checking" ? (
-        <Loader2 className="size-[13px] animate-spin" />
-      ) : state === "available" ? (
-        <Check className="size-[14px]" strokeWidth={2.6} />
-      ) : (
-        <X className="size-[14px]" strokeWidth={2.6} />
-      )}
+    <p className={cn("flex items-center gap-1.5 px-1 pt-1.5 pb-2 text-[12.5px] font-medium", tone)}>
+      {icon}
       {message}
     </p>
   );
 }
+
+/** Skeleton loader while the pending data is fetched. */
+function PanelSkeleton() {
+  return (
+    <div className="space-y-5" aria-busy="true">
+      <div className="flex flex-col items-center gap-3">
+        <span className="size-28 animate-pulse rounded-full bg-slate-200/60" />
+        <span className="block h-[18px] w-[60%] animate-pulse rounded-full bg-slate-200/60" />
+        <span className="block h-[13px] w-[80%] animate-pulse rounded-full bg-slate-200/50" />
+      </div>
+      <span className="block h-[64px] animate-pulse rounded-2xl bg-slate-200/60" />
+      <span className="block h-[64px] animate-pulse rounded-2xl bg-slate-200/55" />
+      <span className="block h-[76px] animate-pulse rounded-2xl bg-slate-200/45" />
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Legal modal — a frosted-glass overlay, replaces Sheet
+   ═══════════════════════════════════════════════════════════ */
+
+function LegalModal({ kind, onClose }: { kind: LegalKind; onClose: () => void }) {
+  const doc = LEGAL[kind];
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={doc.title}
+    >
+      {/* Scrim */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+
+      {/* Panel */}
+      <div
+        className={cn(
+          "relative z-[91] w-full max-w-lg",
+          "rounded-3xl border border-white/30 bg-white/40",
+          "backdrop-blur-xl",
+          "shadow-2xl shadow-black/15",
+          "flex flex-col",
+        )}
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxHeight: "80dvh" }}
+      >
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4">
+          <h2 className="text-[22px] font-bold text-slate-800">{doc.title}</h2>
+          <p className="mt-1.5 text-[14px] leading-relaxed text-slate-500">{doc.intro}</p>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 pb-2">
+          <div className="space-y-5 py-1">
+            {doc.sections.map((section) => (
+              <section key={section.title}>
+                <h3 className="text-[15px] font-semibold text-slate-700">{section.title}</h3>
+                <p className="mt-1.5 text-[14px] leading-relaxed text-slate-500">{section.body}</p>
+              </section>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6">
+          <GlassButton onClick={onClose} className="w-full">
+            I understand
+          </GlassButton>
+        </div>
+
+        {/* Close */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-3 right-3 rounded-xl p-1.5 text-slate-400 hover:bg-white/30 hover:text-slate-600 transition-colors"
+          aria-label="Close"
+        >
+          <X className="size-[19px]" strokeWidth={2} />
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Main page
+   ═══════════════════════════════════════════════════════════ */
 
 function Complete() {
   const params = useSearchParams();
@@ -256,7 +577,7 @@ function Complete() {
           setPhoto(d.photoUrl || null);
         }
       })
-      .catch(() => !dead && setLoadError("Tirbeo couldn’t be reached. Check your connection and try again."));
+      .catch(() => !dead && setLoadError("Tirbeo couldn't be reached. Check your connection and try again."));
     return () => {
       dead = true;
     };
@@ -329,7 +650,7 @@ function Complete() {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       haptic("error");
-      setError("That file isn’t a photo.");
+      setError("That file isn't a photo.");
       return;
     }
     if (file.size > PHOTO_LIMIT) {
@@ -339,7 +660,7 @@ function Complete() {
     }
     const reader = new FileReader();
     reader.onload = () => setEditorSrc(String(reader.result));
-    reader.onerror = () => setError("Your browser couldn’t open that photo.");
+    reader.onerror = () => setError("Your browser couldn't open that photo.");
     reader.readAsDataURL(file);
   }
 
@@ -377,113 +698,143 @@ function Complete() {
       if (!res.ok || !d?.ok) {
         /* The account's reason beats ours: a taken username, a breached
            password, an expired link — each needs a different fix. */
-        setError(d?.error || "Tirbeo couldn’t finish this. Please try again.");
+        setError(d?.error || "Tirbeo couldn't finish this. Please try again.");
         haptic("error");
         setBusy(false);
         return;
       }
       window.location.href = d.redirect_to || finishTarget;
     } catch {
-      setError("Tirbeo couldn’t be reached. Check your connection and try again.");
+      setError("Tirbeo couldn't be reached. Check your connection and try again.");
       haptic("error");
       setBusy(false);
     }
   }
 
-  const shell = (children: React.ReactNode) => (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-bg px-5 py-10 text-fg">
-      <div className="w-full max-w-[440px]">
-        <p className="mb-6 text-center text-[15px] font-extrabold tracking-[-0.02em]">
-          Tirbeo <span className="font-bold text-muted">MyProfile</span>
-        </p>
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-[0_14px_36px_-24px_rgb(0_0_0/0.4)] sm:px-6">
-          {children}
-        </div>
-      </div>
-      {legal ? <LegalSheet kind={legal} onClose={() => setLegal(null)} /> : null}
-      {editorSrc ? (
-        <AvatarEditor
-          src={editorSrc}
-          onCancel={() => setEditorSrc(null)}
-          onApply={(dataUrl) => {
-            setPhoto(dataUrl);
-            setEditorSrc(null);
-            haptic("success");
-          }}
-        />
-      ) : null}
-      <input
-        ref={photoRef}
-        type="file"
-        accept="image/*"
-        aria-label="Choose a profile photo"
-        className="sr-only"
-        onChange={pickPhoto}
-      />
-    </main>
-  );
+  /* ─────────────────────────────────────────────────────
+     Shell — frosted-glass page wrapper
+     ════════════════════════════════════════════════════ */
+  function shell(children: React.ReactNode) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-purple-50 to-pink-50 px-4 py-8">
+        <div className="w-full max-w-[460px]">
+          {/* Logo */}
+          <p className="mb-6 text-center text-[16px] font-extrabold tracking-[-0.02em] text-slate-800">
+            Tirbeo <span className="font-bold text-slate-400">MyProfile</span>
+          </p>
 
+          {/* Frosted-glass card */}
+          <div
+            className={cn(
+              "rounded-[28px] border border-white/30 bg-white/25",
+              "backdrop-blur-xl shadow-[0_30px_80px_-20px_rgb(0_0_0/0.06)]",
+              "px-6 py-7 sm:px-8 sm:py-8",
+            )}
+          >
+            {children}
+          </div>
+        </div>
+
+        {legal ? <LegalModal kind={legal} onClose={() => setLegal(null)} /> : null}
+
+        {editorSrc ? (
+          <AvatarEditor
+            src={editorSrc}
+            onCancel={() => setEditorSrc(null)}
+            onApply={(dataUrl) => {
+              setPhoto(dataUrl);
+              setEditorSrc(null);
+              haptic("success");
+            }}
+          />
+        ) : null}
+
+        <input
+          ref={photoRef}
+          type="file"
+          accept="image/*"
+          aria-label="Choose a profile photo"
+          className="sr-only"
+          onChange={pickPhoto}
+        />
+      </main>
+    );
+  }
+
+  /* ──────────────── Empty-state branch ──────────────── */
   if (!signupToken && !finishing) {
     return shell(
       <>
-        <h1 className="text-[20px] font-bold tracking-[-0.02em]">Nothing to finish</h1>
-        <p className="mt-2 text-[14px] leading-relaxed text-muted">
-          This page completes a Tirbeo sign-in started with Google, GitHub or Discord. Start the
+        <h1 className="text-[22px] font-bold text-slate-800">Nothing to finish</h1>
+        <p className="mt-2 text-[14px] leading-relaxed text-slate-500">
+          This page completes a Tirbeo sign-in started with Google, GitHub or Discord. Start the{" "}
           sign-in again and you&apos;ll land back here.
         </p>
-        <Button variant="primary" className="mt-6 w-full" onClick={() => { window.location.href = finishTarget; }}>
+        <GlassButton className="mt-6 w-full" onClick={() => { window.location.href = finishTarget; }}>
           Back to Tirbeo
-        </Button>
+        </GlassButton>
       </>,
     );
   }
 
+  /* ──────────────── Expired branch ──────────────── */
   if (signupToken && loadError) {
     return shell(
       <>
-        <h1 className="text-[20px] font-bold tracking-[-0.02em]">That sign-in link has expired</h1>
-        <p className="mt-2 text-[14px] leading-relaxed text-muted">
-          {loadError} The link lasts 15 minutes and is used once, so start the sign-in again — it
-          takes a few seconds.
+        <h1 className="text-[22px] font-bold text-slate-800">That sign-in link has expired</h1>
+        <p className="mt-2 text-[14px] leading-relaxed text-slate-500">
+          {loadError} The link lasts 15 minutes and is used once, so start the sign-in again — it takes a few seconds.
         </p>
-        <Button variant="primary" className="mt-6 w-full" onClick={() => { window.location.href = finishTarget; }}>
+        <GlassButton className="mt-6 w-full" onClick={() => { window.location.href = finishTarget; }}>
           Sign in again
-        </Button>
+        </GlassButton>
       </>,
     );
   }
 
+  /* ──────────────── Loading skeleton ──────────────── */
   if (signupToken && !pending) return shell(<PanelSkeleton />);
 
+  /* ──────────────── Main form ──────────────── */
   return shell(
     <>
       {/* The face, editable — the provider's thumbnail is a starting point, not
           a verdict. The camera badge opens the file picker; the crop happens in
           the sheet the editor draws. */}
       <div className="relative mx-auto w-fit">
-        <ProfilePicture
-          photo={photo}
-          seed={pending?.email || name || "tirbeo"}
-          name={name || undefined}
-          size={104}
-          ring
-        />
-        <IconButton
+        {/* Floating halo behind the avatar */}
+        <div className="absolute inset-0 z-0 mx-auto -my-2 h-[128px] w-[128px] rounded-full bg-gradient-to-br from-violet-200/40 via-fuchsia-200/30 to-pink-200/40 blur-2xl" />
+        <div className="relative z-10">
+          <ProfilePicture
+            photo={photo}
+            seed={pending?.email || name || "tirbeo"}
+            name={name || undefined}
+            size={104}
+            ring
+          />
+        </div>
+        <GlassButton
           label="Change profile photo"
+          icon={<Camera className="size-[17px]" strokeWidth={2.25} />}
           onClick={() => { haptic("light"); photoRef.current?.click(); }}
-          icon={<Camera className="size-[16px]" strokeWidth={2.25} />}
-          className="absolute -right-0.5 -bottom-0.5 size-9 border-[3px] border-surface bg-accent text-accent-fg shadow-sm hover:bg-accent-hover"
+          className="absolute -right-1 -bottom-1 size-9 rounded-full p-0 shadow-lg shadow-violet-200/30"
         />
       </div>
-      <h1 className="mt-4 text-center text-[22px] font-bold tracking-[-0.025em]">
+
+      <h1 className="mt-5 text-center text-[24px] font-bold tracking-[-0.025em] text-slate-800">
         {signupToken ? "Create your Tirbeo account" : "One thing left"}
       </h1>
-      <p className="mx-auto mt-1.5 max-w-[36ch] text-center text-[14px] leading-relaxed text-muted">
+
+      <p className="mx-auto mt-2 max-w-[36ch] text-center text-[14px] leading-relaxed text-slate-500">
         {signupToken ? (
           <>
-            Signed in with {providerName} as <span className="font-medium text-fg">{pending?.email}</span>
+            Signed in with {providerName} as <span className="font-medium text-slate-700">{pending?.email}</span>
             {" · "}
-            <button type="button" onClick={() => { haptic("light"); photoRef.current?.click(); }} className="text-accent-text hover:underline">
+            <button
+              type="button"
+              onClick={() => { haptic("light"); photoRef.current?.click(); }}
+              className="font-medium text-violet-600 hover:text-fuchsia-600 hover:underline"
+            >
               change photo
             </button>
           </>
@@ -495,94 +846,96 @@ function Complete() {
       <form onSubmit={submit} className="mt-7">
         {signupToken ? (
           <section>
-            <SectionTitle>Your profile</SectionTitle>
-            <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-              <Group>
-                <Field
-                  label="Username"
-                  hint={username ? undefined : "This is your profile address — 3–30 characters: letters, numbers, - or _."}
-                >
-                  <Input
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="yourname"
-                    autoComplete="username"
-                    spellCheck={false}
-                    required
-                    invalid={usernameState === "taken" || usernameState === "reserved" || usernameState === "invalid"}
-                  />
-                </Field>
-                {username ? <UsernameStatus state={usernameState} message={usernameMsg} /> : null}
-                <Field label="Display name" hint="How your name appears. You can change it later.">
-                  <Input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    autoComplete="name"
-                  />
-                </Field>
-                <Field
-                  label="Password"
-                  hint={`Optional — ${providerName} already gets you in. Adding a password gives the account a second way in, and lets you change it later without going back through ${providerName}.`}
-                >
-                  <PasswordField
-                    value={password}
-                    onChange={setPassword}
-                    placeholder="At least 8 characters"
-                    autoComplete="new-password"
-                  />
-                </Field>
-              </Group>
+            <h2 className="mb-4 text-[15px] font-semibold text-slate-600">Your profile</h2>
+            <div className="space-y-4">
+              <GlassInput
+                label="Username"
+                hint={
+                  username
+                    ? undefined
+                    : "This is your profile address — 3–30 characters: letters, numbers, - or _."
+                }
+              >
+                <GlassTextInput
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="yourname"
+                  autoComplete="username"
+                  spellCheck={false}
+                  required
+                  invalid={usernameState === "taken" || usernameState === "reserved" || usernameState === "invalid"}
+                />
+              </GlassInput>
+              <UsernameStatus state={usernameState} message={usernameMsg} />
+
+              <GlassInput label="Display name" hint="How your name appears. You can change it later.">
+                <GlassTextInput
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your name"
+                  autoComplete="name"
+                />
+              </GlassInput>
+
+              <GlassInput
+                label="Password"
+                hint={`Optional — ${providerName} already gets you in. Adding a password gives the account a second way in, and lets you change it later without going back through ${providerName}.`}
+              >
+                <GlassPasswordField
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="At least 8 characters"
+                  autoComplete="new-password"
+                />
+              </GlassInput>
             </div>
           </section>
         ) : null}
 
-        <section className="mt-9">
-          <SectionTitle>Agreement</SectionTitle>
-          <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-            <Group>
-              <AgreeRow checked={accepted} onChange={setAccepted}>
-                I agree to the <span className="font-semibold">Terms of Service</span> and the{" "}
-                <span className="font-semibold">Privacy Policy</span>, and confirm the details above are
-                mine.
-              </AgreeRow>
-              <ToggleRow
-                title="Let Tirbeo support see my account"
-                sub="For troubleshooting when you ask for help. Optional."
-                on={staffAccess}
-                onChange={setStaffAccess}
-              />
-            </Group>
+        <section className="mt-8">
+          <h2 className="mb-4 text-[15px] font-semibold text-slate-600">Agreement</h2>
+          <div className="space-y-3">
+            <GlassCheckbox checked={accepted} onChange={setAccepted}>
+              I agree to the <span className="font-semibold text-slate-800">Terms of Service</span> and the{" "}
+              <span className="font-semibold text-slate-800">Privacy Policy</span>, and confirm the details above are
+              mine.
+            </GlassCheckbox>
+            <GlassToggleRow
+              title="Let Tirbeo support see my account"
+              sub="For troubleshooting when you ask for help. Optional."
+              on={staffAccess}
+              onChange={setStaffAccess}
+            />
           </div>
-          <div className="mt-2.5 flex items-center gap-1 pl-1">
-            <Button variant="link" onClick={() => { haptic("light"); setLegal("terms"); }}>
-              Read the terms
-            </Button>
-            <span aria-hidden className="text-muted">·</span>
-            <Button variant="link" onClick={() => { haptic("light"); setLegal("privacy"); }}>
-              Read the privacy policy
-            </Button>
+
+          <div className="mt-3 flex items-center justify-center gap-1.5">
+            <GlassLink onClick={() => { haptic("light"); setLegal("terms"); }}>Read the terms</GlassLink>
+            <span aria-hidden className="text-slate-300">·</span>
+            <GlassLink onClick={() => { haptic("light"); setLegal("privacy"); }}>Read the privacy policy</GlassLink>
           </div>
         </section>
 
         <div className="mt-4">
           {error ? (
-            <Helper tone="danger">{error}</Helper>
+            <p className="rounded-xl border border-rose-200/50 bg-rose-50/60 px-3.5 py-2.5 text-[13.5px] text-rose-700">
+              {error}
+            </p>
           ) : !accepted ? (
-            <Helper>Tick that line to finish.</Helper>
+            <p className="text-[13.5px] text-slate-500">Tick that line to finish.</p>
           ) : null}
         </div>
 
-        <Button
+        <GlassButton
           type="submit"
-          variant="primary"
-          className="mt-2 w-full"
+          loading={busy}
           disabled={!accepted || busy || (signupToken ? usernameState !== "available" : false)}
+          className="mt-3 w-full"
         >
           {busy ? "Working…" : signupToken ? "Create account" : "Continue"}
-        </Button>
+        </GlassButton>
+
         {signupToken ? (
-          <p className="mt-3 text-center text-[12.5px] leading-relaxed text-muted">
+          <p className="mt-3 text-center text-[12.5px] leading-relaxed text-slate-500">
             Nothing is created until you press that. Close this page and the account is never made.
           </p>
         ) : null}
