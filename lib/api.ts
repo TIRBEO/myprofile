@@ -15,6 +15,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 import { announceServiceDown, answered } from "@/lib/service-events";
+import { SESSION_EXPIRED_EVENT } from "@/lib/profile";
 
 export class ApiError extends Error {
   status: number;
@@ -96,6 +97,15 @@ async function toError(res: Response): Promise<ApiError> {
     message = (machine ? body?.message || body?.error : body?.error || body?.message) || message;
   } catch {
     /* reply wasn't JSON — keep the status-line message */
+  }
+  /* A dead credential is the shell's business: one 401 that says "the session
+     is no good" moves every screen to the accounts login. Only the plain
+     gate answers qualify — a wrong password (401 "Current password is
+     incorrect") or a refused second factor (REAUTH_REQUIRED) describe the
+     person's input, not the session, and must never bounce them out. */
+  if (res.status === 401 && code !== "REAUTH_REQUIRED" &&
+      /^(not authenticated|unauthorized|authentication required)/i.test(message)) {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   }
   return new ApiError(message, res.status, code, body);
 }

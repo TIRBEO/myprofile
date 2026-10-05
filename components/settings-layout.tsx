@@ -174,6 +174,53 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("tirbeo:session-expired", leave);
   }, [runProbe, leave]);
 
+  /* A tab that was left standing is not a live session. Coming back to the
+     foreground (or the window getting focus) re-asks — through the probe's own
+     cache, so returning every thirty seconds costs nothing, and the first
+     return after that costs one read. Sign-outs on other devices, expired
+     cookies and hour-of-inactivity ends all surface here rather than on the
+     next click that fails. */
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState === "visible") void runProbe(false);
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [runProbe]);
+
+  /* And a sign-out in another tab of this app, or a "stay signed in" that
+     just ran out there, arrives as a message — same origin, so no server
+     round trip is needed to learn it. */
+  useEffect(() => {
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("tirbeo:session");
+      bc.addEventListener("message", (e) => {
+        if (e.data?.type === "logout") leave();
+      });
+    } catch {
+      /* no BroadcastChannel */
+    }
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== "tirbeo_session") return;
+      try {
+        const v = e.newValue ? JSON.parse(e.newValue) : null;
+        if (v?.type === "logout") leave();
+      } catch {
+        /* ignore malformed */
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      bc?.close();
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [leave]);
+
   /* The same strip, for the other reason it appears: a page asked the service
      for something and got nothing back. Every read goes through one of the two
      wrappers in lib/api{, -client}, so one listener here covers all of them —

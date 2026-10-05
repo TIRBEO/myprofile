@@ -76,7 +76,54 @@ type Pending = {
   name: string;
   photoUrl: string | null;
   provider?: string;
+  /** An account already uses this provider email — offer linking, not a duplicate. */
+  existingAccount?: boolean;
+  /** This provider identity is already connected to a Tirbeo account. */
+  existingLink?: boolean;
 };
+
+/** One question per token, however many times the screen mounts (dev reloads,
+    StrictMode double mounts). The endpoint is stateless; this just keeps the
+    noise down and the answer consistent across remounts. */
+const pendingQueries = new Map<string, Promise<Pending & { error?: string }>>();
+function fetchPending(token: string): Promise<Pending & { error?: string }> {
+  const existing = pendingQueries.get(token);
+  if (existing) return existing;
+  const q = fetch(`${apiBase()}/api/auth/oauth/pending?token=${encodeURIComponent(token)}`, {
+    credentials: "include",
+  })
+    .then((r) => r.json())
+    .then((d) => {
+      if (d?.error) { pendingQueries.delete(token); return { ...d, error: d.error } as Pending & { error: string }; }
+      return d as Pending & { error?: string };
+    })
+    .catch(() => {
+      pendingQueries.delete(token);
+      return { email: "", name: "", photoUrl: null, error: "Tirbeo couldn't be reached. Check your connection and try again." } as Pending & { error: string };
+    });
+  pendingQueries.set(token, q);
+  return q;
+}
+
+/** Where the accounts app lives — it owns sign-in, so "link to my existing
+    account" hands the person over there with the pending provider token. */
+function accountsLoginUrl(token: string, redirectTo?: string): string {
+  let base = "";
+  if (typeof window !== "undefined") {
+    const parent = window.location.hostname.match(/(?:^|\.)(tirbeo\.(?:com|app))$/i);
+    if (parent) base = `${window.location.protocol}//accounts.${parent[1].toLowerCase()}`;
+  }
+  if (!base) {
+    const fromEnv = process.env.NEXT_PUBLIC_ACCOUNTS_URL;
+    base = fromEnv && (process.env.NODE_ENV !== "production" || !/localhost|127\.0\.0\.1/.test(fromEnv))
+      ? fromEnv.replace(/\/+$/, "")
+      : process.env.NODE_ENV === "development" ? "http://localhost:3002" : "https://accounts.tirbeo.com";
+  }
+  const url = new URL(`${base}/login`);
+  url.searchParams.set("link_token", token);
+  if (redirectTo) url.searchParams.set("redirect_to", redirectTo);
+  return url.toString();
+}
 
 type LegalKind = "terms" | "privacy";
 
@@ -554,10 +601,7 @@ function Complete() {
   useEffect(() => {
     if (!signupToken) return;
     let dead = false;
-    fetch(`${apiBase()}/api/auth/oauth/pending?token=${encodeURIComponent(signupToken)}`, {
-      credentials: "include",
-    })
-      .then((r) => r.json())
+    fetchPending(signupToken)
       .then((d) => {
         if (dead) return;
         if (d?.error) setLoadError(d.error);
@@ -566,8 +610,7 @@ function Complete() {
           setName(d.name || "");
           setPhoto(d.photoUrl || null);
         }
-      })
-      .catch(() => !dead && setLoadError("Tirbeo couldn't be reached. Check your connection and try again."));
+      });
     return () => {
       dead = true;
     };
@@ -792,6 +835,44 @@ function Complete() {
 
   /* ──────────────── Loading skeleton ──────────────── */
   if (signupToken && !pending) return shell(<PanelSkeleton />);
+
+  /* ──────────────── Existing-account branch ────────────────
+     The email or the provider identity already belongs to an account.
+     Creating a second one is the wrong answer — hand over to the accounts
+     app, and after sign-in the pending provider gets linked to it. */
+  if (signupToken && pending && (pending.existingAccount || pending.existingLink)) {
+    return shell(
+      <>
+        <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">
+          You already have a Tirbeo account
+        </h1>
+        <p className="mt-3 text-[14px] leading-relaxed text-[#bd9d8a]">
+          {providerName} signed in as{" "}
+          <span className="font-medium text-white">{pending.email}</span>, and that
+          belongs to an account Tirbeo already knows. Rather than make a second one,
+          sign in and Tirbeo will connect {providerName} to it — so next time this
+          button gets you straight in.
+        </p>
+        <Button
+          variant="primary"
+          className="mt-6"
+          onClick={() => {
+            haptic("medium");
+            window.location.href = accountsLoginUrl(signupToken, redirectTo || undefined);
+          }}
+        >
+          Sign in &amp; connect {providerName}
+        </Button>
+        <button
+          type="button"
+          onClick={() => { haptic("light"); window.location.href = finishTarget; }}
+          className="mt-4 block w-full text-center text-[13.5px] text-[#bd9d8a] hover:text-[#ff6b2c] transition-colors"
+        >
+          Not my account — go back
+        </button>
+      </>,
+    );
+  }
 
   /* ──────────────── Main form ──────────────── */
   return shell(
