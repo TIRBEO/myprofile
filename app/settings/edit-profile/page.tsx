@@ -33,6 +33,7 @@ import {
   type Profile,
 } from "@/lib/profile";
 import { formatDate, monthNames, weekdayNames } from "@/lib/dates";
+import { checkUsername, type UsernameStatus } from "@/lib/api-client";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { usePageRefresh } from "@/lib/page-refresh";
@@ -95,6 +96,16 @@ const REQ_LABELS: Record<ReqKey, string> = {
   gender: "Gender",
 };
 
+type UsernameCheck = UsernameStatus | "idle" | "checking";
+
+const USERNAME_NOTES: Partial<Record<UsernameCheck, string>> = {
+  checking: "Checking that username…",
+  available: "That username is free.",
+  taken: "That username is taken — try another.",
+  reserved: "That username is reserved by Tirbeo.",
+  invalid: "3–30 characters: letters, numbers, hyphens or underscores.",
+};
+
 export default function EditProfilePage() {
   const [form, setForm] = useState<Profile>(DEFAULT_PROFILE);
   const [editing, setEditing] = useState(false);
@@ -112,12 +123,37 @@ export default function EditProfilePage() {
   const [baseline, setBaseline] = useState<Profile>(DEFAULT_PROFILE);
   /** False while neither the cache nor the account has produced a profile. */
   const [loaded, setLoaded] = useState(false);
+  /** The brain's answer on the draft username, checked as it's typed. */
+  const [usernameStatus, setUsernameStatus] = useState<UsernameCheck>("idle");
 
   useEffect(() => {
     if (!nudge) return;
     const t = setTimeout(() => setNudge(0), 500);
     return () => clearTimeout(t);
   }, [nudge]);
+
+  /* Only a changed username needs asking about — the one on the account is,
+     by definition, available to this account. Debounced so a fast typist
+     pays one check, not ten. A check that fails to answer says nothing and
+     blocks nothing: the save path validates the same way server-side. */
+  useEffect(() => {
+    if (!editing) return;
+    const wanted = slugOf(draft.username ?? "");
+    if (!wanted || wanted === form.username) {
+      setUsernameStatus("idle");
+      return;
+    }
+    let live = true;
+    setUsernameStatus("checking");
+    const t = setTimeout(async () => {
+      const status = await checkUsername(wanted);
+      if (live) setUsernameStatus(status === "error" ? "idle" : status);
+    }, 450);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [editing, draft.username, form.username]);
   const toast = useToast();
   const photoRef = useRef<HTMLInputElement>(null);
   const bannerRef = useRef<HTMLInputElement>(null);
@@ -229,6 +265,9 @@ export default function EditProfilePage() {
     return k === "username" ? !slugOf(v) : !v.trim();
   });
 
+  const usernameBad =
+    usernameStatus === "taken" || usernameStatus === "reserved" || usernameStatus === "invalid";
+
   function blockClose() {
     setAttempted(true);
     setNudge((n) => n + 1);
@@ -247,6 +286,15 @@ export default function EditProfilePage() {
   async function saveEdit(): Promise<boolean> {
     if (missing.length) {
       blockClose();
+      return false;
+    }
+    if (usernameBad || usernameStatus === "checking") {
+      haptic("error");
+      toast.error(
+        usernameStatus === "checking"
+          ? "Hold on — that username is still being checked."
+          : (USERNAME_NOTES[usernameStatus] ?? "That username can't be used."),
+      );
       return false;
     }
     const saved = await commit({
@@ -446,11 +494,21 @@ export default function EditProfilePage() {
                     placeholder={k === "username" ? "username" : "Your name"}
                     autoFocus={i === 0}
                     spellCheck={false}
-                    invalid={attempted && missing.includes(k)}
+                    invalid={k === "username" ? usernameBad : attempted && missing.includes(k)}
                     aria-describedby={attempted && missing.includes(k) ? `req-${k}` : undefined}
                     className="h-11"
                   />
                   <ReqNote show={attempted && missing.includes(k)} id={`req-${k}`} />
+                  {k === "username" && usernameStatus !== "idle" && (
+                    <p
+                      className={cn(
+                        "mt-1.5 text-[12.5px] font-medium",
+                        usernameBad ? "text-danger-text" : "text-muted",
+                      )}
+                    >
+                      {USERNAME_NOTES[usernameStatus]}
+                    </p>
+                  )}
                 </div>
               ))}
 

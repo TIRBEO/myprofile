@@ -42,7 +42,12 @@ const ALLOWED = new Set([
 const ALLOWED_AUTH = new Set(["reauth/verify", "reauth/send-code"]);
 
 function permitted(slug: string[]): boolean {
-  if (slug.length === 1 && slug[0] === "profile") return true; // served locally, see forward()
+  if (slug[0] === "profile") {
+    // /api/profile is served locally; /api/profile/check-username is the
+    // brain's availability probe, forwarded so the edit-profile screen can
+    // check a username without leaving this origin.
+    return slug.length === 1 || (slug.length === 2 && slug[1] === "check-username");
+  }
   if (slug[0] === "auth") return ALLOWED_AUTH.has(slug.slice(1).join("/"));
   return ALLOWED.has(slug[0]);
 }

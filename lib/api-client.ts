@@ -24,6 +24,29 @@ export type ProfilePatchResult =
 
 const BASE = "/api/profile";
 
+export type UsernameStatus = "available" | "taken" | "reserved" | "invalid" | "error";
+
+/** Ask the brain whether a username can have it. The save path validates the
+    same way server-side — this is the early answer, not the only one. */
+export async function checkUsername(username: string): Promise<UsernameStatus> {
+  try {
+    const response = await fetch(
+      `${BASE}/check-username?username=${encodeURIComponent(username)}`,
+      { credentials: "same-origin", headers: { accept: "application/json" } },
+    );
+    if (!response.ok) return "error";
+    const data = (await response.json().catch(() => null)) as
+      | { available?: boolean; reserved?: boolean; valid?: boolean }
+      | null;
+    if (!data || data.valid === undefined) return "error";
+    if (data.valid === false) return "invalid";
+    if (data.reserved) return "reserved";
+    return data.available ? "available" : "taken";
+  } catch {
+    return "error";
+  }
+}
+
 async function request(init: RequestInit): Promise<Response> {
   let response: Response;
   try {
