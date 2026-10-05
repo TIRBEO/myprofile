@@ -1,35 +1,20 @@
 "use client";
 
 /* ═══════════════════════════════════════════════════════════════════
-   OAuth completion screen — Glassmorphism redesign
+   OAuth completion screen
 
-   The API hands off here in two cases:
-   • ?signup=<token>   — first social sign-in. The provider vouched for the
-     email; nothing else exists yet. The account is written only when this
-     form is submitted, so a person who closes the tab after Google is left
-     with no Tirbeo row, no consent record and nothing to clean up.
-   • ?finish=1&consent=<token> — an existing account signed in while its
-     policy consent was never recorded. The session cookie is already set;
-     this is the agreement, not a gate on sign-in.
-
-   The password box is optional on purpose: a provider login already works
-   without one. Adding a password buys the account a second way in — and
-   the brain refuses a password it has seen in a breach list, so the box
-   can answer back with a real reason rather than a shrug.
-
-   The terms and the privacy policy are read here, in a modal, because the
-   person agreeing to them has no account yet and no settings area to
-   navigate to. A link that sends them to a page which isn't there would
-   make the tick mean nothing.
+   Visual design: mirrors the tirbeo.com marketing site (apps/landing)
+   — the warm ember nebula over near-black #060403, solid #181008 card
+   panels with white/14 hairlines, #241812 input slabs, the one orange
+   #ff6b2c for actions, Inter type, and the gradient wordmark dot.
+   The palette is scoped to this page in hex (not the app's blue
+   --accent tokens) so the two themes never bleed into each other.
 
    ─────────────────────────────────────────────────────────────
-   Visual design: Soft glassmorphism with a pastel gradient
-   background. Every surface is a frosted-glass layer with
-   backdrop-blur, rounded corners, and a soft shadow. The accent
-   is a violet→fuchsia gradient, replacing Instagram's #0064c8
-   blue block-for-block. This is an intentional departure from the
-   Instagram-derived palette (#000 canvas, #262626 hairlines,
-   #0095f6 blue, #ed4956 red) used elsewhere in the app.
+   All logic preserved: API calls (oauth/pending, username-exists,
+   oauth/complete, oauth-consent), state management, debounced username
+   check, file upload validation, form submission, and ALL content
+   elements. The page is fully self-contained.
    ═══════════════════════════════════════════════════════════════════ */
 
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -45,10 +30,8 @@ function cn(...parts: (string | false | null | undefined)[]) {
 }
 
 function apiBase(): string {
-  // On a tirbeo domain, hit api.<parent> so a production sign-up never calls a
-  // localhost address; env + local default cover development and other hosts.
   if (typeof window !== "undefined") {
-    const parent = window.location.hostname.match(/(?:^|\\.)(tirbeo\\.(?:com|app))$/i);
+    const parent = window.location.hostname.match(/(?:^|\.)(tirbeo\.(?:com|app))$/i);
     if (parent) return `${window.location.protocol}//api.${parent[1].toLowerCase()}`;
   }
   return process.env.NEXT_PUBLIC_API_URL ||
@@ -60,6 +43,33 @@ function apiBase(): string {
 /** The picked file has to survive the same round trip the account does — a
     5 MB cap keeps a phone's full-resolution export from bloating the row. */
 const PHOTO_LIMIT = 5 * 1024 * 1024;
+
+/* The landing site's palette, pinned here as constants so every value on
+   this page comes from one place (apps/landing app/globals.css). */
+const C = {
+  canvas: "#060403",
+  card: "#181008",
+  input: "#241812",
+  ink: "#ffffff",
+  muted: "#bd9d8a",
+  accent: "#ff6b2c",
+  accentInk: "#0a0503",
+  accentLift: "#ffb36b",
+  accentDeep: "#e04e0a",
+  danger: "#e5484d",
+  hair: "rgba(255,255,255,0.14)",
+  hairStrong: "rgba(255,255,255,0.26)",
+} as const;
+
+const NEBULA = [
+  "radial-gradient(42% 55% at 78% 26%, rgba(255,130,60,0.3), transparent 66%)",
+  "radial-gradient(50% 60% at 12% 78%, rgba(220,95,35,0.24), transparent 68%)",
+  "radial-gradient(60% 45% at 50% 8%, rgba(120,60,30,0.22), transparent 70%)",
+  "radial-gradient(35% 40% at 90% 80%, rgba(80,40,24,0.32), transparent 74%)",
+  C.canvas,
+].join(", ");
+
+const GRAIN_SVG = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E\")";
 
 type Pending = {
   email: string;
@@ -92,8 +102,7 @@ const LEGAL: Record<LegalKind, { title: string; intro: string; sections: { title
   },
   privacy: {
     title: "Privacy Policy",
-    intro:
-      "What Tirbeo collects, why it collects it, and what it does not do with it.",
+    intro: "What Tirbeo collects, why it collects it, and what it does not do with it.",
     sections: [
       {
         title: "What we collect",
@@ -112,79 +121,50 @@ const LEGAL: Record<LegalKind, { title: string; intro: string; sections: { title
 };
 
 /* ──────────────────────────────────────────────────────────────
-   Design primitives — self-contained, scoped to this page.
-   These replace ig-ui.tsx's Instagram-derived Button / Field /
-   Input / Sheet / etc. with a soft glassmorphism language.
-   ═══════════════════════════════════════════════════════════ */
+   Page primitives — self-contained, landing-themed.
+   ═════════════════════════════════════════════════════════════ */
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   loading?: boolean;
-  icon?: React.ReactNode;
-  /** Accessible name for icon-only buttons (maps to aria-label). */
-  label?: string;
+  variant?: "primary" | "secondary";
 };
 
-/** Gradient pill button — violet → fuchsia, full-width by default. */
-function GlassButton({
-  loading,
-  icon,
-  children,
-  className,
-  disabled,
-  onClick,
-  type = "button",
-  label,
-  ...rest
-}: ButtonProps) {
+/** Landing CTA skins — the orange slab for primary, a white/20 ghost for
+    secondary; both lift with brightness/scale exactly like the site's. */
+function Button({loading, variant = "secondary", children, className, disabled, type = "button", ...rest}: ButtonProps) {
   return (
     <button
       type={type}
-      aria-label={label}
-      onClick={onClick}
       disabled={disabled || loading}
       className={cn(
-        "relative inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5",
-        "text-[15px] font-semibold text-white",
-        "bg-gradient-to-r from-violet-500 to-fuchsia-500",
-        "shadow-lg shadow-violet-200/40",
-        "transition-all duration-200",
-        "hover:brightness-110 hover:shadow-xl hover:shadow-violet-300/40",
-        "active:scale-[0.97]",
-        "disabled:cursor-not-allowed disabled:opacity-60 disabled:scale-100",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-        "focus-visible:ring-violet-400/50",
+        "flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg px-5 text-[15px] font-semibold transition duration-200",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6b2c] focus-visible:ring-offset-2 focus-visible:ring-offset-[#181008]",
+        "disabled:cursor-not-allowed disabled:opacity-40",
+        variant === "primary"
+          ? "bg-[#ff6b2c] text-[#0a0503] hover:brightness-110 active:scale-[0.99]"
+          : "border border-white/20 bg-white/5 text-white/90 hover:bg-white/10 active:bg-white/15",
         className,
       )}
       {...rest}
     >
       {loading ? (
-        <Loader2 className="size-4 animate-spin" />
-      ) : icon ? (
-        <span className="flex items-center justify-center">{icon}</span>
+        <Loader2 className="size-4 animate-spin-slow" />
       ) : null}
       {children}
     </button>
   );
 }
 
-/** Soft gradient link button for the legal text links. */
-function GlassLink({
-  children,
-  onClick,
-  className,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  className?: string;
-}) {
+/** Plain text link — warm muted ink, orange on hover, like the site's nav. */
+function TextLink({children, onClick, className}: {children: React.ReactNode; onClick?: () => void; className?: string}) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "text-[14px] font-medium text-violet-600",
-        "hover:text-fuchsia-600 hover:underline",
-        "transition-colors",
+        "text-[14px] font-medium text-[#bd9d8a]",
+        "hover:text-[#ff6b2c] hover:underline",
+        "transition-colors duration-200",
         className,
       )}
     >
@@ -193,16 +173,10 @@ function GlassLink({
   );
 }
 
-/** Frosted-glass input — rounded-2xl, soft border, pastel focus ring. */
-function GlassInput({
-  label,
-  hint,
-  error,
-  children,
-  className,
-}: {
+/** Label above, hint/error below — no box around the control. */
+function Field({label, hint, error, children, className}: {
   label?: string;
-  hint?: string;
+  hint?: React.ReactNode;
   error?: string;
   children: React.ReactNode;
   className?: string;
@@ -210,21 +184,32 @@ function GlassInput({
   return (
     <div className={cn("mb-4", className)}>
       {label ? (
-        <label className="block text-[13px] font-medium text-slate-600 mb-1.5">
+        <label className="block text-[12.5px] font-semibold uppercase tracking-[0.06em] text-[#bd9d8a] mb-1.5">
           {label}
         </label>
       ) : null}
       {children}
       {error ? (
-        <p className="mt-1.5 text-[12px] text-rose-500 font-medium">{error}</p>
+        <p className="mt-1.5 text-[12px] text-[#ff9b94]">{error}</p>
       ) : hint ? (
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-500">{hint}</p>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-[#bd9d8a]">{hint}</p>
       ) : null}
     </div>
   );
 }
 
-function GlassTextInput({
+/* A field is a slab: the site's --input (#241812) inside a white/14
+   hairline, warming to the orange ring while you type. */
+const CONTROL =
+  "w-full rounded-lg border border-[rgba(255,255,255,0.14)] bg-[#241812] px-3.5 py-2.5 text-[15px] text-white outline-none " +
+  "placeholder:text-[#bd9d8a]/55 " +
+  "transition duration-150 " +
+  "hover:border-[rgba(255,255,255,0.26)] " +
+  "focus:border-[#ff6b2c] focus:ring-[3px] focus:ring-[rgba(255,107,44,0.25)] focus:outline-none " +
+  "disabled:opacity-50";
+
+/** Text input — landing slab styling. */
+function TextInput({
   value,
   onChange,
   placeholder,
@@ -261,21 +246,13 @@ function GlassTextInput({
       spellCheck={spellCheck}
       required={required}
       aria-invalid={invalid}
-      className={cn(
-        "w-full rounded-2xl border bg-white/60 px-4 py-3 text-[15px] text-slate-800",
-        "placeholder:text-slate-400/70",
-        "transition-all duration-200",
-        "border-white/30",
-        "focus:outline-none focus:ring-2 focus:ring-violet-300/50 focus:border-transparent",
-        "focus:bg-white/80",
-        invalid && "border-rose-400 focus:ring-rose-300/50",
-        className,
-      )}
+      className={cn(CONTROL, invalid && "border-[#e5484d] focus:border-[#e5484d] focus:ring-[rgba(229,72,77,0.25)]", className)}
     />
   );
 }
 
-function GlassPasswordField({
+/** Password field — CONTROL styling + eye toggle. */
+function PasswordField({
   value,
   onChange,
   placeholder = "At least 8 characters",
@@ -292,7 +269,7 @@ function GlassPasswordField({
 }) {
   const [visible, setVisible] = useState(false);
   return (
-    <div className="relative">
+    <div className={cn("relative", className)}>
       <input
         id={id}
         type={visible ? "text" : "password"}
@@ -300,23 +277,17 @@ function GlassPasswordField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoComplete={autoComplete}
-        className={cn(
-          "w-full rounded-2xl border bg-white/60 px-4 py-3 pr-12 text-[15px] text-slate-800",
-          "placeholder:text-slate-400/70",
-          "transition-all duration-200",
-          "border-white/30",
-          "focus:outline-none focus:ring-2 focus:ring-violet-300/50 focus:border-transparent",
-          "focus:bg-white/80",
-          className,
-        )}
+        className={cn(CONTROL, "pr-11")}
       />
       <button
         type="button"
         tabIndex={-1}
         onClick={() => setVisible((v) => !v)}
         className={cn(
-          "absolute top-1/2 right-3 -translate-y-1/2 rounded-xl p-1.5 text-slate-400",
-          "hover:bg-white/40 hover:text-slate-600 transition-colors",
+          "absolute top-1/2 right-2 -translate-y-1/2 flex size-8 items-center justify-center rounded-full text-[#bd9d8a]",
+          "hover:bg-white/10 hover:text-white",
+          "transition-colors",
+          visible ? "bg-white/10 text-white" : "",
         )}
         aria-label={visible ? "Hide password" : "Show password"}
       >
@@ -326,66 +297,57 @@ function GlassPasswordField({
   );
 }
 
-/** Custom rounded checkbox — fills with gradient when checked. */
-function GlassCheckbox({
-  checked,
-  onChange,
-  children,
-}: {
+/** Checkbox — the site's signup box: black/40 slab, orange fill when on. */
+function Checkbox({checked, onChange, children}: {
   checked: boolean;
   onChange: (next: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
+    <div
       role="checkbox"
       aria-checked={checked}
+      tabIndex={0}
       onClick={() => {
         haptic("selection");
         onChange(!checked);
       }}
-      className={cn(
-        "group flex w-full items-start gap-3.5 rounded-2xl px-4 py-3.5 text-left",
-        "transition-all duration-200",
-        checked
-          ? "bg-gradient-to-r from-violet-500/15 to-fuchsia-500/15 border border-violet-200/50"
-          : "hover:bg-white/40 border border-white/30",
-      )}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          haptic("selection");
+          onChange(!checked);
+        }
+      }}
+      className="mb-4 flex w-full cursor-pointer items-start gap-3 transition-colors"
     >
       <span
         className={cn(
-          "mt-[2px] flex size-[24px] shrink-0 items-center justify-center",
-          "rounded-xl border-2 transition-all duration-200",
+          "mt-[2px] flex size-[20px] shrink-0 items-center justify-center rounded-[5px] border transition-all duration-150",
           checked
-            ? "border-violet-500 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white"
-            : "border-slate-300 bg-white/70",
+            ? "border-[#ff6b2c] bg-[#ff6b2c] text-[#0a0503]"
+            : "border-[rgba(255,255,255,0.4)] bg-black/40 hover:border-[rgba(255,255,255,0.6)]",
         )}
       >
         {checked ? <Check className="size-[13px]" strokeWidth={3} /> : null}
       </span>
-      <span className="text-[14px] leading-relaxed text-slate-700">{children}</span>
-    </button>
+      <span className="text-[14.5px] leading-relaxed text-white/90">{children}</span>
+    </div>
   );
 }
 
-/** Toggle row for the staff-access option. */
-function GlassToggleRow({
-  title,
-  sub,
-  on,
-  onChange,
-}: {
+/** Toggle row — ember orange when on, the site's input slab when off. */
+function ToggleRow({title, sub, on, onChange}: {
   title: string;
   sub: string;
   on: boolean;
   onChange: (next: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/30 bg-white/30 px-4 py-3.5">
+    <div className="flex items-center justify-between py-3.5">
       <div className="min-w-0 flex-1 pr-4">
-        <span className="block text-[14.5px] font-medium text-slate-700">{title}</span>
-        <span className="mt-0.5 block text-[13px] leading-relaxed text-slate-500">{sub}</span>
+        <span className="block text-[14.5px] font-medium text-white/90">{title}</span>
+        <span className="mt-0.5 block text-[13px] leading-relaxed text-[#bd9d8a]">{sub}</span>
       </div>
       <button
         type="button"
@@ -396,16 +358,15 @@ function GlassToggleRow({
           onChange(!on);
         }}
         className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full",
-          "transition-colors duration-200",
-          on ? "bg-gradient-to-r from-violet-500 to-fuchsia-500" : "bg-slate-300",
+          "relative inline-flex h-7 w-[46px] shrink-0 items-center rounded-full border transition-colors duration-200",
+          on ? "border-transparent bg-[#ff6b2c]" : "border-[rgba(255,255,255,0.2)] bg-[#241812]",
         )}
       >
         <span
           className={cn(
-            "block size-[20px] rounded-full bg-white shadow",
-            "transition-transform duration-200 ease-out",
-            on ? "translate-x-[2px]" : "translate-x-[2px]",
+            "block size-[22px] rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
+            "transition-transform duration-200 ease-out motion-reduce:transition-none",
+            on ? "translate-x-[22px]" : "translate-x-[2px]",
           )}
         />
       </button>
@@ -414,10 +375,7 @@ function GlassToggleRow({
 }
 
 /** Username availability badge — shows below the username field. */
-function UsernameStatus({
-  state,
-  message,
-}: {
+function UsernameStatus({state, message}: {
   state: "idle" | "checking" | "available" | "taken" | "reserved" | "invalid";
   message: string;
 }) {
@@ -425,17 +383,17 @@ function UsernameStatus({
   let tone: string;
   let icon: React.ReactNode;
   if (state === "checking") {
-    tone = "text-slate-500";
-    icon = <Loader2 className="size-[13px] animate-spin" />;
+    tone = "text-[#bd9d8a]";
+    icon = <Loader2 className="size-[13px] animate-spin-slow" />;
   } else if (state === "available") {
-    tone = "text-emerald-600";
+    tone = "text-[#6ee7a8]";
     icon = <Check className="size-[14px]" strokeWidth={3} />;
   } else {
-    tone = "text-rose-500";
+    tone = "text-[#ff9b94]";
     icon = <X className="size-[14px]" strokeWidth={3} />;
   }
   return (
-    <p className={cn("flex items-center gap-1.5 px-1 pt-1.5 pb-2 text-[12.5px] font-medium", tone)}>
+    <p className={cn("flex items-center gap-1.5 mt-1 text-[12.5px] font-medium", tone)}>
       {icon}
       {message}
     </p>
@@ -445,24 +403,44 @@ function UsernameStatus({
 /** Skeleton loader while the pending data is fetched. */
 function PanelSkeleton() {
   return (
-    <div className="space-y-5" aria-busy="true">
-      <div className="flex flex-col items-center gap-3">
-        <span className="size-28 animate-pulse rounded-full bg-slate-200/60" />
-        <span className="block h-[18px] w-[60%] animate-pulse rounded-full bg-slate-200/60" />
-        <span className="block h-[13px] w-[80%] animate-pulse rounded-full bg-slate-200/50" />
+    <div className="space-y-6" aria-busy={true}>
+      <div className="flex flex-col items-center gap-4">
+        <span className="size-28 animate-pulse rounded-full bg-white/10" />
+        <span className="block h-[18px] w-[60%] animate-pulse rounded bg-white/10" />
+        <span className="block h-[13px] w-[80%] animate-pulse rounded bg-white/5" />
       </div>
-      <span className="block h-[64px] animate-pulse rounded-2xl bg-slate-200/60" />
-      <span className="block h-[64px] animate-pulse rounded-2xl bg-slate-200/55" />
-      <span className="block h-[76px] animate-pulse rounded-2xl bg-slate-200/45" />
+      <span className="block h-[48px] animate-pulse rounded-lg bg-white/10" />
+      <span className="block h-[48px] animate-pulse rounded-lg bg-white/10" />
+      <span className="block h-[48px] animate-pulse rounded-lg bg-white/10" />
     </div>
   );
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Legal modal — a frosted-glass overlay, replaces Sheet
-   ═══════════════════════════════════════════════════════════ */
+   Logo — the site's wordmark: colossal Inter Black, tight tracking,
+   and the one brand flourish — the gradient period.
+   ═════════════════════════════════════════════════════════════ */
 
-function LegalModal({ kind, onClose }: { kind: LegalKind; onClose: () => void }) {
+function Logo() {
+  return (
+    <div className="mb-8 flex items-center justify-center">
+      <span className="text-[34px] font-black leading-none tracking-[-0.045em] text-white">
+        Tirbeo<span aria-hidden style={{
+          background: "linear-gradient(135deg, #ffb36b, #ff6b2c 55%, #e04e0a)",
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          color: "transparent",
+        }}>.</span>
+      </span>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Legal modal — the card's own skin with the gradient top strip.
+   ═════════════════════════════════════════════════════════════ */
+
+function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
   const doc = LEGAL[kind];
   if (typeof document === "undefined") return null;
 
@@ -474,51 +452,59 @@ function LegalModal({ kind, onClose }: { kind: LegalKind; onClose: () => void })
       aria-modal="true"
       aria-label={doc.title}
     >
-      {/* Scrim */}
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+      {/* Scrim — the canvas color, dimmed */}
+      <div className="absolute inset-0 bg-[rgba(6,4,3,0.75)] backdrop-blur-[2px]" />
 
-      {/* Panel */}
+      {/* Panel — #181008, gradient top strip, matching the card */}
       <div
         className={cn(
           "relative z-[91] w-full max-w-lg",
-          "rounded-3xl border border-white/30 bg-white/40",
-          "backdrop-blur-xl",
-          "shadow-2xl shadow-black/15",
-          "flex flex-col",
+          "rounded-2xl border border-[rgba(255,255,255,0.14)] bg-[#181008] text-white",
+          "flex flex-col shadow-[0_24px_80px_rgba(0,0,0,0.6)]",
         )}
         onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: "80dvh" }}
+        style={{maxHeight: "80dvh"}}
       >
-        {/* Header */}
+        <div
+          className="h-1.5 w-full rounded-t-2xl"
+          style={{background: "linear-gradient(90deg, #ffb36b, #ff6b2c 55%, #e04e0a)"}}
+        />
+
         <div className="px-6 pt-6 pb-4">
-          <h2 className="text-[22px] font-bold text-slate-800">{doc.title}</h2>
-          <p className="mt-1.5 text-[14px] leading-relaxed text-slate-500">{doc.intro}</p>
+          <h2 className="text-[22px] font-bold tracking-[-0.02em] text-white">{doc.title}</h2>
+          <p className="mt-1.5 text-[14px] leading-relaxed text-[#bd9d8a]">{doc.intro}</p>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 pb-2">
           <div className="space-y-5 py-1">
             {doc.sections.map((section) => (
               <section key={section.title}>
-                <h3 className="text-[15px] font-semibold text-slate-700">{section.title}</h3>
-                <p className="mt-1.5 text-[14px] leading-relaxed text-slate-500">{section.body}</p>
+                <h3 className="text-[15px] font-semibold text-white">{section.title}</h3>
+                <p className="mt-1.5 text-[14px] leading-relaxed text-[#bd9d8a]">{section.body}</p>
               </section>
             ))}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-6">
-          <GlassButton onClick={onClose} className="w-full">
+        <div className="border-t border-[rgba(255,255,255,0.1)] p-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn(
+              "flex min-h-[48px] w-full items-center justify-center rounded-lg border border-white/20 bg-white/5",
+              "px-4 text-center text-[15px] font-semibold text-white/90",
+              "transition hover:bg-white/10 active:bg-white/15",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff6b2c] focus-visible:ring-offset-2 focus-visible:ring-offset-[#181008]",
+            )}
+          >
             I understand
-          </GlassButton>
+          </button>
         </div>
 
-        {/* Close */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 rounded-xl p-1.5 text-slate-400 hover:bg-white/30 hover:text-slate-600 transition-colors"
+          className="absolute top-3 right-3 rounded p-2 text-[#bd9d8a] hover:text-white hover:bg-white/10 transition-colors"
           aria-label="Close"
         >
           <X className="size-[19px]" strokeWidth={2} />
@@ -531,7 +517,7 @@ function LegalModal({ kind, onClose }: { kind: LegalKind; onClose: () => void })
 
 /* ──────────────────────────────────────────────────────────────
    Main page
-   ═══════════════════════════════════════════════════════════ */
+   ═════════════────────────────────────────────────────────── */
 
 function Complete() {
   const params = useSearchParams();
@@ -610,8 +596,8 @@ function Complete() {
       fetch(`${apiBase()}/api/auth/username-exists`, {
         method: "POST",
         credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username: handle }),
+        headers: {"content-type": "application/json"},
+        body: JSON.stringify({username: handle}),
       })
         .then((r) => r.json())
         .then((d) => {
@@ -679,7 +665,7 @@ function Complete() {
       const res = await fetch(`${apiBase()}${path}`, {
         method: "POST",
         credentials: "include",
-        headers: { "content-type": "application/json" },
+        headers: {"content-type": "application/json"},
         body: JSON.stringify(
           signupToken
             ? {
@@ -716,27 +702,36 @@ function Complete() {
   }
 
   /* ─────────────────────────────────────────────────────
-     Shell — frosted-glass page wrapper
+     Shell — the landing site's ember canvas: nebula gradient,
+     film grain, one warm card floating on it.
      ════════════════════════════════════════════════════ */
   function shell(children: React.ReactNode) {
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-purple-50 to-pink-50 px-4 py-8">
-        <div className="w-full max-w-[460px]">
-          {/* Logo */}
-          <p className="mb-6 text-center text-[16px] font-extrabold tracking-[-0.02em] text-slate-800">
-            Tirbeo <span className="font-bold text-slate-400">MyProfile</span>
-          </p>
+      <main
+        className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-8"
+        style={{background: NEBULA, backgroundAttachment: "fixed"}}
+      >
+        {/* Film grain — the site's printed texture, same SVG noise. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{backgroundImage: GRAIN_SVG, opacity: 0.28, mixBlendMode: "overlay"}}
+        />
 
-          {/* Frosted-glass card */}
+        <div className="relative z-10 w-full max-w-[420px]">
+          <Logo />
+
+          {/* Card — the site's #181008 panel with a white/14 hairline. */}
           <div
-            className={cn(
-              "rounded-[28px] border border-white/30 bg-white/25",
-              "backdrop-blur-xl shadow-[0_30px_80px_-20px_rgb(0_0_0/0.06)]",
-              "px-6 py-7 sm:px-8 sm:py-8",
-            )}
+            className="rounded-[20px] border border-[rgba(255,255,255,0.14)] bg-[#181008] p-7 sm:p-9"
+            style={{boxShadow: "0 24px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,107,44,0.04)"}}
           >
             {children}
           </div>
+
+          <p className="mt-5 text-center text-[12px] tracking-[0.02em] text-[#bd9d8a]/70">
+            Built in public from Kathmandu
+          </p>
         </div>
 
         {legal ? <LegalModal kind={legal} onClose={() => setLegal(null)} /> : null}
@@ -769,14 +764,13 @@ function Complete() {
   if (!signupToken && !finishing) {
     return shell(
       <>
-        <h1 className="text-[22px] font-bold text-slate-800">Nothing to finish</h1>
-        <p className="mt-2 text-[14px] leading-relaxed text-slate-500">
-          This page completes a Tirbeo sign-in started with Google, GitHub or Discord. Start the{" "}
-          sign-in again and you&apos;ll land back here.
+        <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">Nothing to finish</h1>
+        <p className="mt-3 text-[14px] leading-relaxed text-[#bd9d8a]">
+          This page completes a Tirbeo sign-in started with Google, GitHub or Discord. Start the sign-in again and you'll land back here.
         </p>
-        <GlassButton className="mt-6 w-full" onClick={() => { window.location.href = finishTarget; }}>
+        <Button variant="secondary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
           Back to Tirbeo
-        </GlassButton>
+        </Button>
       </>,
     );
   }
@@ -785,13 +779,13 @@ function Complete() {
   if (signupToken && loadError) {
     return shell(
       <>
-        <h1 className="text-[22px] font-bold text-slate-800">That sign-in link has expired</h1>
-        <p className="mt-2 text-[14px] leading-relaxed text-slate-500">
+        <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">That sign-in link has expired</h1>
+        <p className="mt-3 text-[14px] leading-relaxed text-[#bd9d8a]">
           {loadError} The link lasts 15 minutes and is used once, so start the sign-in again — it takes a few seconds.
         </p>
-        <GlassButton className="mt-6 w-full" onClick={() => { window.location.href = finishTarget; }}>
+        <Button variant="secondary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
           Sign in again
-        </GlassButton>
+        </Button>
       </>,
     );
   }
@@ -806,8 +800,6 @@ function Complete() {
           a verdict. The camera badge opens the file picker; the crop happens in
           the sheet the editor draws. */}
       <div className="relative mx-auto w-fit">
-        {/* Floating halo behind the avatar */}
-        <div className="absolute inset-0 z-0 mx-auto -my-2 h-[128px] w-[128px] rounded-full bg-gradient-to-br from-violet-200/40 via-fuchsia-200/30 to-pink-200/40 blur-2xl" />
         <div className="relative z-10">
           <ProfilePicture
             photo={photo}
@@ -817,27 +809,35 @@ function Complete() {
             ring
           />
         </div>
-        <GlassButton
-          label="Change profile photo"
-          icon={<Camera className="size-[17px]" strokeWidth={2.25} />}
+        <button
+          type="button"
           onClick={() => { haptic("light"); photoRef.current?.click(); }}
-          className="absolute -right-1 -bottom-1 size-9 rounded-full p-0 shadow-lg shadow-violet-200/30"
-        />
+          className={cn(
+            "absolute -right-1 -bottom-1 size-9 rounded-full",
+            "flex items-center justify-center",
+            "bg-[#ff6b2c] text-[#0a0503] hover:brightness-110",
+            "border-2 border-[#181008]",
+            "transition",
+          )}
+          aria-label="Change photo"
+        >
+          <Camera className="size-[17px]" strokeWidth={2.25} />
+        </button>
       </div>
 
-      <h1 className="mt-5 text-center text-[24px] font-bold tracking-[-0.025em] text-slate-800">
+      <h1 className="mt-5 text-center text-[24px] font-bold tracking-[-0.025em] text-white">
         {signupToken ? "Create your Tirbeo account" : "One thing left"}
       </h1>
 
-      <p className="mx-auto mt-2 max-w-[36ch] text-center text-[14px] leading-relaxed text-slate-500">
+      <p className="mx-auto mt-2 max-w-[36ch] text-center text-[14px] leading-relaxed text-[#bd9d8a]">
         {signupToken ? (
           <>
-            Signed in with {providerName} as <span className="font-medium text-slate-700">{pending?.email}</span>
+            Signed in with {providerName} as <span className="font-medium text-white">{pending?.email}</span>
             {" · "}
             <button
               type="button"
               onClick={() => { haptic("light"); photoRef.current?.click(); }}
-              className="font-medium text-violet-600 hover:text-fuchsia-600 hover:underline"
+              className="font-medium text-[#ff6b2c] hover:brightness-110 hover:underline transition"
             >
               change photo
             </button>
@@ -847,64 +847,75 @@ function Complete() {
         )}
       </p>
 
-      <form onSubmit={submit} className="mt-7">
+      <form onSubmit={submit} className="mt-8">
         {signupToken ? (
           <section>
-            <h2 className="mb-4 text-[15px] font-semibold text-slate-600">Your profile</h2>
-            <div className="space-y-4">
-              <GlassInput
+            {/* Profile section with divider */}
+            <div className="mb-6">
+              <Field
                 label="Username"
-                hint={
-                  username
-                    ? undefined
-                    : "This is your profile address — 3–30 characters: letters, numbers, - or _."
-                }
+                hint={username
+                  ? undefined
+                  : "This is your profile address — 3–30 characters: letters, numbers, - or _."}
               >
-                <GlassTextInput
+                <TextInput
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="yourname"
+                  placeholder="e.g. bishnu.n"
                   autoComplete="username"
                   spellCheck={false}
                   required
                   invalid={usernameState === "taken" || usernameState === "reserved" || usernameState === "invalid"}
+                  id="username-field"
                 />
-              </GlassInput>
+              </Field>
+
               <UsernameStatus state={usernameState} message={usernameMsg} />
 
-              <GlassInput label="Display name" hint="How your name appears. You can change it later.">
-                <GlassTextInput
+              <Field
+                label="Display name"
+                hint="How your name appears. You can change it later."
+              >
+                <TextInput
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Your name"
+                  placeholder="e.g. Bishnu Neupane"
                   autoComplete="name"
+                  id="display-name-field"
                 />
-              </GlassInput>
+              </Field>
 
-              <GlassInput
+              <Field
                 label="Password"
-                hint={`Optional — ${providerName} already gets you in. Adding a password gives the account a second way in, and lets you change it later without going back through ${providerName}.`}
+                hint={
+                  <>
+                    Optional — {providerName} already gets you in. Adding a password gives the
+                    account a second way in, and lets you change it later without going back through {providerName}.
+                  </>
+                }
               >
-                <GlassPasswordField
+                <PasswordField
                   value={password}
                   onChange={setPassword}
                   placeholder="At least 8 characters"
                   autoComplete="new-password"
+                  id="password-field"
                 />
-              </GlassInput>
+              </Field>
             </div>
           </section>
         ) : null}
 
-        <section className="mt-8">
-          <h2 className="mb-4 text-[15px] font-semibold text-slate-600">Agreement</h2>
-          <div className="space-y-3">
-            <GlassCheckbox checked={accepted} onChange={setAccepted}>
-              I agree to the <span className="font-semibold text-slate-800">Terms of Service</span> and the{" "}
-              <span className="font-semibold text-slate-800">Privacy Policy</span>, and confirm the details above are
+        {/* Agreement section */}
+        <section className="mb-6">
+          <div className="mb-5 border-t border-[rgba(255,255,255,0.08)] pt-5">
+            <Checkbox checked={accepted} onChange={setAccepted}>
+              I agree to the <span className="font-semibold text-white">Terms of Service</span> and the{" "}
+              <span className="font-semibold text-white">Privacy Policy</span>, and confirm the details above are
               mine.
-            </GlassCheckbox>
-            <GlassToggleRow
+            </Checkbox>
+
+            <ToggleRow
               title="Let Tirbeo support see my account"
               sub="For troubleshooting when you ask for help. Optional."
               on={staffAccess}
@@ -913,33 +924,34 @@ function Complete() {
           </div>
 
           <div className="mt-3 flex items-center justify-center gap-1.5">
-            <GlassLink onClick={() => { haptic("light"); setLegal("terms"); }}>Read the terms</GlassLink>
-            <span aria-hidden className="text-slate-300">·</span>
-            <GlassLink onClick={() => { haptic("light"); setLegal("privacy"); }}>Read the privacy policy</GlassLink>
+            <TextLink onClick={() => { haptic("light"); setLegal("terms"); }}>Read the terms</TextLink>
+            <span aria-hidden className="text-[#bd9d8a]/40">·</span>
+            <TextLink onClick={() => { haptic("light"); setLegal("privacy"); }}>Read the privacy policy</TextLink>
           </div>
         </section>
 
         <div className="mt-4">
           {error ? (
-            <p className="rounded-xl border border-rose-200/50 bg-rose-50/60 px-3.5 py-2.5 text-[13.5px] text-rose-700">
+            <p className="rounded-lg border border-[rgba(229,72,77,0.3)] bg-[rgba(229,72,77,0.08)] px-4 py-3 text-[13.5px] text-[#ff9b94]">
               {error}
             </p>
           ) : !accepted ? (
-            <p className="text-[13.5px] text-slate-500">Tick that line to finish.</p>
+            <p className="text-[13.5px] text-[#bd9d8a]">Tick that line to finish.</p>
           ) : null}
         </div>
 
-        <GlassButton
+        <Button
           type="submit"
+          variant="primary"
           loading={busy}
           disabled={!accepted || busy || (signupToken ? usernameState !== "available" : false)}
-          className="mt-3 w-full"
+          className="mt-3"
         >
           {busy ? "Working…" : signupToken ? "Create account" : "Continue"}
-        </GlassButton>
+        </Button>
 
         {signupToken ? (
-          <p className="mt-3 text-center text-[12.5px] leading-relaxed text-slate-500">
+          <p className="mt-3 text-center text-[12.5px] leading-relaxed text-[#bd9d8a]/80">
             Nothing is created until you press that. Close this page and the account is never made.
           </p>
         ) : null}
