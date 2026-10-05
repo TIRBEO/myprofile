@@ -3,7 +3,7 @@
  *
  * The main API stays the brain — every write goes through it, because a write
  * carries side effects (audit events, notifications, cache busts) that only
- * the brain may produce. But a *read* is just a SELECT of twelve columns, and
+ * the brain may produce. But a *read* is just a SELECT over four tables, and
  * paying one HTTP hop plus the main server's dispatcher for it on every page
  * load is the cost this service exists to remove. So when Redis has no warm
  * copy, the read falls to the database directly — the same database, the same
@@ -11,43 +11,25 @@
  *
  * The rules that keep this safe:
  *
- *   - Read-only. There is no UPDATE here. Not because Prisma couldn't, but
+ *   - Read-only. There is no UPDATE here. Not because pg couldn't, but
  *     because a write that skips the main server skips its audit trail.
- *   - One narrow select, the same columns `internalProfileHandlers.ts` picks.
- *   - A pooled `pg` client under Prisma's driver adapter, sized small: this
- *     process sits beside the main one, and the database's connection budget
- *     is shared between them.
+ *   - One narrow SELECT, the same columns `internalProfileHandlers.ts` picks.
+ *   - A pooled `pg` client, sized small: this process sits beside the main
+ *     one, and the database's connection budget is shared between them.
  *   - Every failure degrades to the HTTP path. The main server remains the
  *     answer of record when the direct line is down.
+ *
+ * Plain SQL, deliberately: this deployable has no Prisma schema of its own,
+ * so the generated client was never present on Vercel — the old
+ * `@prisma/client` import compiled to a stub that threw `Cannot find module
+ * '.prisma/client/default'` on every cold start, silently disabling the
+ * direct read in production. The account row is four tables and a projection;
+ * that does not need an ORM, let alone one that cannot be generated here.
  */
 
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 
-type Client = any;
-
-const g = globalThis as unknown as { __myprofilePrisma?: Client; __myprofilePool?: Pool };
-
-/** The columns a profile is. Reads the same tables the main API's internal
-    handler reads — users (handle) + user_profile (everything else) — and
-    projects both into the same flat wire shape. */
-export const PROFILE_SELECT = {
-  id: true,
-  username: true,
-  status: true,
-  createdAt: true,
-  updatedAt: true,
-  profile: {
-    select: {
-      name: true, bio: true, gender: true, birthday: true,
-      photoUrl: true, bannerUrl: true, pronouns: true, location: true,
-      website: true, jobRole: true, jobCompany: true, jobPlace: true,
-      jobStarted: true, skills: true, followers: true, following: true,
-    },
-  },
-  emails: { select: { address: true, kind: true, isDefault: true }, where: { kind: 'primary' }, take: 1 },
-  phone: { select: { number: true, verifiedAt: true } },
-} as const;
+const g = globalThis as unknown as { __myprofilePool?: Pool };
 
 export type ProfileRow = Record<string, unknown>;
 
@@ -77,19 +59,10 @@ function createPool(): Pool {
   });
 }
 
-export async function getDb(): Promise<Client> {
-  if (g.__myprofilePrisma && g.__myprofilePool) return g.__myprofilePrisma;
-  const pool = createPool();
-  // Loaded lazily and cast to any on purpose: this deployable has no Prisma
-  // schema of its own, so the client is only generated in the monorepo. The
-  // build must not depend on those generated types, and this path is gated at
-  // runtime by isDirectReadConfigured() — if the client can't load, the read
-  // degrades to the HTTP path exactly like any other direct-read failure.
-  const { PrismaClient } = (await import("@prisma/client")) as any;
-  const prisma = new PrismaClient({ adapter: new PrismaPg(pool) as any, log: ["error"] });
-  g.__myprofilePrisma = prisma;
-  g.__myprofilePool = pool;
-  return prisma;
+export async function getPool(): Promise<Pool> {
+  if (g.__myprofilePool) return g.__myprofilePool;
+  g.__myprofilePool = createPool();
+  return g.__myprofilePool;
 }
 
 export type DirectReadResult =
@@ -97,34 +70,56 @@ export type DirectReadResult =
   | { kind: "not_found" }
   | { kind: "unavailable" };
 
-/** Projects the account row + its profile into the flat wire shape the
-    contract maps from — identical to the main API's toWire(). */
-function toWire(u: any): Record<string, unknown> {
-  const p = u.profile ?? {};
+/* The tables live in Postgres schemas (the main API's Prisma multi-schema
+   layout): users + user_profile + user_phone under "user", emails under
+   "email". Correlated subqueries keep the row cardinality at one, the way
+   Prisma's includes did. */
+const READ_SQL = `
+SELECT
+  u.id, u.username, u.status,
+  u.created_at AS "createdAt", u.updated_at AS "updatedAt",
+  p.name, p.bio, p.gender, p.birthday,
+  p.photo_url AS "photoUrl", p.banner_url AS "bannerUrl",
+  p.pronouns, p.location, p.website,
+  p.job_role AS "jobRole", p.job_company AS "jobCompany",
+  p.job_place AS "jobPlace", p.job_started AS "jobStarted",
+  p.skills, COALESCE(p.followers, 0) AS followers, COALESCE(p.following, 0) AS following,
+  (SELECT e.address FROM "email".user_email e
+    WHERE e.user_id = u.id AND e.kind = 'primary' LIMIT 1) AS email,
+  ph.number AS "phoneNumber"
+FROM "user".users u
+LEFT JOIN "user".user_profile p ON p.user_id = u.id
+LEFT JOIN "user".user_phone ph ON ph.user_id = u.id
+WHERE u.id = $1
+LIMIT 1`;
+
+/** Projects the account row into the flat wire shape the contract maps
+    from — identical to the main API's toWire(). */
+function toWire(r: any): Record<string, unknown> {
   return {
-    id: u.id,
-    username: u.username,
-    status: u.status,
-    createdAt: u.createdAt,
-    updatedAt: u.updatedAt,
-    name: p.name ?? null,
-    bio: p.bio ?? null,
-    gender: p.gender ?? null,
-    birthday: p.birthday ?? null,
-    photoUrl: p.photoUrl ?? null,
-    bannerUrl: p.bannerUrl ?? null,
-    pronouns: p.pronouns ?? null,
-    location: p.location ?? null,
-    website: p.website ?? null,
-    companyRole: p.jobRole ?? null,
-    companyName: p.jobCompany ?? null,
-    jobPlace: p.jobPlace ?? null,
-    jobStarted: p.jobStarted ?? null,
-    skills: p.skills ?? [],
-    followers: p.followers ?? 0,
-    following: p.following ?? 0,
-    email: u.emails?.[0]?.address ?? null,
-    phoneNumber: u.phone?.number ?? null,
+    id: r.id,
+    username: r.username,
+    status: r.status,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    name: r.name ?? null,
+    bio: r.bio ?? null,
+    gender: r.gender ?? null,
+    birthday: r.birthday ?? null,
+    photoUrl: r.photoUrl ?? null,
+    bannerUrl: r.bannerUrl ?? null,
+    pronouns: r.pronouns ?? null,
+    location: r.location ?? null,
+    website: r.website ?? null,
+    companyRole: r.jobRole ?? null,
+    companyName: r.jobCompany ?? null,
+    jobPlace: r.jobPlace ?? null,
+    jobStarted: r.jobStarted ?? null,
+    skills: r.skills ?? [],
+    followers: r.followers ?? 0,
+    following: r.following ?? 0,
+    email: r.email ?? null,
+    phoneNumber: r.phoneNumber ?? null,
   };
 }
 
@@ -136,13 +131,12 @@ function toWire(u: any): Record<string, unknown> {
 export async function readProfileRow(userId: string): Promise<DirectReadResult> {
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt++) {
+    let client: PoolClient | null = null;
     try {
-      const row = await (await getDb()).user.findUnique({
-        where: { id: userId },
-        select: PROFILE_SELECT,
-      });
-      if (!row) return { kind: "not_found" };
-      return { kind: "row", row: toWire(row) };
+      client = await (await getPool()).connect();
+      const { rows } = await client.query(READ_SQL, [userId]);
+      if (rows.length === 0) return { kind: "not_found" };
+      return { kind: "row", row: toWire(rows[0]) };
     } catch (error) {
       lastError = error;
       const message = String((error as any)?.message ?? "").toLowerCase();
@@ -152,6 +146,8 @@ export async function readProfileRow(userId: string): Promise<DirectReadResult> 
       if (!retryable) break;
       // Backoff with room for a sleeping database to wake: 0.5s, 2s.
       await new Promise((r) => setTimeout(r, attempt === 0 ? 500 : 2_000));
+    } finally {
+      client?.release();
     }
   }
   console.error("[PROFILE-DB] Direct read failed:", (lastError as any)?.message ?? lastError);
@@ -162,5 +158,3 @@ export async function readProfileRow(userId: string): Promise<DirectReadResult> 
 export function isDirectReadConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL || process.env.DIRECT_DATABASE_URL);
 }
-
-export type { Client };
