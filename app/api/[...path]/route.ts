@@ -59,6 +59,17 @@ function notFound() {
   );
 }
 
+/** Values collected from a browser and about to be put on another request:
+    CR/LF would be header injection and any other control character makes
+    fetch throw, so they are stripped and the length capped — same rules the
+    profile bridge applies to its own `x-origin-*` set. */
+function safeHeaderOriginValue(value: string | null): string | null {
+  if (!value) return null;
+  const printable = value.replace(/[^\x20-\x7e]/g, "").trim();
+  if (!printable) return null;
+  return printable.length > 300 ? printable.slice(0, 300) : printable;
+}
+
 async function forward(
   request: Request,
   context: { params: Promise<{ path: string[] }> },
@@ -120,6 +131,30 @@ async function forward(
   if (agent) headers["user-agent"] = agent;
   const clientIp = request.headers.get("x-forwarded-for");
   if (clientIp) headers["x-forwarded-for"] = clientIp;
+  /* But the GeoIP headers must NOT be forwarded as `x-vercel-ip-*`: Vercel's
+     edge overwrites those on every hop, so by the time the brain reads them
+     they name this service's datacentre, not the person's phone. The browser's
+     real facts travel as the `x-origin-*` set beside the shared service token —
+     the same contract the profile bridge already uses for its own writes — and
+     the brain believes that set only from a caller holding the token. */
+  if (config.internalToken) headers["x-internal-token"] = config.internalToken;
+  const originFrom: [string, string][] = [
+    ["x-vercel-ip-city", "x-origin-city"],
+    ["x-vercel-ip-country", "x-origin-country"],
+    ["x-vercel-ip-latitude", "x-origin-lat"],
+    ["x-vercel-ip-longitude", "x-origin-lng"],
+  ];
+  for (const [from, to] of originFrom) {
+    const value = safeHeaderOriginValue(request.headers.get(from));
+    if (value) headers[to] = value;
+  }
+  // The client at the head of the chain — the rest of it is hops, including this one.
+  const headIp = (clientIp || "").split(",")[0]?.trim();
+  if (headIp) headers["x-origin-ip"] = headIp;
+  if (agent) {
+    const safeAgent = safeHeaderOriginValue(agent);
+    if (safeAgent) headers["x-origin-user-agent"] = safeAgent;
+  }
 
   let body: string | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {

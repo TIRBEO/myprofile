@@ -152,10 +152,16 @@ export default function TwoFactorPage() {
       <Group>
         <ToggleRow
           title="Require 2FA for sensitive actions"
-          sub="Ask for a code before changing password, email or payouts."
+          sub={
+            on
+              ? "Ask for a code from your app when signing in and before changing your password."
+              : "Needs the authenticator app on first — requiring a code you can't produce would lock you out."
+          }
           on={state.requireForActions}
           onChange={(v) => savePref({ requireForActions: v })}
           label="Require 2FA for sensitive actions"
+          disabled={!on}
+          blockedHint={() => toast.error("Turn on the authenticator app first")}
         />
         <ToggleRow
           title="Alert on suspicious sign-in"

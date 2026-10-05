@@ -4,10 +4,16 @@ import { useEffect, useState } from "react";
 import { Sheet } from "@/components/ig-ui";
 import { changeIcon } from "@/components/activity-icons";
 import { MapCard } from "@/components/map-card";
-import { StatementHead, StatementMark } from "@/components/statement";
+import {
+  Prose,
+  StatementBody,
+  StatementHead,
+  StatementMark,
+  StatementSection,
+  Value,
+} from "@/components/statement";
 import { SignOutSheet } from "@/components/settings-layout";
 import {
-  Group,
   Helper,
   PageSkeleton,
   PillButton,
@@ -147,19 +153,40 @@ export default function ChangeDetailPage({ id }: { id: string }) {
         meta={`${formatDate(record.at)} at ${formatTime(record.at)} · ${ago(record.at)}`}
       />
 
-      <Group>
-        <StaticRow title="What changed" sub={touched} />
-        <StaticRow title="Device" sub={record.device} />
-        <StaticRow title="Network address" sub={record.ip || "Not recorded"} />
-        <StaticRow title="Location" sub={record.location || "Not recorded"} />
-        <StaticRow
-          title="When"
-          sub={`${formatDate(record.at)} at ${formatTime(record.at)}`}
-          right={ago(record.at)}
-        />
-      </Group>
+      <StatementBody>
+        <StatementSection label="What changed">
+          {record.fields.length ? (
+            <Prose>
+              A <Value>{record.device}</Value> changed <Value>{record.fields.join(", ")}</Value>{" "}
+              on your account.
+            </Prose>
+          ) : (
+            <Prose>
+              This record says <Value>{record.title.toLowerCase()}</Value> happened on your
+              account, from a <Value>{record.device}</Value>. The log names the fields a change
+              moved only when the change itself came with names.
+            </Prose>
+          )}
+        </StatementSection>
 
-      <Helper>The log keeps which field moved — not the value it was set to.</Helper>
+        <StatementSection label="Where and when">
+          <Prose>
+            It came from the network address <Value>{record.ip || "not recorded"}</Value>
+            {record.location ? (
+              <>
+                , which traces to <Value>{record.location}</Value>. A location read from an
+                address names a city, not an exact place.
+              </>
+            ) : (
+              ", the only address the record has."
+            )}
+          </Prose>
+          <Prose>
+            It happened on <Value>{formatDate(record.at)}</Value> at{" "}
+            <Value>{formatTime(record.at)}</Value> — <Value>{ago(record.at)}</Value>.
+          </Prose>
+        </StatementSection>
+      </StatementBody>
 
       {place ? (
         <div className="mt-4">

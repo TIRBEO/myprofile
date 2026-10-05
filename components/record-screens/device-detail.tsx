@@ -104,7 +104,7 @@ export default function DeviceDetailPage({ id }: { id: string }) {
       return;
     }
     haptic("success");
-    toast.error(`${machine.name} signed out`);
+    toast.success(`${machine.name} signed out`);
     router.push("/settings/devices");
   }
 
