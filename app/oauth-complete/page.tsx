@@ -4,17 +4,18 @@
    OAuth completion screen — Accounts app IG design
 
    Visual design: mirrors the Tirbeo Accounts app (accounts.tirbeo.com)
-   — the Instagram-style quiet dark: #101014 canvas behind a photograph,
-   a 0.72-opacity glass plate card with a white/[0.09] hairline, the one
-   #0064c8 accent only for the primary button fill, transparent inputs
-   on a white/[0.07] plate, and type small enough that the canvas does
-   the talking. BrandMark uses /logo-opt.png.
+   — the Instagram-style quiet dark: canvas #101014 behind a photograph,
+   a rgba(18,18,21,0.72) glass plate card with a white/[0.09] hairline,
+   text in rgba(255,255,255,0.96) / 0.76 / 0.62 / 0.48, the one #0064c8
+   accent for primary button fills only, transparent inputs on a
+   white/[0.07] field plate, 52px rounded-xl buttons, the BrandMark
+   logo from /logo-opt.png.
 
    ─────────────────────────────────────────────────────────────
    All logic preserved: API calls (oauth/pending, username-exists,
    oauth/complete, oauth-consent), state management, debounced username
    check, file upload validation, form submission, avatar editor, legal
-   modal, all content text. Only visual design changed.
+   modal, and ALL content text. Only the visual design changed.
    ════════════════════════════════════════════════════════════════════ */
 
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -45,53 +46,40 @@ function apiBase(): string {
 const PHOTO_LIMIT = 5 * 1024 * 1024;
 
 /* ════════════════════════════════════════════════════════════════════
-   Accounts palette — IG quiet dark. Every value is pinned here so nothing
-   bleeds from the landing app's ember palette.
+   IG quiet dark palette — Account app tokens, pinned here so nothing
+   bleeds from the landing ember theme that used to live on this page.
    ════════════════════════════════════════════════════════════════════ */
 const C = {
-  /* Canvas — near-black, photograph-backed. */
   canvas: "#101014",
-  /* Card — glass plate. */
   card: "rgba(18, 18, 21, 0.72)",
   cardBorder: "rgba(255, 255, 255, 0.09)",
 
-  /* Text scale — four steps of white. */
-  ink: "rgba(255, 255, 255, 0.96)",       /* primary */
-  secondary: "rgba(255, 255, 255, 0.76)",  /* secondary */
-  hint: "rgba(255, 255, 255, 0.62)",      /* hints, labels */
-  disabled: "rgba(255, 255, 255, 0.48)",  /* disabled, footers */
+  ink: "rgba(255, 255, 255, 0.96)",
+  secondary: "rgba(255, 255, 255, 0.76)",
+  hint: "rgba(255, 255, 255, 0.62)",
+  disabled: "rgba(255, 255, 255, 0.48)",
   placeholder: "rgba(255, 255, 255, 0.45)",
 
-  /* Instagram brand blue — fills the primary button, nowhere else. */
   ig: "#0064c8",
   igHover: "#0058b3",
   igPress: "#004f9e",
 
-  /* Fields — a low-opacity white plate on a hairline. */
   fieldBg: "rgba(255, 255, 255, 0.07)",
   fieldBorder: "rgba(255, 255, 255, 0.16)",
   fieldHover: "rgba(255, 255, 255, 0.25)",
-  fieldFocus: "rgba(255, 255, 255, 0.1)",
-  focusRing: "rgba(255, 255, 255, 0.45)",
-  focusShadow: "rgba(255, 255, 255, 0.14)",
+  fieldFocusBorder: "rgba(255, 255, 255, 0.35)",
+  focusRing: "rgba(255, 255, 255, 0.14)",
 
-  /* Lines & surfaces. */
   hair: "rgba(255, 255, 255, 0.12)",
   hairStrong: "rgba(255, 255, 255, 0.18)",
   surfaceHover: "rgba(255, 255, 255, 0.08)",
-  whiteSoft: "rgba(255, 255, 255, 0.07)",
-  whiteSoftHover: "rgba(255, 255, 255, 0.1)",
 
-  /* States. */
   danger: "#ff7a7a",
   success: "#6fd68a",
 } as const;
 
-/* Backdrop — accounts sf-bg: canvas colour, photograph, vignette/sheen.
-   Phones drop the photograph and the grain so the flat base carries it. */
-const BACKDROP_STYLE: React.CSSProperties = {
-  background: C.canvas,
-};
+/* Canvas — IG quiet dark: #101014 behind the photograph (desktop only). */
+const BACKDROP_STYLE: React.CSSProperties = { background: C.canvas };
 
 const PHOTO_STYLE: React.CSSProperties = {
   backgroundImage: "url('/background.jpg')",
@@ -101,12 +89,14 @@ const PHOTO_STYLE: React.CSSProperties = {
   filter: "saturate(1.12) brightness(0.94)",
 };
 
+/* IG's soft vignette + top sheen over the photograph. */
 const VIGNETTE_STYLE: React.CSSProperties = {
   background:
     "radial-gradient(circle 760px at 50% 40%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 70%)," +
     "linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.32) 100%)",
 };
 
+/* IG's film grain — fine, neutral. */
 const GRAIN_SVG =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
@@ -133,20 +123,12 @@ function fetchPending(token: string): Promise<Pending & { error?: string }> {
   })
     .then((r) => r.json())
     .then((d) => {
-      if (d?.error) {
-        pendingQueries.delete(token);
-        return { ...d, error: d.error } as Pending & { error: string };
-      }
+      if (d?.error) { pendingQueries.delete(token); return { ...d, error: d.error } as Pending & { error: string }; }
       return d as Pending & { error?: string };
     })
     .catch(() => {
       pendingQueries.delete(token);
-      return {
-        email: "",
-        name: "",
-        photoUrl: null,
-        error: "Tirbeo couldn't be reached. Check your connection and try again.",
-      } as Pending & { error: string };
+      return { email: "", name: "", photoUrl: null, error: "Tirbeo couldn't be reached. Check your connection and try again." } as Pending & { error: string };
     });
   pendingQueries.set(token, q);
   return q;
@@ -162,14 +144,9 @@ function accountsLoginUrl(token: string, redirectTo?: string): string {
   }
   if (!base) {
     const fromEnv = process.env.NEXT_PUBLIC_ACCOUNTS_URL;
-    base =
-      fromEnv &&
-      (process.env.NODE_ENV !== "production" ||
-        !/localhost|127\.0\.0\.1/.test(fromEnv))
-        ? fromEnv.replace(/\/+$/, "")
-        : process.env.NODE_ENV === "development"
-          ? "http://localhost:3002"
-          : "https://accounts.tirbeo.com";
+    base = fromEnv && (process.env.NODE_ENV !== "production" || !/localhost|127\.0\.0\.1/.test(fromEnv))
+      ? fromEnv.replace(/\/+$/, "")
+      : process.env.NODE_ENV === "development" ? "http://localhost:3002" : "https://accounts.tirbeo.com";
   }
   const url = new URL(`${base}/login`);
   url.searchParams.set("link_token", token);
@@ -182,7 +159,8 @@ type LegalKind = "terms" | "privacy";
 const LEGAL: Record<LegalKind, { title: string; intro: string; sections: { title: string; body: string }[] }> = {
   terms: {
     title: "Terms of Service",
-    intro: "By creating an account or using Tirbeo you agree to these terms. They are short on purpose.",
+    intro:
+      "By creating an account or using Tirbeo you agree to these terms. They are short on purpose.",
     sections: [
       {
         title: "Your account",
@@ -219,49 +197,40 @@ const LEGAL: Record<LegalKind, { title: string; intro: string; sections: { title
 };
 
 /* ──────────────────────────────────────────────────────────────
-   Page primitives — IG quiet dark style.
+   IG quiet-dark page primitives — canvas-backed shell, glass card,
+   the one #0064c8 accent for fills, transparent field plates.
    ═════════════════════════════════════════════════════════════ */
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   loading?: boolean;
-  variant?: "primary" | "secondary" | "ghost";
+  variant?: "primary" | "secondary";
 };
 
 /** IG action button: 52px, rounded-xl. Primary is the one place the brand
-    blue is allowed to be a fill; secondary and ghost are hairline washes. */
-function Button({
-  loading,
-  variant = "secondary",
-  children,
-  className,
-  disabled,
-  type = "button",
-  ...rest
-}: ButtonProps) {
+    blue is a fill; secondary is a white/[0.07] hairline ghost. */
+function Button({loading, variant = "secondary", children, className, disabled, type = "button", ...rest}: ButtonProps) {
   return (
     <button
       type={type}
       disabled={disabled || loading}
-      aria-busy={loading || undefined}
       className={cn(
         "relative inline-flex w-full select-none items-center justify-center gap-2 overflow-hidden",
         "rounded-xl font-semibold normal-case tracking-[-0.01em] whitespace-nowrap",
+        "h-[52px] px-6 text-[15px]",
         "transition-[background-color,color,border-color,opacity,transform] duration-150",
-        "active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40",
-        "h-[52px]",
+        "active:scale-[0.97]",
+        "disabled:pointer-events-none disabled:opacity-40",
+        "focus-visible:outline-none",
         variant === "primary"
           ? cn(
               "bg-[#0064c8] text-white",
               "hover:bg-[#0058b3] active:bg-[#004f9e]",
+              "disabled:bg-white/[0.12] disabled:text-white/40",
             )
-          : variant === "ghost"
-            ? cn(
-                "text-white/70 hover:bg-white/[0.07] hover:text-white",
-              )
-            : cn(
-                "border border-white/[0.18] bg-transparent text-white/85",
-                "hover:border-white/35 hover:bg-white/[0.04] hover:text-white",
-              ),
+          : cn(
+              "border border-white/[0.18] bg-transparent text-white/85",
+              "hover:border-white/35 hover:bg-white/[0.04] hover:text-white",
+            ),
         className,
       )}
       {...rest}
@@ -274,23 +243,17 @@ function Button({
   );
 }
 
-/** Plain text action — muted white, lifting to full white on hover. */
-function TextLink({
-  children,
-  onClick,
-  className,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  className?: string;
-}) {
+/** Plain text link — IG muted white, lifting to full white on hover. */
+function TextLink({children, onClick, className}: {children: React.ReactNode; onClick?: () => void; className?: string}) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "text-[14px] font-semibold text-white/70",
-        "transition-colors hover:text-white",
+        "inline-flex min-h-10 items-center gap-1.5 rounded-xl px-1 text-[15px] font-semibold text-white/75",
+        "transition-colors hover:text-white active:text-white/70",
+        "focus-visible:outline-none focus-visible:text-white",
+        "disabled:pointer-events-none disabled:opacity-40",
         className,
       )}
     >
@@ -300,13 +263,7 @@ function TextLink({
 }
 
 /** Label above, hint/error below — no box around the control. */
-function Field({
-  label,
-  hint,
-  error,
-  children,
-  className,
-}: {
+function Field({label, hint, error, children, className}: {
   label?: string;
   hint?: React.ReactNode;
   error?: string;
@@ -316,9 +273,7 @@ function Field({
   return (
     <div className={cn("mb-4", className)}>
       {label ? (
-        <label className="block text-[14px] font-medium text-white/76 mb-2">
-          {label}
-        </label>
+        <label className="block text-[14px] font-medium text-white/76 mb-2">{label}</label>
       ) : null}
       {children}
       {error ? (
@@ -330,16 +285,17 @@ function Field({
   );
 }
 
-/* A field is a filled plate: white/[0.07] inside a white/[0.16] hairline,
-   warming to white/[0.1] on focus with a soft white/14 ring. */
+/* A field is a plate: white/[0.07] inside a white/[0.16] hairline, warmed to
+   white/[0.35] on focus with a soft white/[0.14] ring — IG's quiet input. */
 const CONTROL =
   "w-full rounded-xl border border-white/[0.16] bg-white/[0.07] px-4 text-[16px] text-white " +
   "transition-[border-color,box-shadow,background-color] duration-150 " +
-  "placeholder:text-white/45 hover:border-white/30 " +
+  "placeholder:text-white/40 " +
+  "hover:border-white/25 " +
   "focus:border-white/70 focus:bg-white/[0.1] focus:shadow-[0_0_0_3px_rgba(255,255,255,0.14)] focus:outline-none " +
   "disabled:opacity-50";
 
-/** Text input — IG field styling. */
+/** Text input — IG field styling (white/[0.07] plate, rounded-xl, h-12). */
 function TextInput({
   value,
   onChange,
@@ -388,7 +344,7 @@ function TextInput({
   );
 }
 
-/** Password field — IG field with the reveal toggle. */
+/** Password field — IG control + the reveal toggle. */
 function PasswordField({
   value,
   onChange,
@@ -421,8 +377,9 @@ function PasswordField({
         tabIndex={-1}
         onClick={() => setVisible((v) => !v)}
         className={cn(
-          "absolute top-1/2 right-2 -translate-y-1/2 flex size-10 items-center justify-center rounded-xl text-white/60",
-          "transition-colors hover:bg-white/[0.06] hover:text-white",
+          "absolute top-1/2 right-2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full text-white/60",
+          "hover:bg-white/[0.06] hover:text-white",
+          "transition-colors",
           visible ? "bg-white/[0.08] text-white" : "",
         )}
         aria-label={visible ? "Hide password" : "Show password"}
@@ -433,67 +390,48 @@ function PasswordField({
   );
 }
 
-/** IG consent check — a hairline square that fills white when checked. */
-function Checkbox({
-  checked,
-  onChange,
-  children,
-}: {
+/** IG consent checkbox — a white/[0.16] square that fills the white/96
+    when on, with the check mark in #0064c8. */
+function Checkbox({checked, onChange, children}: {
   checked: boolean;
   onChange: (next: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
+    <div
       role="checkbox"
       aria-checked={checked}
+      tabIndex={0}
       onClick={() => {
         haptic("selection");
         onChange(!checked);
       }}
-      className={cn(
-        "group flex w-full items-start gap-3 rounded-xl text-left transition-colors",
-        "disabled:pointer-events-none disabled:opacity-40",
-      )}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          haptic("selection");
+          onChange(!checked);
+        }
+      }}
+      className="mb-4 flex w-full cursor-pointer items-start gap-3 transition-colors"
     >
       <span
-        aria-hidden
         className={cn(
-          "mt-[1px] grid size-5 shrink-0 place-items-center rounded-[6px] border-2 transition-colors duration-150",
+          "mt-[2px] flex size-[22px] shrink-0 items-center justify-center rounded-[6px] border transition-all duration-150",
           checked
-            ? "border-white bg-white"
-            : "border-white/30 group-hover:border-white/60",
+            ? "border-[#0064c8] bg-[#0064c8] text-white"
+            : "border-white/[0.4] bg-black/40 hover:border-white/60",
         )}
       >
-        {checked ? (
-          <svg
-            viewBox="0 0 24 24"
-            className="size-3.5 text-black"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={4}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
-        ) : null}
+        {checked ? <Check className="size-[13px]" strokeWidth={3} /> : null}
       </span>
-      <span className="min-w-0 flex-1 text-[14px] leading-relaxed text-white/80">
-        {children}
-      </span>
-    </button>
+      <span className="text-[14.5px] leading-relaxed text-white/90">{children}</span>
+    </div>
   );
 }
 
-/** IG toggle row — white when on, track when off. */
-function ToggleRow({
-  title,
-  sub,
-  on,
-  onChange,
-}: {
+/** IG toggle row — #0064c8 when on, white/[0.07] track when off. */
+function ToggleRow({title, sub, on, onChange}: {
   title: string;
   sub: string;
   on: boolean;
@@ -502,10 +440,8 @@ function ToggleRow({
   return (
     <div className="flex items-center justify-between py-3.5">
       <div className="min-w-0 flex-1 pr-4">
-        <span className="block text-[15px] font-medium text-white/90">{title}</span>
-        <span className="mt-0.5 block text-[13px] leading-relaxed text-white/62">
-          {sub}
-        </span>
+        <span className="block text-[14.5px] font-medium text-white/90">{title}</span>
+        <span className="mt-0.5 block text-[13px] leading-relaxed text-white/62">{sub}</span>
       </div>
       <button
         type="button"
@@ -518,8 +454,8 @@ function ToggleRow({
         className={cn(
           "relative inline-flex h-7 w-[46px] shrink-0 items-center rounded-full border transition-colors duration-200",
           on
-            ? "border-transparent bg-white"
-            : "border-white/[0.2] bg-black/40",
+            ? "border-transparent bg-[#0064c8]"
+            : "border-white/[0.2] bg-white/[0.07]",
         )}
       >
         <span
@@ -535,10 +471,7 @@ function ToggleRow({
 }
 
 /** Username availability badge — shows below the username field. */
-function UsernameStatus({
-  state,
-  message,
-}: {
+function UsernameStatus({state, message}: {
   state: "idle" | "checking" | "available" | "taken" | "reserved" | "invalid";
   message: string;
 }) {
@@ -556,7 +489,7 @@ function UsernameStatus({
     icon = <X className="size-[14px]" strokeWidth={3} />;
   }
   return (
-    <p className={cn("flex items-center gap-1.5 mt-2 text-[12.5px] font-medium", tone)}>
+    <p className={cn("flex items-center gap-1.5 mt-1 text-[12.5px] font-medium", tone)}>
       {icon}
       {message}
     </p>
@@ -600,16 +533,11 @@ function BrandMark() {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Legal modal — glass card matching the AuthShell.
+   Legal modal — the IG glass card: canvas-dim scrim, transparent
+   rgba(18,18,21,0.72) plate with a white/[0.09] hairline.
    ═════════════════════════════════════════════════════════════ */
 
-function LegalModal({
-  kind,
-  onClose,
-}: {
-  kind: LegalKind;
-  onClose: () => void;
-}) {
+function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
   const doc = LEGAL[kind];
   if (typeof document === "undefined") return null;
 
@@ -621,45 +549,31 @@ function LegalModal({
       aria-modal="true"
       aria-label={doc.title}
     >
-      {/* Scrim — the canvas color, dimmed */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundColor: "rgba(16, 16, 20, 0.75)",
-          backdropFilter: "blur(2px)",
-        }}
-      />
+      {/* Scrim — canvas #101014, dimmed */}
+      <div className="absolute inset-0 bg-[#101014]/75 backdrop-blur-[2px]" />
 
-      {/* Panel — glass card matching the AuthShell */}
+      {/* Panel — IG glass card: transparent plate, white/[0.09] hairline */}
       <div
         className={cn(
           "relative z-[91] w-full max-w-lg",
-          "rounded-2xl border border-white/[0.09] bg-black/75 text-white",
+          "rounded-2xl border border-white/[0.09] bg-[rgba(18,18,21,0.72)] text-white",
           "flex flex-col shadow-[0_24px_80px_rgba(0,0,0,0.6)]",
           "backdrop-blur-[40px] backdrop-saturate-150",
         )}
         onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: "80dvh" }}
+        style={{maxHeight: "80dvh"}}
       >
         <div className="px-6 pt-6 pb-4">
-          <h2 className="text-[22px] font-bold tracking-[-0.02em] text-white">
-            {doc.title}
-          </h2>
-          <p className="mt-1.5 text-[14px] leading-relaxed text-white/62">
-            {doc.intro}
-          </p>
+          <h2 className="text-[22px] font-bold tracking-[-0.02em] text-white">{doc.title}</h2>
+          <p className="mt-1.5 text-[14px] leading-relaxed text-white/62">{doc.intro}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-2">
           <div className="space-y-5 py-1">
             {doc.sections.map((section) => (
               <section key={section.title}>
-                <h3 className="text-[15px] font-semibold text-white/90">
-                  {section.title}
-                </h3>
-                <p className="mt-1.5 text-[14px] leading-relaxed text-white/76">
-                  {section.body}
-                </p>
+                <h3 className="text-[15px] font-semibold text-white">{section.title}</h3>
+                <p className="mt-1.5 text-[14px] leading-relaxed text-white/62">{section.body}</p>
               </section>
             ))}
           </div>
@@ -672,8 +586,8 @@ function LegalModal({
             className={cn(
               "flex min-h-[48px] w-full items-center justify-center rounded-xl",
               "px-4 text-center text-[15px] font-semibold text-white/85",
-              "transition-colors hover:bg-white/[0.07] hover:text-white",
-              "focus:outline-none focus:shadow-[0_0_0_3px_rgba(255,255,255,0.45)]",
+              "transition hover:bg-white/[0.04]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffffff80] focus-visible:ring-offset-2 focus-visible:ring-offset-[#101014]",
             )}
           >
             I understand
@@ -683,7 +597,7 @@ function LegalModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 rounded p-2 text-white/60 hover:text-white hover:bg-white/[0.06] transition-colors"
+          className="absolute top-3 right-3 rounded p-2 text-white/62 hover:text-white hover:bg-white/[0.06] transition-colors"
           aria-label="Close"
         >
           <X className="size-[19px]" strokeWidth={2} />
@@ -696,7 +610,7 @@ function LegalModal({
 
 /* ──────────────────────────────────────────────────────────────
    Main page
-   ═════════════════════════════════════════════════════════════ */
+   ═════════════────────────────────────────────────────────── */
 
 function Complete() {
   const params = useSearchParams();
@@ -733,15 +647,16 @@ function Complete() {
   useEffect(() => {
     if (!signupToken) return;
     let dead = false;
-    fetchPending(signupToken).then((d) => {
-      if (dead) return;
-      if (d?.error) setLoadError(d.error);
-      else {
-        setPending(d as Pending);
-        setName(d.name || "");
-        setPhoto(d.photoUrl || null);
-      }
-    });
+    fetchPending(signupToken)
+      .then((d) => {
+        if (dead) return;
+        if (d?.error) setLoadError(d.error);
+        else {
+          setPending(d as Pending);
+          setName(d.name || "");
+          setPhoto(d.photoUrl || null);
+        }
+      });
     return () => {
       dead = true;
     };
@@ -758,11 +673,7 @@ function Complete() {
       setUsernameMsg("");
       return;
     }
-    if (
-      handle.length < 3 ||
-      handle.length > 30 ||
-      !/^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/.test(handle)
-    ) {
+    if (handle.length < 3 || handle.length > 30 || !/^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$/.test(handle)) {
       setUsernameState("invalid");
       setUsernameMsg("3–30 characters: letters, numbers, - or _.");
       return;
@@ -774,8 +685,8 @@ function Complete() {
       fetch(`${apiBase()}/api/auth/username-exists`, {
         method: "POST",
         credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username: handle }),
+        headers: {"content-type": "application/json"},
+        body: JSON.stringify({username: handle}),
       })
         .then((r) => r.json())
         .then((d) => {
@@ -839,13 +750,11 @@ function Complete() {
     setBusy(true);
     haptic("medium");
     try {
-      const path = signupToken
-        ? "/api/auth/oauth/complete"
-        : "/api/auth/oauth-consent";
+      const path = signupToken ? "/api/auth/oauth/complete" : "/api/auth/oauth-consent";
       const res = await fetch(`${apiBase()}${path}`, {
         method: "POST",
         credentials: "include",
-        headers: { "content-type": "application/json" },
+        headers: {"content-type": "application/json"},
         body: JSON.stringify(
           signupToken
             ? {
@@ -875,69 +784,62 @@ function Complete() {
       }
       window.location.href = d.redirect_to || finishTarget;
     } catch {
-      setError(
-        "Tirbeo couldn't be reached. Check your connection and try again.",
-      );
+      setError("Tirbeo couldn't be reached. Check your connection and try again.");
       haptic("error");
       setBusy(false);
     }
   }
 
   /* ─────────────────────────────────────────────────────
-     Shell — IG quiet dark: #101014 canvas behind the
-     photograph, a glass-plate card, BrandMark at the top.
+     Shell — the IG quiet dark: #101014 canvas behind the
+     photograph, a glass-plate card with a white/[0.09] hairline,
+     film grain, BrandMark at the top.
      ════════════════════════════════════════════════════ */
-  function shell(children: React.ReactNode) {
+  function shell(children: React.ReactNode, wide = false) {
     return (
-      <main className="relative flex min-h-dvh w-full flex-col items-center justify-center px-3 py-6 sm:px-6 sm:py-10">
-        {/* Canvas */}
-        <div
-          className="fixed inset-0 z-0"
-          style={BACKDROP_STYLE}
-        >
-          {/* Photograph (desktop only) */}
-          <div
-            className="absolute inset-0 hidden sm:block"
-            style={PHOTO_STYLE}
-          />
-          {/* Vignette + top light (desktop only) */}
-          <div
-            className="absolute inset-0 hidden sm:block"
-            style={VIGNETTE_STYLE}
-          />
-        </div>
+      <main
+        className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-8"
+        style={BACKDROP_STYLE}
+      >
+        {/* Photograph (desktop only) — the accounts app sf-bg backdrop */}
+        <div className="absolute inset-0 hidden sm:block" style={PHOTO_STYLE} />
 
-        {/* Film grain (desktop only) */}
+        {/* IG's soft vignette + top sheen over the photograph */}
+        <div className="absolute inset-0 hidden sm:block" style={VIGNETTE_STYLE} />
+
+        {/* Film grain — the IG texture, neutral opacity */}
         <div
           aria-hidden
-          className="fixed inset-0 z-1 pointer-events-none hidden sm:block"
-          style={{
-            opacity: 0.025,
-            backgroundImage: GRAIN_SVG,
-            backgroundSize: "160px 160px",
-          }}
+          className="pointer-events-none absolute inset-0 hidden sm:block"
+          style={{backgroundImage: GRAIN_SVG, opacity: 0.035, backgroundSize: "160px 160px"}}
         />
 
-        {/* Card — glass plate */}
-        <div
-          className={cn(
-            "animate-fade-in relative w-full rounded-3xl border border-white/[0.09] bg-black/75 p-6 sm:p-8",
-            "shadow-[0_32px_100px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.07),inset_0_0_80px_rgba(0,0,0,0.55)]",
-            "backdrop-blur-[40px] backdrop-saturate-150 max-w-[560px]",
-          )}
-        >
-          <a
-            href="/"
-            aria-label="Tirbeo home"
-            className="-mx-2 mb-8 flex justify-center py-1 transition-opacity duration-200 hover:opacity-80"
+        <div className={cn("relative z-10 w-full", wide ? "max-w-[940px]" : "max-w-[520px]")}>
+          {/* Card — IG glass plate: rgba(18,18,21,0.72), white/[0.09] hairline */}
+          <div
+            className={cn(
+              "border border-white/[0.09] bg-[rgba(18,18,21,0.72)] p-7 sm:p-9",
+              "backdrop-blur-[40px] backdrop-saturate-150",
+              "shadow-[0_24px_80px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)]",
+              "rounded-3xl",
+              wide && "md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-start md:gap-12 md:px-10 md:py-10",
+            )}
           >
-            <BrandMark />
-          </a>
-
-          {children}
+            {wide ? children : (
+              <>
+                <a
+                  href="/"
+                  aria-label="Tirbeo home"
+                  className="mb-8 flex justify-center py-1 transition-opacity duration-200 hover:opacity-80"
+                >
+                  <BrandMark />
+                </a>
+                {children}
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Portals + hidden file input */}
         {legal ? <LegalModal kind={legal} onClose={() => setLegal(null)} /> : null}
 
         {editorSrc ? (
@@ -968,12 +870,9 @@ function Complete() {
   if (!signupToken && !finishing) {
     return shell(
       <>
-        <h1 className="text-[26px] font-bold tracking-[-0.02em] text-white">
-          Nothing to finish
-        </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-white/62">
-          This page completes a Tirbeo sign-in started with Google, GitHub or
-          Discord. Start the sign-in again and you'll land back here.
+        <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">Nothing to finish</h1>
+        <p className="mt-3 text-[14px] leading-relaxed text-white/62">
+          This page completes a Tirbeo sign-in started with Google, GitHub or Discord. Start the sign-in again and you'll land back here.
         </p>
         <Button variant="secondary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
           Back to Tirbeo
@@ -986,12 +885,9 @@ function Complete() {
   if (signupToken && loadError) {
     return shell(
       <>
-        <h1 className="text-[26px] font-bold tracking-[-0.02em] text-white">
-          That sign-in link has expired
-        </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-white/62">
-          {loadError} The link lasts 15 minutes and is used once, so start the
-          sign-in again — it takes a few seconds.
+        <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">That sign-in link has expired</h1>
+        <p className="mt-3 text-[14px] leading-relaxed text-white/62">
+          {loadError} The link lasts 15 minutes and is used once, so start the sign-in again — it takes a few seconds.
         </p>
         <Button variant="secondary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
           Sign in again
@@ -1010,36 +906,30 @@ function Complete() {
   if (signupToken && pending && (pending.existingAccount || pending.existingLink)) {
     return shell(
       <>
-        <h1 className="text-[26px] font-bold tracking-[-0.02em] text-white">
+        <h1 className="text-[22px] font-bold tracking-[-0.02em] text-white">
           You already have a Tirbeo account
         </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-white/62">
+        <p className="mt-3 text-[14px] leading-relaxed text-white/62">
           {providerName} signed in as{" "}
-          <span className="font-medium text-white">{pending.email}</span>,
-          and that belongs to an account Tirbeo already knows. Rather than make
-          a second one, sign in and Tirbeo will connect {providerName} to it —
-          so next time this button gets you straight in.
+          <span className="font-medium text-white">{pending.email}</span>, and that
+          belongs to an account Tirbeo already knows. Rather than make a second one,
+          sign in and Tirbeo will connect {providerName} to it — so next time this
+          button gets you straight in.
         </p>
         <Button
           variant="primary"
           className="mt-6"
           onClick={() => {
             haptic("medium");
-            window.location.href = accountsLoginUrl(
-              signupToken,
-              redirectTo || undefined,
-            );
+            window.location.href = accountsLoginUrl(signupToken, redirectTo || undefined);
           }}
         >
           Sign in &amp; connect {providerName}
         </Button>
         <button
           type="button"
-          onClick={() => {
-            haptic("light");
-            window.location.href = finishTarget;
-          }}
-          className="mt-4 block w-full text-center text-[13.5px] text-white/62 hover:text-white transition-colors"
+          onClick={() => { haptic("light"); window.location.href = finishTarget; }}
+          className="mt-4 block w-full text-center text-[13.5px] text-white/62 hover:text-white/96 transition-colors"
         >
           Not my account — go back
         </button>
@@ -1050,10 +940,63 @@ function Complete() {
   /* ──────────────── Main form ──────────────── */
   return shell(
     <>
+      {/* Left — brand, headline, the identity it arrived with */}
+      <div>
+        <a
+          href="/"
+          aria-label="Tirbeo home"
+          className="flex justify-center py-1 transition-opacity duration-200 hover:opacity-80 md:justify-start"
+        >
+          <BrandMark />
+        </a>
+
+        <h1 className="mt-6 text-center text-[24px] font-bold tracking-[-0.025em] text-white md:mt-8 md:text-left md:text-[26px] md:leading-[1.2]">
+          {signupToken ? "Create your Tirbeo account" : "One thing left"}
+        </h1>
+
+        <p className="mx-auto mt-2 max-w-[36ch] text-center text-[14px] leading-relaxed text-white/62 md:mx-0 md:max-w-none md:text-left">
+          {signupToken ? (
+            <>
+              Signed in with {providerName} as{" "}
+              <span className="font-medium text-white">{pending?.email}</span>
+              {" · "}
+              <button
+                type="button"
+                onClick={() => { haptic("light"); photoRef.current?.click(); }}
+                className="font-medium text-[#0064c8] transition hover:brightness-110 hover:underline"
+              >
+                change photo
+              </button>
+            </>
+          ) : (
+            "Tirbeo hasn't got your agreement on record yet. Tick it below to keep going."
+          )}
+        </p>
+
+        {signupToken ? (
+          <ul className="mt-6 space-y-2.5 text-[13.5px] leading-relaxed text-white/62 md:mt-8">
+            <li className="flex items-start gap-2.5">
+              <Check className="mt-0.5 size-4 shrink-0 text-[#0064c8]" aria-hidden />
+              <span>{providerName} stays connected — sign in with either, any time.</span>
+            </li>
+            <li className="flex items-start gap-2.5">
+              <Check className="mt-0.5 size-4 shrink-0 text-[#0064c8]" aria-hidden />
+              <span>Username, photo and display name can all be changed later in Settings.</span>
+            </li>
+            <li className="flex items-start gap-2.5">
+              <Check className="mt-0.5 size-4 shrink-0 text-[#0064c8]" aria-hidden />
+              <span>Add a password for a second way in — and for account recovery.</span>
+            </li>
+          </ul>
+        ) : null}
+      </div>
+
+      {/* Right — the face, then the fields */}
+      <div className="mt-8 md:mt-0">
       {/* The face, editable — the provider's thumbnail is a starting point,
           not a verdict. The camera badge opens the file picker; the crop
           happens in the sheet the editor draws. */}
-      <div className="relative mx-auto w-fit">
+      <div className="relative mx-auto w-fit md:mx-0">
         <div className="relative z-10">
           <ProfilePicture
             photo={photo}
@@ -1065,10 +1008,7 @@ function Complete() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            haptic("light");
-            photoRef.current?.click();
-          }}
+          onClick={() => { haptic("light"); photoRef.current?.click(); }}
           className={cn(
             "absolute -right-1 -bottom-1 size-9 rounded-full",
             "flex items-center justify-center",
@@ -1082,92 +1022,62 @@ function Complete() {
         </button>
       </div>
 
-      <h1 className="mt-5 text-center text-[24px] font-bold tracking-[-0.025em] text-white">
-        {signupToken ? "Create your Tirbeo account" : "One thing left"}
-      </h1>
-
-      <p className="mx-auto mt-2 max-w-[36ch] text-center text-[14px] leading-relaxed text-white/62">
-        {signupToken ? (
-          <>
-            Signed in with {providerName} as{" "}
-            <span className="font-medium text-white">{pending?.email}</span>
-            {" · "}
-            <button
-              type="button"
-              onClick={() => {
-                haptic("light");
-                photoRef.current?.click();
-              }}
-              className="font-medium text-[#0064c8] hover:underline transition"
-            >
-              change photo
-            </button>
-          </>
-        ) : (
-          "Tirbeo hasn't got your agreement on record yet. Tick it below to keep going."
-        )}
-      </p>
-
-      <form onSubmit={submit} className="mt-8">
+      <form onSubmit={submit} className="mt-6">
         {signupToken ? (
           <section>
-            <Field
-              label="Username"
-              hint={
-                username
+            {/* Profile section with divider */}
+            <div className="mb-6">
+              <Field
+                label="Username"
+                hint={username
                   ? undefined
-                  : "This is your profile address — 3–30 characters: letters, numbers, - or _."
-              }
-            >
-              <TextInput
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. bishnu.n"
-                autoComplete="username"
-                spellCheck={false}
-                required
-                invalid={
-                  usernameState === "taken" ||
-                  usernameState === "reserved" ||
-                  usernameState === "invalid"
+                  : "This is your profile address — 3–30 characters: letters, numbers, - or _."}
+              >
+                <TextInput
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="e.g. bishnu.n"
+                  autoComplete="username"
+                  spellCheck={false}
+                  required
+                  invalid={usernameState === "taken" || usernameState === "reserved" || usernameState === "invalid"}
+                  id="username-field"
+                />
+              </Field>
+
+              <UsernameStatus state={usernameState} message={usernameMsg} />
+
+              <Field
+                label="Display name"
+                hint="How your name appears. You can change it later."
+              >
+                <TextInput
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Bishnu Neupane"
+                  autoComplete="name"
+                  id="display-name-field"
+                />
+              </Field>
+
+              <Field
+                label="Password"
+                hint={
+                  <>
+                    Optional — {providerName} already gets you in. Adding a password gives the
+                    account a second way in, and lets you change it later without going back through {providerName}.
+                  </>
                 }
-                id="username-field"
-              />
-            </Field>
-
-            <UsernameStatus state={usernameState} message={usernameMsg} />
-
-            <Field
-              label="Display name"
-              hint="How your name appears. You can change it later."
-            >
-              <TextInput
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Bishnu Neupane"
-                autoComplete="name"
-                id="display-name-field"
-              />
-            </Field>
-
-            <Field
-              label="Password"
-              hint={
-                <>
-                  Optional — {providerName} already gets you in. Adding a password gives
-                  the account a second way in, and lets you change it later without going
-                  back through {providerName}.
-                </>
-              }
-            >
-              <PasswordField
-                value={password}
-                onChange={setPassword}
-                placeholder="At least 8 characters"
-                autoComplete="new-password"
-                id="password-field"
-              />
-            </Field>
+              >
+                <PasswordField
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="At least 8 characters"
+                  autoComplete="new-password"
+                  id="password-field"
+                />
+              </Field>
+            </div>
           </section>
         ) : null}
 
@@ -1175,11 +1085,9 @@ function Complete() {
         <section className="mb-6">
           <div className="mb-5 border-t border-white/[0.08] pt-5">
             <Checkbox checked={accepted} onChange={setAccepted}>
-              I agree to the{" "}
-              <span className="font-semibold text-white">Terms of Service</span>{" "}
-              and the{" "}
-              <span className="font-semibold text-white">Privacy Policy</span>, and confirm the
-              details above are mine.
+              I agree to the <span className="font-semibold text-white">Terms of Service</span> and the{" "}
+              <span className="font-semibold text-white">Privacy Policy</span>, and confirm the details above are
+              mine.
             </Checkbox>
 
             <ToggleRow
@@ -1191,31 +1099,15 @@ function Complete() {
           </div>
 
           <div className="mt-3 flex items-center justify-center gap-1.5">
-            <TextLink
-              onClick={() => {
-                haptic("light");
-                setLegal("terms");
-              }}
-            >
-              Read the terms
-            </TextLink>
-            <span aria-hidden className="text-white/48">
-              ·
-            </span>
-            <TextLink
-              onClick={() => {
-                haptic("light");
-                setLegal("privacy");
-              }}
-            >
-              Read the privacy policy
-            </TextLink>
+            <TextLink onClick={() => { haptic("light"); setLegal("terms"); }}>Read the terms</TextLink>
+            <span aria-hidden className="text-white/48">·</span>
+            <TextLink onClick={() => { haptic("light"); setLegal("privacy"); }}>Read the privacy policy</TextLink>
           </div>
         </section>
 
         <div className="mt-4">
           {error ? (
-            <p className="rounded-xl border border-[#ff7a7a]/30 bg-[#ff7a7a]/8 px-4 py-3 text-[13.5px] text-[#ff7a7a]">
+            <p className="rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
               {error}
             </p>
           ) : !accepted ? (
@@ -1227,11 +1119,7 @@ function Complete() {
           type="submit"
           variant="primary"
           loading={busy}
-          disabled={
-            !accepted ||
-            busy ||
-            (signupToken ? usernameState !== "available" : false)
-          }
+          disabled={!accepted || busy || (signupToken ? usernameState !== "available" : false)}
           className="mt-3"
         >
           {busy ? "Working…" : signupToken ? "Create account" : "Continue"}
@@ -1239,12 +1127,13 @@ function Complete() {
 
         {signupToken ? (
           <p className="mt-3 text-center text-[12.5px] leading-relaxed text-white/55">
-            Nothing is created until you press that. Close this page and the
-            account is never made.
+            Nothing is created until you press that. Close this page and the account is never made.
           </p>
         ) : null}
       </form>
+      </div>
     </>,
+    true,
   );
 }
 

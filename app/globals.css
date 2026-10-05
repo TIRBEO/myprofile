@@ -511,8 +511,12 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* Hairline between list rows that stops short of the icon gutter */
-.list-divide > * + * {
-  border-top: 1px solid var(--divider);
+/* Row separators are a desktop convenience — on a phone the settings lists
+   read as one continuous column, so no hairlines below the sm breakpoint. */
+@media (min-width: 640px) {
+  .list-divide > * + * {
+    border-top: 1px solid var(--divider);
+  }
 }
 
 .no-divider > * + * {

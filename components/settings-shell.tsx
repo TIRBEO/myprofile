@@ -640,22 +640,32 @@ export function StaticRow({
   title,
   sub,
   right,
+  onClick,
 }: {
   icon?: ReactNode;
   title: string;
   sub?: ReactNode;
   right?: ReactNode;
+  onClick?: () => void;
 }) {
-  return (
-    <div className={ROW}>
+  const body = (
+    <>
       {icon ? <span className={CHIP}>{icon}</span> : null}
       <span className="min-w-0 flex-1">
         <span className={TITLE}>{title}</span>
         {sub ? <span className={SUB}>{sub}</span> : null}
       </span>
       {right ? <span className="shrink-0 text-[13px] text-muted">{right}</span> : null}
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={cn(ROW, LIVE, "cursor-pointer")}>
+        {body}
+      </button>
+    );
+  }
+  return <div className={ROW}>{body}</div>;
 }
 
 function Trailing({ right, chevron }: { right?: ReactNode; chevron?: string }) {

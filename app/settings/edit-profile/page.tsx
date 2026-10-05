@@ -258,6 +258,14 @@ export default function EditProfilePage() {
     setEditing(true);
   }
 
+  /* Any part of the profile opens the same popup — the banner, the face,
+     the name, a detail row or the bio — so "Edit" is never a button you
+     have to find before a field will answer. */
+  function openEditFromPart() {
+    haptic("light");
+    openEdit();
+  }
+
   /* Every starred field is compulsory — the popup won't close until
      they're all filled, however the user tries to leave. */
   const missing = REQUIRED.filter((k) => {
@@ -352,12 +360,22 @@ export default function EditProfilePage() {
              one control instead of three that open the same thing. ══ */}
       <section className="-mx-4 overflow-hidden sm:-mx-6">
         <div className="relative">
-          <div className="block h-[141px] w-full overflow-hidden bg-surface-2">
+          <button
+            type="button"
+            onClick={openEditFromPart}
+            aria-label="Edit profile — change banner"
+            className="block h-[141px] w-full cursor-pointer overflow-hidden bg-surface-2 transition-opacity hover:opacity-95"
+          >
             {form.banner ? (
               <img src={form.banner} alt="" className="size-full object-cover" />
             ) : null}
-          </div>
-          <div className="absolute top-full left-1/2 z-10 flex size-40 -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full border-4 border-bg bg-surface-2">
+          </button>
+          <button
+            type="button"
+            onClick={openEditFromPart}
+            aria-label="Edit profile — change photo"
+            className="absolute top-full left-1/2 z-10 flex size-40 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center overflow-hidden rounded-full border-4 border-bg bg-surface-2 transition-transform hover:scale-[1.02]"
+          >
             {form.photo && brokenPhoto !== form.photo ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -369,15 +387,20 @@ export default function EditProfilePage() {
             ) : (
               <RandomAvatar seed={username} className="size-full" />
             )}
-          </div>
+          </button>
         </div>
 
-        <div className="px-4 pt-24 pb-2 text-center sm:px-5">
+        <button
+          type="button"
+          onClick={openEditFromPart}
+          aria-label="Edit profile"
+          className="block w-full cursor-pointer px-4 pt-24 pb-2 text-center transition-opacity hover:opacity-90 sm:px-5"
+        >
           <p className="text-[24px] leading-tight font-bold tracking-[-0.01em] break-words">
             {(form.name ?? "").trim() || <span className="text-muted">No name yet</span>}
           </p>
           <p className="mt-1 text-[15px] text-muted break-words">@{username}</p>
-        </div>
+        </button>
       </section>
 
       {/* One control edits the whole profile — the picture, the name, the
@@ -397,15 +420,15 @@ export default function EditProfilePage() {
 
       <SectionTitle>Profile details</SectionTitle>
       <Group>
-        <StaticRow title="Name" sub={displayName(form) || "Not added"} />
-        <StaticRow title="Username" sub={`@${username}`} />
-        <StaticRow title="Pronouns" sub={form.pronouns || "Not added"} />
-        <StaticRow title="Location" sub={form.location || "Not added"} />
-        <StaticRow title="Date of birth" sub={prettyDate(form.dob) || "Not added"} />
-        <StaticRow title="Gender" sub={form.gender || "Not added"} />
+        <StaticRow title="Name" sub={displayName(form) || "Not added"} onClick={openEditFromPart} />
+        <StaticRow title="Username" sub={`@${username}`} onClick={openEditFromPart} />
+        <StaticRow title="Pronouns" sub={form.pronouns || "Not added"} onClick={openEditFromPart} />
+        <StaticRow title="Location" sub={form.location || "Not added"} onClick={openEditFromPart} />
+        <StaticRow title="Date of birth" sub={prettyDate(form.dob) || "Not added"} onClick={openEditFromPart} />
+        <StaticRow title="Gender" sub={form.gender || "Not added"} onClick={openEditFromPart} />
       </Group>
 
-      <BioBlock bio={form.bio} />
+      <BioBlock bio={form.bio} onEdit={openEditFromPart} />
 
       {/* ══ Edit popup — every field, both uploads ══ */}
       {editing ? (
@@ -1058,7 +1081,7 @@ function EditorSheet({
    line breaks someone put in it are part of what it says — so it sits under the
    list of short fields, at the width a paragraph is read at, with its breaks
    kept and only its first few lines shown until the rest is asked for. */
-function BioBlock({ bio }: { bio: string | null }) {
+function BioBlock({ bio, onEdit }: { bio: string | null; onEdit?: () => void }) {
   // The endpoint answers `null` for a bio nobody has written, and `Profile`
   // types the field as a string — so this is called with a value its own
   // signature said could not happen. Normalising here as well as in the store
@@ -1087,15 +1110,29 @@ function BioBlock({ bio }: { bio: string | null }) {
       </h3>
       {text ? (
         <>
-          <p
-            ref={body}
-            className={cn(
-              "mt-2 max-w-[62ch] px-1 text-[15px] leading-[1.65] break-words whitespace-pre-line",
-              !open && "line-clamp-5",
-            )}
-          >
-            {text}
-          </p>
+          {onEdit ? (
+            <button type="button" onClick={onEdit} aria-label="Edit bio" className="mt-2 block w-full cursor-pointer text-left">
+              <p
+                ref={body}
+                className={cn(
+                  "max-w-[62ch] px-1 text-[15px] leading-[1.65] break-words whitespace-pre-line",
+                  !open && "line-clamp-5",
+                )}
+              >
+                {text}
+              </p>
+            </button>
+          ) : (
+            <p
+              ref={body}
+              className={cn(
+                "mt-2 max-w-[62ch] px-1 text-[15px] leading-[1.65] break-words whitespace-pre-line",
+                !open && "line-clamp-5",
+              )}
+            >
+              {text}
+            </p>
+          )}
           {taller || open ? (
             <Button
               variant="link"
@@ -1110,7 +1147,13 @@ function BioBlock({ bio }: { bio: string | null }) {
           ) : null}
         </>
       ) : (
-        <p className="mt-2 px-1 text-[15px] text-muted">Not added</p>
+        onEdit ? (
+          <button type="button" onClick={onEdit} className="mt-2 block w-full cursor-pointer text-left">
+            <p className="px-1 text-[15px] text-muted">Not added</p>
+          </button>
+        ) : (
+          <p className="mt-2 px-1 text-[15px] text-muted">Not added</p>
+        )
       )}
     </section>
   );
