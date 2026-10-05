@@ -952,10 +952,10 @@ function Complete() {
             type="button"
             onClick={() => { haptic("light"); photoRef.current?.click(); }}
             className={cn(
-              "absolute -right-1 -bottom-1 size-9 rounded-full",
+              "absolute -right-1 -bottom-1 z-20 size-9 rounded-full",
               "flex items-center justify-center",
               "bg-[#0064c8] text-white hover:brightness-110",
-              "border-2 border-[rgba(18,18,21,0.72)]",
+              "border-[3px] border-[#101014]",
               "transition",
             )}
             aria-label="Change photo"
