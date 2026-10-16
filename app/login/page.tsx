@@ -1,5 +1,3 @@
-"use client";
-
 /* ═══════════════════════════════════════════════════════════════════
    The sign-in landing.
 
@@ -8,56 +6,21 @@
    It offers the real hand-off when one is configured, and in
    development (where the accounts app isn't running) it says plainly
    what happened instead of looping.
+
+   This is a server component for one reason: the `redirect_to` the
+   accounts app hands back has to be *this* origin, and reading it from
+   `window.location` rendered an empty one on the server and the real
+   one on the client — a hydration mismatch on the page's only button.
+   The frame itself is the accounts AuthShell (see `login-shell.tsx`).
    ═══════════════════════════════════════════════════════════════════ */
 
-import { Button, PILL_BASE, PILL_FILL, cn } from "@/components/ig-ui";
+import { headers } from "next/headers";
 
-export default function LoginPage() {
-  const raw = process.env.NEXT_PUBLIC_ACCOUNTS_URL;
-  const isLoopback = !!raw && /localhost|127\.0\.0\.1/.test(raw);
-  // A dirty .env.local baked into a prod build must not put a localhost link
-  // on the sign-in page.
-  const base = isLoopback && process.env.NODE_ENV === "production"
-    ? "https://accounts.tirbeo.com"
-    : raw;
+import LoginShell from "./login-shell";
 
-  return (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-bg px-5 text-center">
-      <div className="w-full max-w-[380px]">
-        <h1 className="text-[24px] font-extrabold tracking-[-0.03em]">
-          Tirbeo <span className="text-fg/45">MyProfile</span>
-        </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-muted">
-          {base
-            ? "Sign in to see your profile. You'll come straight back here."
-            : "You're signed out. Sign in through the accounts app to load your profile here."}
-        </p>
-
-        {base ? (
-          <a
-            href={`${base.replace(/\/+$/, "")}/login?redirect_to=${encodeURIComponent(
-              typeof window !== "undefined" ? window.location.origin : "",
-            )}`}
-            className={cn(PILL_BASE, PILL_FILL.primary, "mt-6 block py-3.5 text-[15.5px]")}
-          >
-            <span className="min-w-0">Sign in</span>
-          </a>
-        ) : (
-          <div className="mt-6 rounded-2xl border border-divider bg-surface-2 p-4 text-left">
-            <p className="text-[13px] leading-relaxed text-muted">
-              Development mode: set{" "}
-              <code className="rounded bg-surface-3 px-1 py-0.5 text-[12px]">NEXT_PUBLIC_ACCOUNTS_URL</code>{" "}
-              in <code className="rounded bg-surface-3 px-1 py-0.5 text-[12px]">.env.local</code> to
-              point at the accounts app, or sign in there first and open this site on the same
-              origin (localhost) so the session cookie is sent.
-            </p>
-          </div>
-        )}
-
-        <Button variant="ghost" className="mt-3" onClick={() => window.history.back()}>
-          Go back
-        </Button>
-      </div>
-    </main>
-  );
+export default async function LoginPage() {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") || h.get("host") || "";
+  const proto = h.get("x-forwarded-proto") || (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
+  return <LoginShell origin={host ? `${proto}://${host}` : ""} />;
 }

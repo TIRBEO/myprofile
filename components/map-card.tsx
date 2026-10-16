@@ -60,7 +60,7 @@ export function MapCard({ coords, label }: { coords: [number, number]; label: st
           dragRotate: false,
           pitchWithRotate: false,
         });
-        marker = new mapboxgl.Marker({ color: "#0a84ff" })
+        marker = new mapboxgl.Marker({ color: "#b42318" })
           .setLngLat([lng, lat])
           .addTo(map);
         // A bad or unbilled token fails here, once the style request comes back.

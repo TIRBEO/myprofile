@@ -152,7 +152,7 @@ export function Card({
   padded?: boolean;
 }) {
   return (
-    <div className={cn("rounded-2xl border border-border bg-surface shadow-[0_14px_36px_-24px_rgb(0_0_0/0.4)]", padded && "p-5", className)}>
+    <div className={cn("rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgb(0_0_0/45%),0_10px_26px_-18px_rgb(0_0_0/60%)]", padded && "p-5", className)}>
       {children}
     </div>
   );
@@ -236,12 +236,7 @@ export function ListRow({
       {leading ? (
         <span className="shrink-0">{leading}</span>
       ) : icon ? (
-        <span
-          className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-[10px] border border-border",
-            CHIP[iconTone],
-          )}
-        >
+        <span className="flex shrink-0 items-center justify-center text-text-4">
           {icon}
         </span>
       ) : null}
@@ -249,18 +244,18 @@ export function ListRow({
       <span className="min-w-0 flex-1">
         <span
           className={cn(
-            "block text-[14.5px] leading-snug font-medium",
+            "block text-[16px] leading-snug",
             tone === "danger" ? "text-danger-text" : "text-fg",
           )}
         >
           {label}
         </span>
         {description ? (
-          <span className="mt-0.5 block max-w-[56ch] text-[13px] leading-snug text-muted">{description}</span>
+          <span className="mt-0.5 block max-w-[56ch] text-[14px] leading-snug text-text-3">{description}</span>
         ) : null}
       </span>
 
-      {value ? <span className="mono shrink-0 text-[13px] text-muted">{value}</span> : null}
+      {value ? <span className="mono shrink-0 text-[13px] text-text-3">{value}</span> : null}
       {trailing}
       {on ? (
         <Switch
@@ -272,14 +267,14 @@ export function ListRow({
           label={typeof label === "string" ? label : undefined}
         />
       ) : null}
-      {showChevron ? <ChevronRight className="size-4 shrink-0 text-muted/60" /> : null}
+      {showChevron ? <ChevronRight className="size-[22px] shrink-0 text-text-4" /> : null}
     </>
   );
 
   const cls = cn(
-    "group flex w-full min-h-[3.5rem] items-center gap-4 px-1 py-4 text-left",
+    "group flex w-full min-h-[3.5rem] items-center gap-4 px-4 py-3.5 text-left",
     "transition-colors duration-100",
-    interactive && !disabled && "hover:bg-surface-2/60 active:bg-surface-2",
+    interactive && !disabled && "hover:bg-hover active:bg-field-focus",
     disabled && "opacity-45",
     className,
   );
@@ -332,15 +327,15 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!on)}
       className={cn(
-        "relative inline-flex h-7 w-[46px] shrink-0 items-center rounded-full",
+        "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full",
         "transition-colors duration-200",
-        on ? "bg-accent" : "bg-track",
+        on ? "bg-ig" : "bg-track",
         disabled && "opacity-45",
       )}
     >
       <span
         className={cn(
-          "block size-[22px] rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
+          "block size-6 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
           "transition-transform duration-200 ease-out motion-reduce:transition-none",
           on ? "translate-x-[22px]" : "translate-x-[2px]",
         )}
@@ -353,42 +348,41 @@ export function Switch({
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
 type ButtonSize = "sm" | "md" | "lg";
 
-/* Instagram's four button skins: one blue fill, one hairline outline,
-   one quiet text, one red. Nothing else is ever a button. */
+/* The accounts-app button skins: one sky fill, one hairline outline,
+   one quiet text, one red — 18px pills, semibold, tight tracking. */
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-fg hover:bg-accent-hover active:brightness-95",
+  primary: "bg-ig text-white hover:bg-ig-hover active:bg-ig-press active:scale-[0.995]",
   secondary:
-    "border border-border-strong bg-surface text-fg hover:bg-surface-2 active:bg-surface-3",
-  ghost: "text-muted hover:bg-surface-2 hover:text-fg",
-  danger: "bg-danger text-white hover:brightness-105 active:brightness-95",
-  link: "text-accent-text hover:text-accent-hover px-0",
+    "border border-btn-line bg-transparent text-text-2 hover:border-btn-line-hover hover:bg-hover hover:text-fg",
+  ghost: "text-text-3 hover:bg-hover hover:text-fg",
+  danger: "bg-danger text-white hover:bg-[#e4283a] active:brightness-95",
+  link: "min-h-10 rounded-full px-1 text-[15px] font-semibold text-text-3 hover:text-fg",
 };
 
 /** Every full-width action button in settings is built from these two, so a
     "Save" and a "Delete" can't drift apart in size, only in fill. */
 export const PILL_BASE =
-  "flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 " +
-  "text-center text-[14px] leading-snug font-semibold outline-none transition " +
+  "flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[18px] px-4 py-2.5 " +
+  "text-center text-[15px] leading-snug font-semibold tracking-[-0.01em] outline-none transition " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export const PILL_FILL = {
-  primary: "bg-accent text-accent-fg hover:bg-accent-hover active:brightness-95",
-  danger: "bg-danger text-white hover:brightness-105 active:brightness-95",
-  /** Instagram's secondary button is a hairline outline, never a grey
-      slab — a filled one sits next to the blue one and reads as the
-      disabled pair, while the outline reads as the way out. */
+  primary: "bg-ig text-white hover:bg-ig-hover active:bg-ig-press",
+  danger: "bg-danger text-white hover:bg-[#e4283a] active:brightness-95",
+  /** The accounts secondary is a hairline outline, never a grey slab — a
+      filled one sits next to the accent-filled one and reads as the disabled pair. */
   outline:
-    "border border-border-strong bg-surface text-fg hover:bg-surface-2 active:bg-surface-3",
+    "border border-btn-line bg-transparent text-text-2 hover:border-btn-line-hover hover:bg-hover hover:text-fg",
 } as const;
 
-/** A filled button that can't be used yet still has to read as blue, or as
+/** A filled button that can't be used yet still has to read as accent-coloured, or as
     red, rather than turning into a grey slab nobody can parse. */
 export const PILL_DISABLED = "pointer-events-none opacity-55";
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "h-9 rounded-lg px-3.5 text-[13px] gap-1.5",
-  md: "h-10 rounded-lg px-4 text-[14px] gap-2",
-  lg: "h-11 rounded-lg px-5 text-[14.5px] gap-2",
+  sm: "h-10 rounded-[18px] px-4 text-[14px] gap-1.5",
+  md: "h-12 rounded-[18px] px-5 text-[15px] gap-2",
+  lg: "h-[56px] rounded-[18px] px-6 text-[15px] gap-2",
 };
 
 export function Button({
@@ -414,7 +408,7 @@ export function Button({
       type={rest.type ?? "button"}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex touch-manipulation items-center justify-center font-semibold whitespace-nowrap",
+        "inline-flex touch-manipulation items-center justify-center font-semibold tracking-[-0.01em] whitespace-nowrap",
         "transition-[filter,background-color,transform,opacity] duration-100 active:scale-[0.985]",
         "disabled:pointer-events-none disabled:opacity-45",
         variant === "link" ? "text-[14px] font-medium" : BUTTON_SIZE[size],
@@ -449,7 +443,7 @@ export function IconButton({
       className={cn(
         "flex shrink-0 items-center justify-center rounded-full text-fg",
         !sized && "size-10",
-        "transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3",
+        "transition-colors duration-100 hover:bg-hover active:bg-field-focus",
         "disabled:pointer-events-none disabled:opacity-45",
         className,
       )}
@@ -459,8 +453,8 @@ export function IconButton({
   );
 }
 
-/** Segmented control. Exactly one option is active — the active half is a
-    blue pill on a grey track, the shape Instagram uses for every chooser. */
+/** Segmented control. Exactly one option is active — the accounts recipe:
+    a grey plate container with a raised charcoal pill on the choice. */
 export function Segmented<T extends string>({
   value,
   options,
@@ -480,7 +474,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className={cn("flex gap-1 rounded-full bg-surface-2 p-1", block && "w-full")}
+      className={cn("flex gap-1 rounded-2xl border border-border bg-field p-1.5", block && "w-full")}
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -499,8 +493,8 @@ export function Segmented<T extends string>({
               "transition-all duration-150",
               size === "sm" ? "h-8 text-[13px]" : "h-9 text-[14px]",
               active
-                ? "bg-accent text-accent-fg shadow-[0_1px_2px_rgb(0_0_0/0.18)]"
-                : "bg-transparent text-muted hover:text-fg",
+                ? "bg-border-strong text-fg shadow-[0_1px_3px_rgba(0,0,0,0.4)]"
+                : "bg-transparent text-text-4 hover:text-fg",
             )}
           >
             {opt.label}
@@ -513,16 +507,15 @@ export function Segmented<T extends string>({
 
 /* ── Form controls ──────────────────────────────────────────────── */
 
-/* A field is a box, not a line: Instagram's inputs are an off-white slab
-   inside a hairline, turning white with a blue ring while you type. The
-   whole field is the target, so the box carries the padding rather than a
-   rule drawn under the text. */
+/* The accounts field: a grey plate, borderless until focus, then an
+   accent border plus a soft accent ring. The whole box is the target. */
 const CONTROL =
-  "w-full rounded-lg border border-border bg-surface-2 px-3.5 py-2.5 text-[15px] text-fg outline-none " +
-  "placeholder:text-muted/70 " +
-  "transition-colors duration-150 " +
-  "hover:border-border-strong " +
-  "focus:border-accent focus:bg-surface focus:ring-[3px] focus:ring-accent/18 focus:outline-none " +
+  "w-full rounded-2xl border border-transparent bg-field px-4 text-[16px] text-fg outline-none " +
+  "placeholder:text-placeholder " +
+  "transition-[border-color,box-shadow,background-color] duration-150 " +
+  "hover:bg-field-hover " +
+  "focus:border-ig-hover focus:bg-field-focus " +
+  "focus:shadow-[0_0_0_3px_var(--accent-soft-ring)] focus:outline-none " +
   "disabled:opacity-50";
 
 export const Input = forwardRef<
@@ -536,8 +529,8 @@ export const Input = forwardRef<
       aria-invalid={invalid || undefined}
       className={cn(
         CONTROL,
-        "h-11",
-        invalid && "border-danger",
+        "h-12",
+        invalid && "!border-danger",
         className,
       )}
     />
@@ -556,8 +549,8 @@ export const Textarea = forwardRef<
       aria-invalid={invalid || undefined}
       className={cn(
         CONTROL,
-        "resize-none leading-relaxed",
-        invalid && "border-danger",
+        "resize-none py-3 leading-relaxed",
+        invalid && "!border-danger",
         className,
       )}
     />
@@ -570,14 +563,14 @@ export const Select = forwardRef<
 >(function Select({ className, options, ...rest }, ref) {
   return (
     <div className="relative">
-      <select ref={ref} {...rest} className={cn(CONTROL, "h-11 appearance-none pr-9", className)}>
+      <select ref={ref} {...rest} className={cn(CONTROL, "h-12 cursor-pointer appearance-none pr-11 [&>option]:bg-card", className)}>
         {options.map((o) => (
           <option key={o} value={o}>
             {o}
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute top-1/2 right-1 size-4 -translate-y-1/2 text-muted" />
+      <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-5 -translate-y-1/2 text-text-4" />
     </div>
   );
 });
@@ -618,7 +611,7 @@ export function Field({
     <div className={cn("px-4 py-4 sm:px-5", className)}>
       {label ? (
         <div className="mb-2 flex items-center justify-between gap-3">
-          <span id={`${uid}-label`} className="label">
+          <span id={`${uid}-label`} className="tb-label mb-0">
             {label}
           </span>
           {action}
@@ -626,11 +619,11 @@ export function Field({
       ) : null}
       <label className="block">{control}</label>
       {error ? (
-        <p id={noteId} className="mono mt-2 text-[12px] text-danger-text">
+        <p id={noteId} role="alert" className="tb-hint tb-error">
           {error}
         </p>
       ) : hint ? (
-        <p id={noteId} className="mt-2 max-w-[62ch] text-[13px] leading-relaxed text-muted">
+        <p id={noteId} className="tb-hint max-w-[62ch]">
           {hint}
         </p>
       ) : null}
@@ -677,7 +670,7 @@ export function PasswordField({
         onClick={() => setVisible((v) => !v)}
         className={cn(
           "absolute right-1.5 top-1/2 size-8 -translate-y-1/2 after:absolute after:-inset-1.5 after:content-['']",
-          visible ? "bg-surface-2" : "text-muted",
+          visible ? "bg-hover text-fg" : "text-text-4 hover:text-fg",
         )}
       />
     </div>
@@ -713,7 +706,7 @@ export function Pill({
 /**
  * Toggle chip — the filter and jump pills. One primitive, so a row of
  * filters is always the same 36px rounded-full on a hairline, with the
- * selected one filled blue the way Instagram fills a chosen filter.
+ * selected one filled accent the way Instagram fills a chosen filter.
  */
 export function Chip({
   active,
@@ -741,8 +734,8 @@ export function Chip({
         "inline-flex min-h-9 touch-manipulation items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13.5px] font-semibold whitespace-nowrap outline-none transition-colors",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         active
-          ? "border-transparent bg-accent text-accent-fg hover:bg-accent-hover"
-          : "border-border-strong bg-surface text-fg hover:bg-surface-2 active:bg-surface-3",
+          ? "border-transparent bg-ig text-white hover:bg-ig-hover"
+          : "border-border-strong bg-transparent text-text-2 hover:bg-hover hover:text-fg",
         className,
       )}
     >
@@ -934,7 +927,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
       {icon ? (
-        <span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-surface-2 text-muted">
+        <span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-field text-text-4">
           {icon}
         </span>
       ) : null}
@@ -1050,8 +1043,7 @@ export function SearchField({
         aria-label={placeholder}
         className={cn(
           CONTROL,
-          "h-10 rounded-full border-transparent bg-surface-2 pr-10 pl-10",
-          "hover:border-transparent focus:border-transparent focus:ring-0",
+          "h-10 rounded-full bg-field pr-10 pl-10",
           "[&::-webkit-search-cancel-button]:hidden",
         )}
       />
@@ -1079,6 +1071,27 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function Divider({ className }: { className?: string }) {
   return <div className={cn("hairline", className)} role="separator" />;
+}
+
+/** "or" rule between an OAuth row and the form (accounts recipe). */
+export function OrDivider({ label = "or" }: { label?: string }) {
+  return (
+    <div className="flex items-center gap-4" aria-hidden>
+      <span className="h-px flex-1 bg-divider" />
+      <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-4">{label}</span>
+      <span className="h-px flex-1 bg-divider" />
+    </div>
+  );
+}
+
+/** Inline error/success line under a form — the accounts FormNotice. */
+export function FormNotice({ notice }: { notice?: { msg: string; tone: "error" | "success" } | null }) {
+  if (!notice) return null;
+  return (
+    <p role={notice.tone === "error" ? "alert" : "status"} className={"form-notice form-notice-" + notice.tone}>
+      {notice.msg}
+    </p>
+  );
 }
 
 /* ── Sheet ──────────────────────────────────────────────────────── */
@@ -1131,6 +1144,29 @@ export function Sheet({
     setClosing(true);
     closeTimer.current = window.setTimeout(() => closeRef.current(), 300);
   }
+
+  /* A sheet that is refused — edit-profile's X when a required field is still
+     empty — must heal. The exit animations leave the sheet out of sight while
+     its full-screen wrapper stays mounted and swallows every click on the page
+     behind it, so the app looks frozen. A parent that closes unconditionally
+     unmounts us at 300ms, before this fires; if we are still mounted and the
+     sheet is out of sight (faded, or slid below the viewport on a phone), put
+     it back. */
+  useEffect(() => {
+    if (!closing) return;
+    const t = window.setTimeout(() => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const scrim = panel.closest('[role="dialog"]')?.firstElementChild;
+      const faded = scrim ? Number(getComputedStyle(scrim).opacity) < 0.05 : false;
+      const slidOut = panel.getBoundingClientRect().top >= window.innerHeight - 4;
+      if (faded || slidOut) {
+        setClosing(false);
+        setDrag(null);
+      }
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [closing]);
 
   useOverlay(startClose);
 
@@ -1303,9 +1339,9 @@ export function Sheet({
                 (closing
                   ? "animate-sheet-down sm:animate-scale-out"
                   : "animate-sheet-up sm:animate-scale-in"),
-              "rounded-t-2xl bg-surface",
+              "rounded-t-[22px] bg-surface",
               "shadow-[0_-30px_90px_-20px_rgb(0_0_0/0.7)]",
-              "sm:rounded-2xl sm:border sm:border-border/70 sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
+              "sm:rounded-[22px] sm:border sm:border-hairline sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
               width === "lg" ? "sm:max-w-[560px]" : "sm:max-w-[420px]",
             )}
             style={{
@@ -1419,30 +1455,30 @@ export function SheetOption({
         haptic("selection");
         onClick();
       }}
- className="group flex w-full items-center gap-4 px-4 py-4 text-left outline-none transition-colors hover:bg-surface-2/60 active:bg-surface-2/80 sm:px-5"
+ className="group flex w-full items-center gap-4 px-4 py-4 text-left outline-none transition-colors hover:bg-hover active:bg-field-focus sm:px-5"
     >
       <span className="min-w-0 flex-1">
         <span
           className={cn(
-            "block text-[15px] font-medium",
-            selected ? "text-fg" : "text-fg/90",
+            "block text-[16px] font-medium",
+            selected ? "text-fg" : "text-text-2",
           )}
         >
           {children}
         </span>
         {description ? (
-          <span className="mt-0.5 block max-w-[56ch] text-[13px] leading-snug text-muted">{description}</span>
+          <span className="mt-0.5 block max-w-[56ch] text-[14px] leading-snug text-text-3">{description}</span>
         ) : null}
       </span>
       <span
         className={cn(
           "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-150",
-          selected ? "border-accent" : "border-track group-hover:border-muted/60",
+          selected ? "border-ig" : "border-track group-hover:border-text-4",
         )}
       >
         <span
           className={cn(
-            "size-2.5 rounded-full bg-accent transition-transform duration-150",
+            "size-2.5 rounded-full bg-ig transition-transform duration-150",
             selected ? "scale-100" : "scale-0",
           )}
         />
@@ -1452,7 +1488,7 @@ export function SheetOption({
 }
 
 /** The two buttons at the bottom of a sheet. The one that does something is
-    filled — blue when it builds or changes, red when it takes something away —
+    filled — accent-coloured when it builds or changes, red when it takes something away —
     so the difference between "Save" and "Delete" is a colour, not a sentence. */
 export function SheetActions({
   onCancel,
@@ -1476,17 +1512,17 @@ export function SheetActions({
      decision, both 8px corners, stacked on a phone with the action under
      the thumb. Blue when it builds, red when it takes something away. */
   return (
-    <div className="flex flex-col gap-2.5 sm:flex-row-reverse">
+      <div className="flex flex-col gap-2.5 sm:flex-row-reverse">
       <button
         type="button"
         onClick={onConfirm}
         disabled={disabled || loading}
         className={cn(
-          "flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[14px] font-semibold outline-none transition",
+          "flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-[18px] px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] outline-none transition",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
           confirmVariant === "danger"
-            ? "bg-danger text-white hover:brightness-105 active:brightness-95"
-            : "bg-accent text-accent-fg hover:bg-accent-hover active:brightness-95",
+            ? "bg-danger text-white hover:bg-[#e4283a] active:brightness-95"
+            : "bg-ig text-white hover:bg-ig-hover active:bg-ig-press",
           (disabled || loading) && "pointer-events-none opacity-55",
         )}
       >
@@ -1496,7 +1532,7 @@ export function SheetActions({
       <button
         type="button"
         onClick={() => (deferredClose ? deferredClose() : onCancel())}
-        className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-border-strong bg-surface px-4 py-2.5 text-[14px] font-semibold text-fg outline-none transition hover:bg-surface-2 active:bg-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex min-h-[48px] flex-1 items-center justify-center rounded-[18px] border border-btn-line bg-transparent px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] text-text-2 outline-none transition hover:border-btn-line-hover hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         {cancelLabel}
       </button>
@@ -1790,6 +1826,21 @@ export function Modal({
     closeTimer.current = window.setTimeout(() => closeRef.current(), 300);
   }
 
+  // Same refused-close heal as Sheet: a parent that ignores onClose must not
+  // be left holding an invisible overlay that eats every click.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!closing) return;
+    const t = window.setTimeout(() => {
+      const root = rootRef.current;
+      if (!root) return;
+      const faded = Number(getComputedStyle(root).opacity) < 0.05;
+      const slidOut = (panelRef.current?.getBoundingClientRect().top ?? 0) >= window.innerHeight - 4;
+      if (faded || slidOut) setClosing(false);
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [closing]);
+
   useEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
@@ -1803,6 +1854,7 @@ export function Modal({
 
   return createPortal(
     <div
+      ref={rootRef}
       className={cn(
         "fixed inset-0 z-[90] flex items-end justify-center bg-scrim backdrop-blur-[6px] sm:items-center sm:p-6",
         closing ? "animate-fade-out" : "animate-fade-in",
@@ -1818,12 +1870,12 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "w-full max-w-md overflow-hidden rounded-t-2xl bg-surface",
+          "w-full max-w-md overflow-hidden rounded-t-[22px] bg-surface",
           closing
             ? "animate-sheet-down sm:animate-scale-out"
             : "animate-sheet-up sm:animate-scale-in",
           "shadow-[0_-30px_90px_-20px_rgb(0_0_0/0.7)]",
-          "sm:rounded-2xl sm:border sm:border-border/70 sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
+          "sm:rounded-[22px] sm:border sm:border-hairline sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
         )}
       >
         <div className="px-6 pt-4 pb-1 sm:pt-6">

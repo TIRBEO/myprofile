@@ -108,7 +108,7 @@ export default function SettingsIndex() {
   return (
     <SettingsPage>
       <div className="-mx-4 sm:-mx-6">
-        <div className="sticky top-0 z-30 -mt-4 border-b border-divider bg-bg/85 py-2.5 backdrop-blur-xl sm:-mt-9">
+        <div className="sticky top-0 z-30 -mt-4 border-b border-hairline bg-glass py-2.5 backdrop-blur-xl sm:-mt-9">
           <h1 className="text-center text-[16px] font-semibold tracking-[-0.01em]">{t("Settings")}</h1>
         </div>
 
@@ -119,7 +119,7 @@ export default function SettingsIndex() {
         <div className="px-4 pt-3.5 pb-1 sm:px-6">
           {/* The same pill the rest of the app searches from, at the height a
               thumb actually aims at. */}
-          <div className="[&_input]:h-12 [&_input]:rounded-full [&_input]:border-transparent [&_input]:bg-surface-2">
+          <div className="[&_input]:h-12 [&_input]:rounded-full [&_input]:border-transparent [&_input]:bg-field">
             <SearchField value={query} onChange={setQuery} placeholder={t("Search settings")} />
           </div>
         </div>
@@ -212,10 +212,10 @@ function AccountHeader({ profile }: { profile: ReturnType<typeof useProfile> }) 
   if (!profile) {
     return (
       <div className="flex items-center gap-3.5 px-4 pt-4 pb-1 sm:px-6" aria-busy="true">
-        <span className="size-[58px] shrink-0 animate-pulse rounded-full bg-surface-2" />
+        <span className="size-[58px] shrink-0 animate-pulse rounded-full bg-field" />
         <span className="min-w-0 flex-1 space-y-2">
-          <span className="block h-[16px] w-[46%] animate-pulse rounded-full bg-surface-2" />
-          <span className="block h-[13px] w-[30%] animate-pulse rounded-full bg-surface-2/80" />
+          <span className="block h-[16px] w-[46%] animate-pulse rounded-full bg-field" />
+          <span className="block h-[13px] w-[30%] animate-pulse rounded-full bg-field/80" />
         </span>
       </div>
     );
@@ -225,7 +225,7 @@ function AccountHeader({ profile }: { profile: ReturnType<typeof useProfile> }) 
     <Link
       href="/settings/edit-profile"
       onClick={() => haptic("light")}
-      className="flex items-center gap-3.5 px-4 pt-4 pb-1 outline-none transition-colors hover:bg-surface-2/50 active:bg-surface-2/70 sm:px-6"
+      className="flex items-center gap-3.5 px-4 pt-4 pb-1 outline-none transition-colors hover:bg-hover active:bg-field-focus sm:px-6"
     >
       <ProfilePicture photo={profile.photo} seed={profile.username || profile.email} name={name} size={58} />
       <span className="min-w-0 flex-1">

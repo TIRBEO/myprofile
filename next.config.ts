@@ -13,11 +13,12 @@ const nextConfig: NextConfig = {
   },
   /* The account app is the site: /settings is what the root address is.
      Temporary rather than permanent so a page that comes back later isn't
-     stuck behind a cached redirect in every browser that visited before. */
+     stuck behind a cached redirect in every browser that visited before.
+     /login is *not* redirected — the app's own sign-in landing lives there
+     (the proxy sends signed-out visitors straight to the accounts app). */
   async redirects() {
     return [
       { source: "/", destination: "/settings", permanent: false },
-      { source: "/login", destination: "/settings", permanent: false },
       { source: "/messages", destination: "/settings", permanent: false },
       { source: "/messages/:path*", destination: "/settings", permanent: false },
     ];

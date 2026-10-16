@@ -321,9 +321,9 @@ function SessionNotice({ onRetry, rechecking }: { onRetry: () => void; recheckin
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-divider bg-surface-2 px-4 py-2.5 text-[13.5px] text-fg sm:px-6"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-hairline bg-field px-4 py-2.5 text-[13.5px] text-fg sm:px-6"
     >
-      <WifiOff className="size-4 shrink-0 text-muted" aria-hidden="true" />
+      <WifiOff className="size-4 shrink-0 text-text-4" aria-hidden="true" />
       <span className="min-w-0 flex-1">
         {t("Tirbeo isn't answering right now, so some of your settings may not have loaded.")}
       </span>
@@ -347,7 +347,7 @@ function SideRail({
 }) {
   const t = useT();
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[22rem] flex-col border-r border-divider bg-rail backdrop-blur-2xl backdrop-saturate-150 lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[22rem] flex-col border-r border-border bg-rail backdrop-blur-2xl backdrop-saturate-150 lg:flex">
       <div className="px-5 pt-7 pb-4">
         <Wordmark />
         <AccountChip />
@@ -370,7 +370,7 @@ function SideRail({
         <button
           type="button"
           onClick={onSignOut}
-          className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-lg bg-danger px-3.5 text-[14px] font-semibold text-white outline-none transition-colors hover:brightness-110 active:brightness-95"
+          className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-[18px] bg-danger px-3.5 text-[15px] font-semibold tracking-[-0.01em] text-white outline-none transition-colors hover:bg-[#e4283a] active:brightness-95"
         >
           <LogOut className="size-[18px] shrink-0" strokeWidth={2.2} />
           {t("Log out")}
@@ -399,11 +399,11 @@ function AccountChip() {
   const t = useT();
   if (!profile) {
     return (
-      <div className="mt-5 flex items-center gap-3.5 px-1" aria-busy="true">
-        <span className="size-12 shrink-0 animate-pulse rounded-full bg-surface-2" />
+      <div className="mt-5 flex items-center gap-3.5 rounded-2xl border border-border bg-card px-3 py-2.5" aria-busy="true">
+        <span className="size-12 shrink-0 animate-pulse rounded-full bg-field" />
         <span className="min-w-0 flex-1 space-y-2">
-          <span className="block h-[14px] w-[55%] animate-pulse rounded-full bg-surface-2" />
-          <span className="block h-[12px] w-[78%] animate-pulse rounded-full bg-surface-2/70" />
+          <span className="block h-[14px] w-[55%] animate-pulse rounded-full bg-field" />
+          <span className="block h-[12px] w-[78%] animate-pulse rounded-full bg-field/70" />
         </span>
       </div>
     );
@@ -415,7 +415,7 @@ function AccountChip() {
       href="/settings/edit-profile"
       aria-label={`${role}: ${name}`}
       onClick={() => haptic("light")}
-      className="mt-5 flex w-full items-center gap-3.5 rounded-xl px-1 py-1 outline-none transition-colors hover:bg-surface-2/60 active:bg-surface-2/80"
+      className="mt-5 flex w-full items-center gap-3.5 rounded-2xl border border-border bg-card px-3.5 py-3 outline-none transition-colors hover:bg-hover/60 active:bg-hover"
     >
       <ProfilePicture
         photo={profile.photo}
@@ -424,8 +424,8 @@ function AccountChip() {
         size={48}
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15.5px] leading-tight font-semibold">{name}</span>
-        <span className="mt-1 block truncate text-[13px] leading-tight text-muted">{profile.email}</span>
+        <span className="block truncate text-[16px] leading-tight font-semibold">{name}</span>
+        <span className="mt-1 block truncate text-[13px] leading-tight text-text-3">{profile.email}</span>
       </span>
     </Link>
   );
@@ -498,7 +498,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="mx-0.5 rounded border border-border bg-surface-2 px-1.5 py-0.5 font-sans text-[11px]">
+    <kbd className="mx-0.5 rounded border border-border bg-field px-1.5 py-0.5 font-sans text-[11px]">
       {children}
     </kbd>
   );
@@ -544,12 +544,12 @@ function NavGroups({ query, onNavigate }: { query: string; onNavigate?: () => vo
                   className={cn(
                     "flex min-h-10 items-center gap-3 rounded-lg px-3 text-[14.5px] outline-none transition-colors",
                     active
-                      ? "bg-surface-2 font-semibold text-fg"
-                      : "font-medium text-fg/90 hover:bg-surface-2/60 active:bg-surface-2/80",
+                      ? "bg-field font-semibold text-fg"
+                      : "font-medium text-text-2 hover:bg-hover active:bg-field-focus",
                   )}
                 >
                   <Icon
-                    className={cn("size-5 shrink-0", active ? "text-fg" : "text-muted")}
+                    className={cn("size-5 shrink-0", active ? "text-fg" : "text-text-4")}
                     strokeWidth={active ? 2.2 : 1.8}
                   />
                   <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>

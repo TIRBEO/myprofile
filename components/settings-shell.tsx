@@ -28,21 +28,21 @@ import { haptic } from "@/lib/haptics";
     have room for both without the control at the end crowding the words. */
 export const ROW =
  "flex w-full items-center gap-4 px-4 py-[15px] text-left outline-none transition-colors sm:px-5 sm:py-[17px]";
-export const LIVE = "hover:bg-surface-2/50 active:bg-surface-2/70";
+export const LIVE = "hover:bg-hover active:bg-field-focus";
 /** A bare glyph, not a coin: the picture belongs to the row, not to itself. */
-export const CHIP = "flex size-7 shrink-0 items-center justify-center text-muted [&_svg]:size-[19px]";
+export const CHIP = "flex size-7 shrink-0 items-center justify-center text-text-4 [&_svg]:size-[19px]";
 /** The row's own line. It wraps rather than clipping, because the label often
     IS the setting — "Share anonymous usage data with partners" cut to two
     lines and an ellipsis stops being a question you can answer. */
-export const TITLE = "block text-[15.5px] leading-[1.35] font-medium";
-export const SUB = "mt-[3px] block text-[13.5px] leading-[1.45] text-muted";
+export const TITLE = "block text-[16px] leading-[1.35] font-medium";
+export const SUB = "mt-[3px] block text-[14px] leading-[1.45] text-text-3";
 
 /** The square beside a record's heading — the same tile on every detail page,
     so a change, a sign-in and a deleted item are all introduced the same way.
     A clean raised surface with a strong glyph, not a tinted slab: the colour
     belongs to the record's state, which the heading and the flags carry. */
 export const TILE =
-  "flex size-[62px] shrink-0 items-center justify-center rounded-2xl bg-surface-3 text-fg [&_svg]:size-[26px]";
+  "flex size-[62px] shrink-0 items-center justify-center rounded-[18px] border border-hairline bg-field text-fg [&_svg]:size-[26px]";
 
 export function SettingsPage({
   title,
@@ -97,13 +97,13 @@ export function SettingsPage({
       ) : null}
 
       {inBar ? (
-        <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-3 flex items-center gap-1 border-b border-divider bg-bg/85 px-1.5 py-1.5 backdrop-blur-xl sm:-mx-6 sm:-mt-9 lg:hidden">
+        <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-3 flex items-center gap-1 border-b border-hairline bg-glass px-1.5 py-1.5 backdrop-blur-xl sm:-mx-6 sm:-mt-9 lg:hidden">
           {back ? (
             <Link
               href={back}
               aria-label={`Back to ${titleFor(back)}`}
               onClick={() => haptic("light")}
-              className="flex size-10 shrink-0 items-center justify-center rounded-full text-fg outline-none transition-colors hover:bg-surface-2 active:bg-surface-3"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full text-fg outline-none transition-colors hover:bg-hover active:bg-field-focus"
             >
               <ChevronLeft className="size-[22px]" strokeWidth={2.2} />
             </Link>
@@ -190,7 +190,7 @@ export function Breadcrumb({ items }: { items: { label: string; href?: string }[
             <Link
               href={item.href}
               onClick={() => haptic("light")}
- className="inline-flex min-h-10 items-center truncate rounded-full px-2 py-1 outline-none transition-colors hover:bg-surface-2 hover:text-fg"
+ className="inline-flex min-h-10 items-center truncate rounded-full px-2 py-1 outline-none transition-colors hover:bg-hover hover:text-fg"
             >
               {item.label}
             </Link>
@@ -215,7 +215,7 @@ function BackLink({ href }: { href: string }) {
       aria-label={`Back to ${label}`}
       onClick={() => haptic("light")}
       className={cn(
-        "group -ml-2.5 inline-flex min-h-11 max-w-full items-center gap-1 rounded-lg py-2 pr-3 pl-2 text-[15px] font-semibold text-fg outline-none transition-colors hover:bg-surface-2 active:bg-surface-3",
+        "group -ml-2.5 inline-flex min-h-11 max-w-full items-center gap-1 rounded-lg py-2 pr-3 pl-2 text-[15px] font-semibold text-fg outline-none transition-colors hover:bg-hover active:bg-field-focus",
       )}
     >
       <ChevronLeft
@@ -261,19 +261,17 @@ export function SectionTitle({
   return (
     <div className="mt-9 mb-3 first:mt-0">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-fg">{children}</h2>
+        <h2 className="text-[19px] font-semibold tracking-[-0.01em] text-fg">{children}</h2>
         {action}
       </div>
-      {desc ? <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-muted">{desc}</p> : null}
+      {desc ? <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-text-3">{desc}</p> : null}
     </div>
   );
 }
 
-/** A section of rows, unboxed: a plain list on the page, the rows divided by
-    one full-width hairline each. No frame, no fill, no shadow — the heading
-    above says what the block is, and the hairlines say what belongs to it.
-    The same container serves nav rows and read-only detail rows, so one look
-    runs through the app. */
+/** A section of rows, boxed the accounts way: a rounded charcoal plate with a
+    hairline frame and full-width dividers between the lines. The heading
+    above says what the block is; the frame says where it ends. */
 export function Group({
   children,
   dimmed,
@@ -288,7 +286,10 @@ export function Group({
       role={label ? "radiogroup" : undefined}
       aria-label={label}
       aria-disabled={dimmed || undefined}
-      className={cn("list-divide transition-opacity duration-200", dimmed && "pointer-events-none opacity-45")}
+      className={cn(
+        "overflow-hidden rounded-2xl border border-border bg-card divide-y divide-divider transition-opacity duration-200",
+        dimmed && "pointer-events-none opacity-45",
+      )}
     >
       {children}
     </div>
@@ -349,13 +350,13 @@ export function SwitchVisual({ on }: { on: boolean }) {
     <span
       aria-hidden
       className={cn(
-        "relative inline-flex h-7 w-[46px] shrink-0 items-center rounded-full transition-colors duration-200",
-        on ? "bg-accent" : "bg-track",
+        "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200",
+        on ? "bg-ig" : "bg-track",
       )}
     >
       <span
         className={cn(
-          "block size-[22px] rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)] transition-transform duration-200 ease-out motion-reduce:transition-none",
+          "block size-6 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)] transition-transform duration-200 ease-out motion-reduce:transition-none",
           on ? "translate-x-[22px]" : "translate-x-[2px]",
         )}
       />
@@ -417,9 +418,9 @@ export function ToggleRow({
   );
 }
 
-/** A name, its one-line description, and the plain list of rows under it —
-    no frame, just hairlines between the lines. The name sits above the list
-    so the block reads as one decision with its explanation, not a form. */
+/** A name, its one-line description, and the boxed list of rows under it —
+    the accounts Group skin. The name sits above the box so the block reads
+    as one decision with its explanation, not a form. */
 export function Panel({
   title,
   sub,
@@ -441,14 +442,14 @@ export function Panel({
   return (
     <section id={id} className={cn(id && "scroll-mt-20", className)}>
       <div className="mb-3 px-1">
-        <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
+        <h2 className="text-[19px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
         {sub ? (
-          <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-muted">{sub}</p>
+          <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-text-3">{sub}</p>
         ) : null}
       </div>
       <div
         className={cn(
-          "list-divide",
+          "overflow-hidden rounded-2xl border border-border bg-card divide-y divide-divider",
           compact && "[&_a]:py-[11px] [&_button]:py-[11px]",
         )}
       >
@@ -766,7 +767,7 @@ export function SheetAction({
       }}
       className={cn(
         SHEET_ROW,
-        danger ? "text-danger-text hover:bg-danger/8 active:bg-danger/15" : "hover:bg-surface-2/60 active:bg-surface-2/80",
+        danger ? "text-danger-text hover:bg-danger/8 active:bg-danger/15" : "hover:bg-hover active:bg-field-focus",
       )}
     >
       <span className={cn("shrink-0", danger ? "text-danger-text" : "text-muted")}>{icon}</span>
@@ -793,7 +794,7 @@ export function SheetButton({
       }}
       className={cn(
         SHEET_ROW,
-        danger ? "text-danger-text hover:bg-danger/8 active:bg-danger/15" : "hover:bg-surface-2/60 active:bg-surface-2/80",
+        danger ? "text-danger-text hover:bg-danger/8 active:bg-danger/15" : "hover:bg-hover active:bg-field-focus",
       )}
     >
       <span className="min-w-0 flex-1 text-[15px] font-medium">{label}</span>

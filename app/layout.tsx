@@ -22,9 +22,11 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Lets the tab bar sit under the home indicator on notched devices.
   viewportFit: "cover",
+  // Follows the palette the boot script picks, so the browser chrome matches
+  // the canvas underneath it instead of always being black.
   themeColor: [
     { media: "(prefers-color-scheme: dark)", color: "#000000" },
-    { media: "(prefers-color-scheme: light)", color: "#f4f4f6" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
   ],
 };
 

@@ -28,6 +28,19 @@
  */
 
 import { Pool, type PoolClient } from "pg";
+import { setDefaultResultOrder } from "node:dns";
+import { setDefaultAutoSelectFamily } from "node:net";
+
+// pg hands the socket nothing but (port, host), so a `family` on the pool
+// config is dropped and an AAAA-first answer on a host with no IPv6 route dies
+// as ENETUNREACH. Node's Happy Eyeballs ignores --dns-result-order=ipv4first,
+// hence both setters.
+try {
+  setDefaultAutoSelectFamily(false);
+  setDefaultResultOrder("ipv4first");
+} catch {
+  /* runtimes without these setters keep their defaults */
+}
 
 const g = globalThis as unknown as { __myprofilePool?: Pool };
 
@@ -70,10 +83,8 @@ export type DirectReadResult =
   | { kind: "not_found" }
   | { kind: "unavailable" };
 
-/* The tables live in Postgres schemas (the main API's Prisma multi-schema
-   layout): users + user_profile + user_phone under "user", emails under
-   "email". Correlated subqueries keep the row cardinality at one, the way
-   Prisma's includes did. */
+/* Single-schema layout: every table lives in "public". Correlated subqueries
+   keep the row cardinality at one, the way Prisma's includes did. */
 const READ_SQL = `
 SELECT
   u.id, u.username, u.status,
@@ -84,12 +95,12 @@ SELECT
   p.job_role AS "jobRole", p.job_company AS "jobCompany",
   p.job_place AS "jobPlace", p.job_started AS "jobStarted",
   p.skills, COALESCE(p.followers, 0) AS followers, COALESCE(p.following, 0) AS following,
-  (SELECT e.address FROM "email".user_email e
+  (SELECT e.address FROM "public".user_email e
     WHERE e.user_id = u.id AND e.kind = 'primary' LIMIT 1) AS email,
   ph.number AS "phoneNumber"
-FROM "user".users u
-LEFT JOIN "user".user_profile p ON p.user_id = u.id
-LEFT JOIN "user".user_phone ph ON ph.user_id = u.id
+FROM "public".users u
+LEFT JOIN "public".user_profile p ON p.user_id = u.id
+LEFT JOIN "public".user_phone ph ON ph.user_id = u.id
 WHERE u.id = $1
 LIMIT 1`;
 

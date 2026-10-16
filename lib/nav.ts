@@ -69,9 +69,9 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         href: "/settings/appearance",
         label: "Appearance",
-        description: "Light, dark or system theme",
+        description: "The black palette this app uses",
         icon: Palette,
-        keywords: "theme dark light system colour color appearance",
+        keywords: "theme dark colour color appearance palette",
       },
     ],
   },

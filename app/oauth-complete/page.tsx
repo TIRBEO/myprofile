@@ -1,29 +1,30 @@
 "use client";
 
 /* ════════════════════════════════════════════════════════════════════
-   OAuth completion screen — Accounts app IG design
+   OAuth completion screen — the Accounts app's sign-in surface
 
-   Visual design: mirrors the Tirbeo Accounts app (accounts.tirbeo.com)
-   — the Instagram-style quiet dark: canvas #101014 behind a photograph,
-   a rgba(18,18,21,0.72) glass plate card with a white/[0.09] hairline,
-   text in rgba(255,255,255,0.96) / 0.76 / 0.62 / 0.48, the one #0064c8
-   accent for primary button fills only, transparent inputs on a
-   white/[0.07] field plate, 52px rounded-xl buttons, the BrandMark
-   logo from /logo-opt.png.
+   Visual design: the same shell the accounts app signs people in with,
+   through the classes ported into globals.css — `.login-page` canvas
+   (charcoal, two-tone from 1280px up), a transparent borderless
+   `.login-card` column that scales in em, `--field` plates, one
+   dark-red accent for the action fill, and the fixed wordmark + legal
+   bar. No photograph, no glass plate: an account is created on the
+   same surface that signs people in, so it looks like it.
 
    ─────────────────────────────────────────────────────────────
    All logic preserved: API calls (oauth/pending, username-exists,
    oauth/complete, oauth-consent), state management, debounced username
    check, file upload validation, form submission, avatar editor, legal
-   modal, and ALL content text. Only the visual design changed.
+   modal, and ALL content text.
    ════════════════════════════════════════════════════════════════════ */
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Camera, Check, Loader2, X, Eye, EyeOff, FileText, ShieldCheck } from "lucide-react";
+import { Camera, Check, Loader2, X, Eye, EyeOff, FileText, ShieldCheck, TriangleAlert } from "lucide-react";
 import { createPortal } from "react-dom";
 import { ProfilePicture } from "@/components/profile-picture";
 import { AvatarEditor } from "@/components/avatar-editor";
+import { ProviderGlyph } from "@/components/provider-glyph";
 import { haptic } from "@/lib/haptics";
 
 function cn(...parts: (string | false | null | undefined)[]) {
@@ -45,60 +46,11 @@ function apiBase(): string {
     5 MB cap keeps a phone's full-resolution export from bloating the row. */
 const PHOTO_LIMIT = 5 * 1024 * 1024;
 
-/* ════════════════════════════════════════════════════════════════════
-   IG quiet dark palette — Account app tokens, pinned here so nothing
-   bleeds from the landing ember theme that used to live on this page.
-   ════════════════════════════════════════════════════════════════════ */
-const C = {
-  canvas: "#101014",
-  card: "rgba(18, 18, 21, 0.72)",
-  cardBorder: "rgba(255, 255, 255, 0.09)",
-
-  ink: "rgba(255, 255, 255, 0.96)",
-  secondary: "rgba(255, 255, 255, 0.76)",
-  hint: "rgba(255, 255, 255, 0.62)",
-  disabled: "rgba(255, 255, 255, 0.48)",
-  placeholder: "rgba(255, 255, 255, 0.45)",
-
-  ig: "#0064c8",
-  igHover: "#0058b3",
-  igPress: "#004f9e",
-
-  fieldBg: "rgba(255, 255, 255, 0.07)",
-  fieldBorder: "rgba(255, 255, 255, 0.16)",
-  fieldHover: "rgba(255, 255, 255, 0.25)",
-  fieldFocusBorder: "rgba(255, 255, 255, 0.35)",
-  focusRing: "rgba(255, 255, 255, 0.14)",
-
-  hair: "rgba(255, 255, 255, 0.12)",
-  hairStrong: "rgba(255, 255, 255, 0.18)",
-  surfaceHover: "rgba(255, 255, 255, 0.08)",
-
-  danger: "#ff7a7a",
-  success: "#6fd68a",
-} as const;
-
-/* Canvas — IG quiet dark: #101014 behind the photograph (desktop only). */
-const BACKDROP_STYLE: React.CSSProperties = { background: C.canvas };
-
-const PHOTO_STYLE: React.CSSProperties = {
-  backgroundImage: "url('/background.jpg')",
-  backgroundSize: "cover",
-  backgroundPosition: "center",
-  opacity: 1,
-  filter: "saturate(1.12) brightness(0.94)",
+type ExistingPreview = {
+  name: string;
+  username: string | null;
+  photoUrl: string | null;
 };
-
-/* IG's soft vignette + top sheen over the photograph. */
-const VIGNETTE_STYLE: React.CSSProperties = {
-  background:
-    "radial-gradient(circle 760px at 50% 40%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 70%)," +
-    "linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.32) 100%)",
-};
-
-/* IG's film grain — fine, neutral. */
-const GRAIN_SVG =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
 type Pending = {
   email: string;
@@ -109,13 +61,20 @@ type Pending = {
   existingAccount?: boolean;
   /** This provider identity is already connected to a Tirbeo account. */
   existingLink?: boolean;
+  /** The account that already owns this email, enough of it to recognise. */
+  existing?: ExistingPreview | null;
+  /** Accounts-app merge screen for this provider identity, pre-authorized by a
+      fresh signed token. Present only when a merge is actually possible. */
+  mergeUrl?: string | null;
 };
+
+type PendingError = {error: string; retryable?: boolean};
 
 /** One question per token, however many times the screen mounts (dev reloads,
     StrictMode double mounts). The endpoint is stateless; this just keeps the
     noise down and the answer consistent across remounts. */
-const pendingQueries = new Map<string, Promise<Pending & { error?: string }>>();
-function fetchPending(token: string): Promise<Pending & { error?: string }> {
+const pendingQueries = new Map<string, Promise<Pending & Partial<PendingError>>>();
+function fetchPending(token: string): Promise<Pending & Partial<PendingError>> {
   const existing = pendingQueries.get(token);
   if (existing) return existing;
   const q = fetch(`${apiBase()}/api/auth/oauth/pending?token=${encodeURIComponent(token)}`, {
@@ -123,20 +82,31 @@ function fetchPending(token: string): Promise<Pending & { error?: string }> {
   })
     .then((r) => r.json())
     .then((d) => {
-      if (d?.error) { pendingQueries.delete(token); return { ...d, error: d.error } as Pending & { error: string }; }
-      return d as Pending & { error?: string };
+      if (d?.error) { pendingQueries.delete(token); return { ...d, error: d.error } as Pending & PendingError; }
+      return d as Pending;
     })
     .catch(() => {
       pendingQueries.delete(token);
-      return { email: "", name: "", photoUrl: null, error: "Tirbeo couldn't be reached. Check your connection and try again." } as Pending & { error: string };
+      return { email: "", name: "", photoUrl: null, error: "Tirbeo couldn't be reached. Check your connection and try again.", retryable: true } as Pending & PendingError;
     });
   pendingQueries.set(token, q);
   return q;
 }
 
+/** Ask the account service again, ignoring the cached answer. Used when a
+    create attempt comes back saying the address was claimed — the form on
+    screen is now the wrong question, and the fresh answer carries the merge
+    offer for the account that appeared. */
+async function recheckPending(token: string): Promise<Pending & Partial<PendingError>> {
+  pendingQueries.delete(token);
+  return fetchPending(token);
+}
+
 /** Where the accounts app lives — it owns sign-in, so "link to my existing
-    account" hands the person over there with the pending provider token. */
-function accountsLoginUrl(token: string, redirectTo?: string): string {
+    account" hands the person over there. With a token the pending provider
+    identity gets attached as soon as they land in; without one this is the
+    plain entry screen, which is the right place for "that isn't me". */
+function accountsHost(): string {
   let base = "";
   if (typeof window !== "undefined") {
     const parent = window.location.hostname.match(/(?:^|\.)(tirbeo\.(?:com|app))$/i);
@@ -148,11 +118,32 @@ function accountsLoginUrl(token: string, redirectTo?: string): string {
       ? fromEnv.replace(/\/+$/, "")
       : process.env.NODE_ENV === "development" ? "http://localhost:3002" : "https://accounts.tirbeo.com";
   }
-  const url = new URL(`${base}/login`);
-  url.searchParams.set("link_token", token);
+  return base;
+}
+
+function accountsLoginUrl(token?: string | null, redirectTo?: string): string {
+  const url = new URL(`${accountsHost()}/login`);
+  if (token) url.searchParams.set("link_token", token);
   if (redirectTo) url.searchParams.set("redirect_to", redirectTo);
   return url.toString();
 }
+
+/** Restart the provider handshake. Used when this identity is already
+    connected to an account: the callback then signs the person straight in
+    instead of bringing them back to a create screen. */
+function providerStartUrl(provider: string | undefined, redirectTo?: string): string {
+  if (!provider) return accountsLoginUrl(null, redirectTo);
+  const url = new URL(`${apiBase()}/api/auth/${provider}`);
+  if (redirectTo) url.searchParams.set("redirect_to", redirectTo);
+  return url.toString();
+}
+
+/** The providers' own capitalisation — "Github" reads like a typo of the brand. */
+const PROVIDER_LABELS: Record<string, string> = {
+  google: "Google",
+  github: "GitHub",
+  discord: "Discord",
+};
 
 type LegalKind = "terms" | "privacy";
 
@@ -197,25 +188,42 @@ const LEGAL: Record<LegalKind, { title: string; intro: string; sections: { title
 };
 
 /* ──────────────────────────────────────────────────────────────
-   IG quiet-dark page primitives — canvas-backed shell, glass card,
-   the one #0064c8 accent for fills, transparent field plates.
+   Page primitives — the accounts auth kit, class for class: one pill
+   shape for every action, dark-red for the fill, field plates behind a
+   label, and no card of its own (the .login-card in globals.css is that).
    ═════════════════════════════════════════════════════════════ */
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   loading?: boolean;
   variant?: "primary" | "secondary";
+  size?: "sm" | "md" | "lg";
 };
 
-/** IG action button: 52px, rounded-xl. Primary is the one place the brand
-    blue is a fill; secondary is a white/[0.07] hairline ghost. */
 const BUTTON_BASE =
   "relative inline-flex w-full select-none items-center justify-center gap-2 overflow-hidden " +
-  "rounded-xl font-semibold normal-case tracking-[-0.01em] whitespace-nowrap " +
-  "h-[52px] px-6 text-[15px] " +
-  "transition-[background-color,color,border-color,opacity,transform] duration-150 " +
-  "active:scale-[0.97] disabled:pointer-events-none disabled:active:scale-100";
+  "rounded-[18px] font-semibold normal-case tracking-[-0.01em] whitespace-nowrap " +
+  "transition-[background-color,color,border-color,opacity,transform,box-shadow] duration-150 " +
+  "disabled:pointer-events-none";
 
-function Button({loading, variant = "secondary", children, className, disabled, type = "button", ...rest}: ButtonProps) {
+const BUTTON_SIZE: Record<"sm" | "md" | "lg", string> = {
+  sm: "h-12 px-4 text-[14px]",
+  md: "h-12 px-5 text-[15px]",
+  lg: "h-[56px] px-6 text-[15px]",
+};
+
+/** Primary — the accounts `.login-cta` recipe: dark-red fill, darker on
+    press, the disabled plate rather than a faded-out button. On a
+    type="submit" inside the card, globals.css adds the gradient + lift. */
+function Button({
+  loading,
+  variant = "secondary",
+  size = "lg",
+  children,
+  className,
+  disabled,
+  type = "button",
+  ...rest
+}: ButtonProps) {
   return (
     <button
       type={type}
@@ -223,14 +231,16 @@ function Button({loading, variant = "secondary", children, className, disabled, 
       aria-busy={loading || undefined}
       className={cn(
         BUTTON_BASE,
+        BUTTON_SIZE[size],
         variant === "primary"
           ? cn(
-              "bg-ig text-white hover:bg-ig-hover active:bg-ig-press",
-              "disabled:bg-white/[0.12] disabled:text-white/40",
+              "bg-ig text-white hover:bg-ig-hover active:bg-ig-press active:scale-[0.995]",
+              "disabled:bg-surface-3 disabled:text-placeholder disabled:opacity-100 disabled:shadow-none",
             )
           : cn(
-              "border border-white/[0.18] bg-transparent text-white/85",
-              "hover:border-white/35 hover:bg-white/[0.04] hover:text-white",
+              "border border-btn-line bg-transparent text-text-2",
+              "hover:border-btn-line-hover hover:bg-hover hover:text-fg",
+              "disabled:text-text-4 disabled:opacity-100",
             ),
         className,
       )}
@@ -240,6 +250,24 @@ function Button({loading, variant = "secondary", children, className, disabled, 
         {loading ? <Loader2 className="size-4 animate-spin-slow" /> : null}
         {children}
       </span>
+    </button>
+  );
+}
+
+/** Inline text action — colour carries the affordance, 40px hit area. */
+function TextAction({children, className, ...rest}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      {...rest}
+      className={cn(
+        "inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full px-1 text-[15px] font-semibold text-text-3",
+        "transition-colors hover:text-fg active:text-text-2",
+        "focus-visible:outline-none focus-visible:text-fg",
+        className,
+      )}
+    >
+      {children}
     </button>
   );
 }
@@ -257,33 +285,34 @@ function Field({label, hint, error, required, optional, children, className}: {
   return (
     <div className={cn("mb-4", className)}>
       {label ? (
-        <label className="block text-[14px] font-medium text-white/76 mb-2">
+        <label className="tb-label">
           {label}
-          {required ? <span className="text-[#ff7a7a]"> *</span> : null}
-          {optional ? <span className="font-normal text-white/45"> (optional)</span> : null}
+          {required ? <span className="text-danger-text"> *</span> : null}
+          {optional ? <span className="font-normal text-text-4"> (optional)</span> : null}
         </label>
       ) : null}
       {children}
       {error ? (
-        <p className="mt-2 text-[14px] leading-relaxed text-[#ff7a7a]">{error}</p>
+        <p className="tb-hint tb-error">{error}</p>
       ) : hint ? (
-        <p className="mt-2 text-[14px] leading-relaxed text-white/62">{hint}</p>
+        <p className="tb-hint">{hint}</p>
       ) : null}
     </div>
   );
 }
 
-/* A field is a plate: white/[0.07] inside a white/[0.16] hairline, warmed to
-   white/[0.35] on focus with a soft white/[0.14] ring — IG's quiet input. */
+/* The accounts field plate: a solid fill that warms on hover and lights
+   accent-coloured on focus. Height and radius come from globals.css (.login-card input)
+   so the plates are the same 58px/16px as the accounts sign-in form. */
 const CONTROL =
-  "w-full rounded-xl border border-white/[0.16] bg-white/[0.07] px-4 text-[16px] text-white " +
+  "w-full rounded-[16px] border border-transparent bg-field px-4 text-[16px] text-fg " +
   "transition-[border-color,box-shadow,background-color] duration-150 " +
-  "placeholder:text-white/40 " +
-  "hover:border-white/25 " +
-  "focus:border-white/70 focus:bg-white/[0.1] focus:shadow-[0_0_0_3px_rgba(255,255,255,0.14)] focus:outline-none " +
+  "placeholder:text-placeholder " +
+  "hover:bg-field-hover " +
+  "focus:border-ig-hover focus:bg-field-focus focus:shadow-[0_0_0_3px_var(--accent-soft-ring)] focus:outline-none " +
   "disabled:opacity-50";
 
-/** Text input — IG field styling (white/[0.07] plate, rounded-xl, h-12). */
+/** Text input — accounts field styling (bg-field plate, rounded-2xl, h-12). */
 function TextInput({
   value,
   onChange,
@@ -323,9 +352,8 @@ function TextInput({
       aria-invalid={invalid}
       className={cn(
         CONTROL,
-        "h-12",
         invalid &&
-          "border-[#ff7a7a] focus:border-[#ff7a7a] focus:shadow-[0_0_0_3px_rgba(245,124,124,0.25)]",
+          "border-danger focus:border-danger focus:shadow-[0_0_0_3px_rgba(240,86,106,0.25)]",
         className,
       )}
     />
@@ -358,17 +386,17 @@ function PasswordField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoComplete={autoComplete}
-        className={cn(CONTROL, "h-12 pr-12")}
+        className={cn(CONTROL, "pr-12")}
       />
       <button
         type="button"
         tabIndex={-1}
         onClick={() => setVisible((v) => !v)}
         className={cn(
-          "absolute top-1/2 right-2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full text-white/60",
-          "hover:bg-white/[0.06] hover:text-white",
+          "absolute top-1/2 right-2 -translate-y-1/2 flex size-10 items-center justify-center rounded-full text-text-4",
+          "hover:bg-hover hover:text-fg",
           "transition-colors",
-          visible ? "bg-white/[0.08] text-white" : "",
+          visible ? "bg-field-focus text-fg" : "",
         )}
         aria-label={visible ? "Hide password" : "Show password"}
       >
@@ -379,24 +407,34 @@ function PasswordField({
 }
 
 /** IG consent checkbox — matches accounts ConsentCheck: a hairline square
-    that fills the white when on, with a black check mark SVG. */
+    that fills the white when on, with a black check mark SVG.
+
+    A span, not a button: the label carries Terms/Privacy buttons, and a
+    <button> may not contain another one (invalid HTML, hydration error). */
 function Checkbox({checked, onChange, children}: {
   checked: boolean;
   onChange: (next: boolean) => void;
   children: React.ReactNode;
 }) {
+  const toggle = () => {
+    haptic("selection");
+    onChange(!checked);
+  };
   return (
-    <button
-      type="button"
+    <span
       role="checkbox"
       aria-checked={checked}
-      onClick={() => {
-        haptic("selection");
-        onChange(!checked);
+      tabIndex={0}
+      onClick={toggle}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          toggle();
+        }
       }}
       className={cn(
-        "group flex w-full items-start gap-3 rounded-xl text-left transition-colors",
-        "disabled:pointer-events-none disabled:opacity-40",
+        "group flex w-full cursor-pointer items-start gap-3 rounded-xl text-left transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
       )}
     >
       <span
@@ -412,12 +450,38 @@ function Checkbox({checked, onChange, children}: {
           </svg>
         ) : null}
       </span>
-      <span className="min-w-0 flex-1 text-[14px] leading-relaxed text-white/80">{children}</span>
-    </button>
+      <span className="min-w-0 flex-1 text-[14px] leading-relaxed text-text-2">{children}</span>
+    </span>
   );
 }
 
-/** IG toggle row — #0064c8 when on, white/[0.07] track when off. */
+/** The two legal documents, as inline buttons inside the consent label. */
+function Agreement({onOpen}: {onOpen: (kind: LegalKind) => void}) {
+  const link = "font-semibold text-fg underline underline-offset-2";
+  return (
+    <>
+      I agree to the{" "}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); haptic("light"); onOpen("terms"); }}
+        className={link}
+      >
+        Terms of Service
+      </button>{" "}
+      and the{" "}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); haptic("light"); onOpen("privacy"); }}
+        className={link}
+      >
+        Privacy Policy
+      </button>
+      , and confirm the details above are mine.
+    </>
+  );
+}
+
+/** IG toggle row — dark-red when on, the track colour when off. */
 function ToggleRow({title, sub, on, onChange}: {
   title: string;
   sub: string;
@@ -427,27 +491,28 @@ function ToggleRow({title, sub, on, onChange}: {
   return (
     <div className="flex items-center justify-between py-3.5">
       <div className="min-w-0 flex-1 pr-4">
-        <span className="block text-[14.5px] font-medium text-white/90">{title}</span>
-        <span className="mt-0.5 block text-[13px] leading-relaxed text-white/62">{sub}</span>
+        <span className="block text-[14.5px] font-medium text-fg">{title}</span>
+        <span className="mt-0.5 block text-[13px] leading-relaxed text-text-3">{sub}</span>
       </div>
       <button
         type="button"
         role="switch"
         aria-checked={on}
+        /* A switch with no name is announced as just "switch, off" — the label
+           sits in a sibling column, so it has to be named explicitly. */
+        aria-label={title}
         onClick={() => {
           haptic("light");
           onChange(!on);
         }}
         className={cn(
-          "relative inline-flex h-7 w-[46px] shrink-0 items-center rounded-full border transition-colors duration-200",
-          on
-            ? "border-transparent bg-[#0064c8]"
-            : "border-white/[0.2] bg-white/[0.07]",
+          "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200",
+          on ? "bg-ig" : "bg-track",
         )}
       >
         <span
           className={cn(
-            "block size-[22px] rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
+            "block size-6 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
             "transition-transform duration-200 ease-out motion-reduce:transition-none",
             on ? "translate-x-[22px]" : "translate-x-[2px]",
           )}
@@ -459,24 +524,28 @@ function ToggleRow({title, sub, on, onChange}: {
 
 /** Username availability badge — shows below the username field. */
 function UsernameStatus({state, message}: {
-  state: "idle" | "checking" | "available" | "taken" | "reserved" | "invalid";
+  state: "idle" | "checking" | "available" | "taken" | "reserved" | "invalid" | "error";
   message: string;
 }) {
   if (state === "idle" || !message) return null;
   let tone: string;
   let icon: React.ReactNode;
   if (state === "checking") {
-    tone = "text-white/62";
+    tone = "text-text-3";
     icon = <Loader2 className="size-[13px] animate-spin-slow" />;
   } else if (state === "available") {
-    tone = "text-[#6fd68a]";
+    tone = "text-success-text";
     icon = <Check className="size-[14px]" strokeWidth={3} />;
+  } else if (state === "error") {
+    // The service failed, not the name. Amber, and it must not block submit.
+    tone = "text-warn-text";
+    icon = <TriangleAlert className="size-[14px]" strokeWidth={2.5} />;
   } else {
-    tone = "text-[#ff7a7a]";
+    tone = "text-danger-text";
     icon = <X className="size-[14px]" strokeWidth={3} />;
   }
   return (
-    <p className={cn("flex items-center gap-1.5 mt-1 text-[12.5px] font-medium", tone)}>
+    <p className={cn("tb-hint flex items-center gap-1.5 font-medium", tone)}>
       {icon}
       {message}
     </p>
@@ -488,40 +557,42 @@ function PanelSkeleton() {
   return (
     <div className="space-y-6" aria-busy={true}>
       <div className="flex flex-col items-center gap-4">
-        <span className="size-28 animate-pulse rounded-full bg-white/10" />
-        <span className="block h-[18px] w-[60%] animate-pulse rounded bg-white/10" />
-        <span className="block h-[13px] w-[80%] animate-pulse rounded bg-white/5" />
+        <span className="size-28 animate-pulse rounded-full bg-field" />
+        <span className="block h-[18px] w-[60%] animate-pulse rounded bg-field" />
+        <span className="block h-[13px] w-[80%] animate-pulse rounded bg-field/60" />
       </div>
-      <span className="block h-[48px] animate-pulse rounded-xl bg-white/10" />
-      <span className="block h-[48px] animate-pulse rounded-xl bg-white/10" />
-      <span className="block h-[48px] animate-pulse rounded-xl bg-white/10" />
+      <span className="block h-[48px] animate-pulse rounded-2xl bg-field" />
+      <span className="block h-[48px] animate-pulse rounded-2xl bg-field" />
+      <span className="block h-[48px] animate-pulse rounded-2xl bg-field" />
     </div>
   );
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Logo — IG BrandMark: logo-opt.png + word.
+   Logo — the accounts BrandMark wordmark (logo-white.webp), which the
+   `.page-brand` rule parks in the top-left corner at every width.
    ═════════════════════════════════════════════════════════════ */
 
-function BrandMark() {
+function BrandMark({className = ""}: {className?: string}) {
   return (
-    <span className="inline-flex items-center gap-2.5">
-      <img
-        src="/logo-opt.png"
-        alt=""
-        decoding="async"
-        className="h-[30px] w-auto object-contain"
-      />
-      <span className="font-semibold tracking-[-0.035em] text-white text-[24px]">
-        Tirbeo
-      </span>
-    </span>
+    <img
+      src="/logo-white.webp"
+      alt="Tirbeo"
+      width={600}
+      height={200}
+      decoding="async"
+      className={cn("h-[30px] w-auto object-contain", className)}
+    />
   );
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Legal modal — the IG glass card: canvas-dim scrim, transparent
-   rgba(18,18,21,0.72) plate with a white/[0.09] hairline.
+   Legal modal — the accounts sheet look: dimmed canvas scrim,
+   frosted glass plate on a hairline, 22px corners.
+
+   It portals to <body>, outside the .login-page subtree, so it carries
+   the .auth-dark pin itself — otherwise a light-theme visitor got a
+   white-on-white sheet.
    ═════════════════════════════════════════════════════════════ */
 
 function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
@@ -530,28 +601,27 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+      className="auth-dark fixed inset-0 z-[90] flex items-center justify-center p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={doc.title}
     >
-      {/* Scrim — canvas #101014, dimmed */}
-      <div className="absolute inset-0 bg-[#101014]/75 backdrop-blur-[2px]" />
+      {/* Scrim — canvas, dimmed */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
 
-      {/* Panel — IG glass card: transparent plate, white/[0.09] hairline */}
+      {/* Panel — glass plate on a hairline */}
       <div
         className={cn(
-          "relative z-[91] flex w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl glass text-fg sm:max-w-3xl sm:rounded-3xl",
-          "shadow-[0_32px_100px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.07),inset_0_0_80px_rgba(0,0,0,0.55)]",
-          "backdrop-blur-[40px] backdrop-saturate-150 max-sm:backdrop-blur-none max-sm:backdrop-saturate-100",
+          "relative z-[91] flex w-full max-w-3xl flex-col overflow-hidden rounded-t-[22px] border border-hairline bg-glass-2 text-fg backdrop-blur-xl sm:max-w-3xl sm:rounded-[22px]",
+          "shadow-[0_32px_100px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.07)]",
         )}
         onClick={(e) => e.stopPropagation()}
         style={{maxHeight: "80dvh"}}
       >
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-divider px-5 py-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/12 text-white/70">
+            <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-field text-text-2">
               {kind === "terms" ? (
                 <FileText className="size-[18px]" />
               ) : (
@@ -559,8 +629,8 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
               )}
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-[22px] text-white/90">{doc.title}</h2>
-              <p className="text-[15px] text-white/45">Tirbeo</p>
+              <h2 className="truncate text-[22px] text-fg">{doc.title}</h2>
+              <p className="text-[15px] text-text-4">Tirbeo</p>
             </div>
           </div>
           <button
@@ -577,8 +647,8 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
           <div className="space-y-5 py-1">
             {doc.sections.map((section) => (
               <section key={section.title}>
-              <h3 className="text-[15px] font-semibold text-white">{section.title}</h3>
-              <p className="mt-1.5 text-[14px] leading-relaxed text-white/70">{section.body}</p>
+              <h3 className="text-[15px] font-semibold text-fg">{section.title}</h3>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-text-3">{section.body}</p>
               </section>
             ))}
           </div>
@@ -590,8 +660,9 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
             onClick={onClose}
             className={cn(
               BUTTON_BASE,
+              BUTTON_SIZE.md,
               "bg-ig text-white hover:bg-ig-hover active:bg-ig-press",
-              "disabled:bg-white/[0.12] disabled:text-white/40",
+              "disabled:bg-surface-3 disabled:text-placeholder",
             )}
           >
             I understand
@@ -616,6 +687,7 @@ function Complete() {
 
   const [pending, setPending] = useState<Pending | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [loadRetryable, setLoadRetryable] = useState(false);
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -632,7 +704,7 @@ function Complete() {
      stops, so a taken name is caught here rather than after the person has
      filled the whole form and pressed the one button. */
   const [usernameState, setUsernameState] = useState<
-    "idle" | "checking" | "available" | "taken" | "reserved" | "invalid"
+    "idle" | "checking" | "available" | "taken" | "reserved" | "invalid" | "error"
   >("idle");
   const [usernameMsg, setUsernameMsg] = useState("");
 
@@ -645,8 +717,10 @@ function Complete() {
     fetchPending(signupToken)
       .then((d) => {
         if (dead) return;
-        if (d?.error) setLoadError(d.error);
-        else {
+        if (d?.error) {
+          setLoadError(d.error);
+          setLoadRetryable(!!d.retryable);
+        } else {
           setPending(d as Pending);
           setName(d.name || "");
           setPhoto(d.photoUrl || null);
@@ -683,10 +757,20 @@ function Complete() {
         headers: {"content-type": "application/json"},
         body: JSON.stringify({username: handle}),
       })
-        .then((r) => r.json())
-        .then((d) => {
+        .then(async (r) => {
+          const d = await r.json().catch(() => null);
           if (dead) return;
-          if (d?.reserved) {
+          // A failed lookup says nothing about the name. Treating it as
+          // "invalid" blamed the person's typing for the service being down.
+          if (!r.ok || !d) {
+            setUsernameState("error");
+            setUsernameMsg("Couldn't check availability — the name is verified when you submit.");
+            return;
+          }
+          if (d.valid === false) {
+            setUsernameState("invalid");
+            setUsernameMsg("3–30 characters: letters, numbers, - or _.");
+          } else if (d?.reserved) {
             setUsernameState("reserved");
             setUsernameMsg("That name is reserved.");
           } else if (d?.taken || d?.exists) {
@@ -696,8 +780,8 @@ function Complete() {
             setUsernameState("available");
             setUsernameMsg(`${handle} is available.`);
           } else {
-            setUsernameState("invalid");
-            setUsernameMsg("3–30 characters: letters, numbers, - or _.");
+            setUsernameState("error");
+            setUsernameMsg("Couldn't check availability — the name is verified when you submit.");
           }
         })
         .catch(() => {
@@ -714,9 +798,7 @@ function Complete() {
   }, [signupToken, username]);
 
   const finishTarget = redirectTo || "/";
-  const providerName = pending?.provider
-    ? pending.provider.charAt(0).toUpperCase() + pending.provider.slice(1)
-    : "your provider";
+  const providerName = PROVIDER_LABELS[pending?.provider ?? ""] ?? "your provider";
 
   function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -770,9 +852,27 @@ function Complete() {
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d?.ok) {
+        /* An address claimed while this form was open is not a mistake to
+           repeat. Ask again, and show what the person can do with the account
+           that turned up — merge or sign in — instead of a dead end. */
+        if (d?.accountExists && signupToken) {
+          const fresh = await recheckPending(signupToken);
+          if (fresh.existingAccount || fresh.existingLink) {
+            setPending(fresh);
+            haptic("error");
+            setBusy(false);
+            return;
+          }
+        }
         /* The account's reason beats ours: a taken username, a breached
            password, an expired link — each needs a different fix. */
         setError(d?.error || "Tirbeo couldn't finish this. Please try again.");
+        // The server has the last word on the name, so make the field say so
+        // and keep "Create account" disabled until it is changed.
+        if (d?.usernameTaken) {
+          setUsernameState("taken");
+          setUsernameMsg("That username is already taken.");
+        }
         haptic("error");
         setBusy(false);
         return;
@@ -786,55 +886,60 @@ function Complete() {
   }
 
   /* ─────────────────────────────────────────────────────
-     Shell — the IG quiet dark: #101014 canvas behind the
-     photograph, a glass-plate card with a white/[0.09] hairline,
-     film grain, BrandMark at the top.
+     Shell — the accounts sign-in surface. `.login-page` paints the
+     canvas (flat charcoal, the two-tone split from 1280px up), the
+     wordmark rides the top-left corner, `.login-card` is the em-scaled
+     column, and the muted legal bar sits under everything. Every rule
+     is globals.css, ported from the accounts app — this only assembles
+     the same parts in the same order.
      ════════════════════════════════════════════════════ */
-  function shell(children: React.ReactNode, wide = false) {
+  function shell(children: React.ReactNode, opts: {
+    wide?: boolean;
+    lead?: React.ReactNode;
+    kicker?: string;
+    title?: React.ReactNode;
+    sub?: React.ReactNode;
+    footer?: React.ReactNode;
+  } = {}) {
     return (
-      <main
-        className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-8"
-        style={BACKDROP_STYLE}
-      >
-        {/* Photograph (desktop only) — the accounts app sf-bg backdrop */}
-        <div className="absolute inset-0 hidden sm:block" style={PHOTO_STYLE} />
+      <div className="login-page">
+        <BrandMark className="page-brand" />
 
-        {/* IG's soft vignette + top sheen over the photograph */}
-        <div className="absolute inset-0 hidden sm:block" style={VIGNETTE_STYLE} />
+        {/* display:contents makes the card a direct child of the page, so the
+            centring and the portrait bottom-sheet pin come from .login-page. */}
+        <main className="contents">
+          <div className="login-card animate-fade-in" data-wide={opts.wide || undefined}>
+            {opts.lead || opts.title || opts.kicker || opts.sub ? (
+              <header className="login-head">
+                {opts.lead ? <div className="mb-4 flex justify-center">{opts.lead}</div> : null}
+                {opts.kicker ? <p className="login-kicker mt-0">{opts.kicker}</p> : null}
+                {opts.title ? (
+                  <h1 className={cn("tb-heading", opts.kicker ? "mt-[0.42em]" : "mt-0")}>{opts.title}</h1>
+                ) : null}
+                {opts.sub ? <p className="tb-sub mt-[0.7em]">{opts.sub}</p> : null}
+              </header>
+            ) : null}
 
-        {/* Film grain — the IG texture, neutral opacity */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 hidden sm:block"
-          style={{backgroundImage: GRAIN_SVG, opacity: 0.035, backgroundSize: "160px 160px"}}
-        />
-
-        <div className={cn("relative z-10 w-full", wide ? "max-w-[560px]" : "max-w-[560px]")}>
-          {/* Card — IG glass plate: rgba(18,18,21,0.72), white/[0.09] hairline */}
-          <div
-            className={cn(
-              "animate-fade-in relative w-full rounded-3xl border border-white/[0.09] bg-black/75 p-6 sm:p-8",
-              "shadow-[0_32px_100px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.07),inset_0_0_80px_rgba(0,0,0,0.55)]",
-              "max-sm:backdrop-blur-none max-sm:backdrop-saturate-100",
-              "backdrop-blur-[40px] backdrop-saturate-150",
-              "w-full",
-              wide && "md:px-10 md:py-10",
-            )}
-          >
-            {wide ? children : (
-              <>
-                <a
-                  href="/"
-                  aria-label="Tirbeo home"
-                  className="mb-8 flex justify-center py-1 transition-opacity duration-200 hover:opacity-80"
-                >
-                  <BrandMark />
-                </a>
-                {children}
-              </>
-            )}
+            <div className="login-form">
+              {children}
+              {opts.footer ? <p className="login-terms">{opts.footer}</p> : null}
+            </div>
           </div>
-        </div>
+        </main>
+
+        <footer className="legal-bar">
+          <nav className="legal-links" aria-label="Footer">
+            <button type="button" onClick={() => setLegal("terms")}>Terms of Service</button>
+            <button type="button" onClick={() => setLegal("privacy")}>Privacy Policy</button>
+            <a href="https://tirbeo.com" target="_blank" rel="noreferrer">About</a>
+            <a href="https://tirbeo.com/help" target="_blank" rel="noreferrer">Help</a>
+          </nav>
+          <p className="legal-meta">
+            <span>English</span>
+            <span aria-hidden>·</span>
+            <span>© 2026 Tirbeo</span>
+          </p>
+        </footer>
 
         {legal ? <LegalModal kind={legal} onClose={() => setLegal(null)} /> : null}
 
@@ -858,87 +963,178 @@ function Complete() {
           className="sr-only"
           onChange={pickPhoto}
         />
-      </main>
+      </div>
     );
   }
 
   /* ──────────────── Empty-state branch ──────────────── */
   if (!signupToken && !finishing) {
     return shell(
-      <>
-        <h1 className="tb-heading">Nothing to finish</h1>
-        <p className="tb-sub mt-1.5">
-          This page completes a Tirbeo sign-in started with Google, GitHub or Discord. Start the sign-in again and you'll land back here.
-        </p>
-        <Button variant="primary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
-          Back to Tirbeo
-        </Button>
-      </>,
+      <Button variant="primary" onClick={() => { window.location.href = finishTarget; }}>
+        Back to Tirbeo
+      </Button>,
+      {
+        title: "Nothing to finish",
+        sub: "This page completes a Tirbeo sign-in started with Google, GitHub or Discord. Start the sign-in again and you'll land back here.",
+        footer: <a href={accountsLoginUrl(null, redirectTo || undefined)}>Sign in another way</a>,
+      },
     );
   }
 
-  /* ──────────────── Expired branch ──────────────── */
+  /* ──────────────── Link expired / service unreachable ────────────────
+     Two different failures, and the person needs to know which one they are
+     looking at: an expired link means start over, an unreachable service
+     means the link is probably fine — just ask again. */
   if (signupToken && loadError) {
+    if (loadRetryable) {
+      return shell(
+        <Button variant="primary" onClick={() => { window.location.reload(); }}>
+          Try again
+        </Button>,
+        {
+          title: "Tirbeo can't be reached right now",
+          sub: <>{loadError} Your sign-in link is still valid, so this is worth another go rather than starting over.</>,
+        },
+      );
+    }
     return shell(
-      <>
-        <h1 className="tb-heading">That sign-in link has expired</h1>
-        <p className="tb-sub mt-1.5">
-          {loadError} The link lasts 15 minutes and is used once, so start the sign-in again — it takes a few seconds.
-        </p>
-        <Button variant="primary" className="mt-6" onClick={() => { window.location.href = finishTarget; }}>
-          Sign in again
-        </Button>
-      </>,
+      <Button variant="primary" onClick={() => { window.location.href = finishTarget; }}>
+        Sign in again
+      </Button>,
+      {
+        title: "That sign-in link has expired",
+        sub: <>{loadError} The link lasts 15 minutes and is used once, so start the sign-in again — it takes a few seconds.</>,
+      },
     );
   }
 
   /* ──────────────── Loading skeleton ──────────────── */
-  if (signupToken && !pending) return shell(<PanelSkeleton />);
+  if (signupToken && !pending) return shell(<PanelSkeleton />, {wide: true});
 
-  /* ──────────────── Existing-account branch ────────────────
-     The email or the provider identity already belongs to an account.
-     Creating a second one is the wrong answer — hand over to the accounts
-     app, and after sign-in the pending provider gets linked to it. */
+  /* ──────────────── Already-exists branch ────────────────
+     The email or the provider identity belongs to an account Tirbeo already
+     has, so creating a second one is not on the menu — no username field, no
+     create button. What is offered is the two moves that keep one profile:
+     merge this provider into the account above, or sign in to it first and
+     let Tirbeo connect the provider afterwards. */
   if (signupToken && pending && (pending.existingAccount || pending.existingLink)) {
+    const who = pending.existing;
+    const canMerge = !!pending.mergeUrl;
     return shell(
-      <><h1 className="tb-heading">You already have a Tirbeo account</h1>
-        <p className="tb-sub mt-1.5">
-          {providerName} signed in as{" "}
-          <span className="font-medium text-white">{pending.email}</span>, and that
-          belongs to an account Tirbeo already knows. Rather than make a second one,
-          sign in and Tirbeo will connect {providerName} to it — so next time this
-          button gets you straight in.
-        </p>
-        <Button
-          variant="primary"
-          className="mt-6"
+      <>
+        {who ? (
+          <div className="flex items-center gap-3 rounded-[16px] border border-hairline bg-field p-3.5">
+            <ProfilePicture photo={who.photoUrl} seed={pending.email} name={who.name || undefined} size={48} />
+            <div className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-semibold text-fg">
+                {who.name || who.username || pending.email}
+              </span>
+              <span className="block truncate text-[13.5px] text-text-3">
+                {who.username ? `@${who.username}` : "Already on Tirbeo"}
+              </span>
+            </div>
+            <ShieldCheck className="size-[18px] shrink-0 text-success" aria-hidden />
+          </div>
+        ) : null}
+
+        {canMerge ? (
+          <>
+            <Button
+              variant="primary"
+              className="mt-4"
+              onClick={() => {
+                haptic("medium");
+                window.location.href = pending.mergeUrl!;
+              }}
+            >
+              Merge {providerName} into this account
+            </Button>
+            <p className="tb-hint mt-2 text-center text-[13.5px] text-text-4">
+              {providerName} becomes another way to sign in to the account above. Nothing is
+              duplicated and nothing is lost.
+            </p>
+            <Button
+              variant="secondary"
+              size="md"
+              className="mt-4"
+              onClick={() => {
+                haptic("light");
+                window.location.href = accountsLoginUrl(signupToken, redirectTo || undefined);
+              }}
+            >
+              Sign in to that account first
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              variant="primary"
+              className="mt-4"
+              onClick={() => {
+                haptic("medium");
+                window.location.href = providerStartUrl(pending.provider, finishTarget);
+              }}
+            >
+              Sign in with {providerName}
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              className="mt-4"
+              onClick={() => {
+                haptic("light");
+                window.location.href = accountsLoginUrl(signupToken, redirectTo || undefined);
+              }}
+            >
+              Sign in another way
+            </Button>
+          </>
+        )}
+
+        <TextAction
+          className="mt-3"
           onClick={() => {
-            haptic("medium");
-            window.location.href = accountsLoginUrl(signupToken, redirectTo || undefined);
+            haptic("light");
+            window.location.href = accountsLoginUrl(null, redirectTo || undefined);
           }}
         >
-          Sign in &amp; connect {providerName}
-        </Button>
-        <button
-          type="button"
-          onClick={() => { haptic("light"); window.location.href = finishTarget; }}
-          className="mt-4 block w-full text-center text-[13.5px] text-white/55 hover:text-white/96 transition-colors"
-        >
-          Not my account — go back
-        </button>
+          Not my account — use a different email
+        </TextAction>
       </>,
+      {
+        wide: true,
+        lead: <ProviderGlyph provider={pending.provider} className="size-[64px]" />,
+        kicker: "One account only",
+        title: pending.existingLink
+          ? `${providerName} is already connected to Tirbeo`
+          : "You already have a Tirbeo account",
+        sub: pending.existingLink ? (
+          <>
+            {providerName} signed in as <span className="font-medium text-fg">{pending.email}</span>, and
+            that identity is already connected to an account. Start the sign-in again and it takes you
+            straight in — a second account is never created over an existing one.
+          </>
+        ) : (
+          <>
+            {providerName} signed in as <span className="font-medium text-fg">{pending.email}</span>, which
+            belongs to an account Tirbeo already knows. Rather than split yourself in two, merge:{" "}
+            {providerName} becomes another way into that account.
+          </>
+        ),
+      },
     );
   }
 
   /* ──────────────── Main form ────────────────
-     Signup: no marketing column — the card is the form itself, and on a
-     PC the fields split into two columns. Consent-only finish: the narrow
-     card with its headline. */
+     Signup: the card is the form itself — no marketing column, and on a PC
+     the fields split into two. Consent-only finish: same surface, narrower. */
   if (signupToken) {
     return shell(
       <form onSubmit={submit}>
-        {/* The face, editable — tapping anywhere on it opens the file picker. */}
-        <div className="relative mx-auto w-fit">
+        {/* The face, editable — tapping anywhere on it opens the file picker.
+            The dashed ring + accent camera chip are the accounts signup
+            recipe (116px ring, 38px chip on its shoulder). */}
+        <div className="relative mx-auto mb-5 grid size-[116px] place-items-center rounded-full border-2 border-dashed border-divider bg-field">
           <button
             type="button"
             onClick={() => { haptic("light"); photoRef.current?.click(); }}
@@ -949,28 +1145,22 @@ function Complete() {
               photo={photo}
               seed={pending?.email || name || "tirbeo"}
               name={name || undefined}
-              size={88}
-              ring
+              size={106}
             />
           </button>
           <span
             aria-hidden
             className={cn(
-              "pointer-events-none absolute -right-1 -bottom-1 z-20 size-9 rounded-full",
-              "flex items-center justify-center",
-              "bg-[#0064c8] text-white",
-              "border-[3px] border-[#101014]",
+              "pointer-events-none absolute right-0 bottom-1 z-20 grid size-[38px] place-items-center rounded-full",
+              "border-[3px] border-bg bg-ig text-white",
+              "shadow-[0_6px_14px_-6px_rgba(0,0,0,0.7)]",
             )}
           >
             <Camera className="size-[17px]" strokeWidth={2.25} />
           </span>
         </div>
 
-        <h1 className="mt-4 text-center text-[21px] font-semibold tracking-[-0.025em] text-white/96">
-          {name?.trim() ? `Welcome, ${name.trim().split(/\s+/)[0]}` : "Create account"}
-        </h1>
-
-        <div className="mt-6 md:grid md:grid-cols-2 md:items-start md:gap-x-8">
+        <div className="md:grid md:grid-cols-2 md:items-start md:gap-x-5">
           {/* Row 1 — username left, password right */}
           <div>
             <Field label="Username" required>
@@ -986,7 +1176,7 @@ function Complete() {
               />
             </Field>
 
-            <div className="mb-2 min-h-[20px]">
+            <div className="mb-2 min-h-[22px]">
               <UsernameStatus state={usernameState} message={usernameMsg} />
             </div>
           </div>
@@ -1018,25 +1208,9 @@ function Complete() {
         </div>
 
         {/* Agreement, support toggle, and the create button — full width */}
-        <div className="mt-1 border-t border-white/[0.08] pt-5">
+        <div className="mt-1 border-t border-divider pt-4">
           <Checkbox checked={accepted} onChange={setAccepted}>
-            I agree to the{" "}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("terms"); }}
-              className="font-semibold text-white underline-offset-2 hover:underline"
-            >
-              Terms of Service
-            </button>{" "}
-            and the{" "}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("privacy"); }}
-              className="font-semibold text-white underline-offset-2 hover:underline"
-            >
-              Privacy Policy
-            </button>
-            , and confirm the details above are mine.
+            <Agreement onOpen={setLegal} />
           </Checkbox>
 
           <ToggleRow
@@ -1048,9 +1222,7 @@ function Complete() {
         </div>
 
         {error ? (
-          <p className="mt-4 rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
-            {error}
-          </p>
+          <p role="alert" className="form-notice form-notice-error mt-3">{error}</p>
         ) : null}
 
         <Button
@@ -1065,67 +1237,61 @@ function Complete() {
             || usernameState === "reserved"
             || usernameState === "invalid"
           }
-          className="mt-3"
+          className="mt-4"
         >
           {busy ? "Working…" : "Create account"}
         </Button>
       </form>,
-      true,
+      {
+        wide: true,
+        title: name?.trim() ? `Welcome, ${name.trim().split(/\s+/)[0]}` : "Create your account",
+        sub: (
+          <>
+            {providerName} verified <span className="font-medium text-fg">{pending?.email}</span> — that
+            is the email this account gets, and Tirbeo will not make a second one with it. Pick a
+            username and you&apos;re in.
+          </>
+        ),
+        footer: (
+          <>Already have an account?{" "}
+            <a href={accountsLoginUrl(null, redirectTo || undefined)}>Sign in</a>
+          </>
+        ),
+      },
     );
   }
 
   return shell(
-    <>
-      <h1 className="tb-heading">One thing left</h1>
-      <p className="tb-sub mt-1.5">
-        Tirbeo hasn&apos;t got your agreement on record yet. Tick it below to keep going.
-      </p>
+    <form onSubmit={submit}>
+      <Checkbox checked={accepted} onChange={setAccepted}>
+        <Agreement onOpen={setLegal} />
+      </Checkbox>
 
-      <form onSubmit={submit} className="mt-6">
-        <Checkbox checked={accepted} onChange={setAccepted}>
-          I agree to the{" "}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("terms"); }}
-            className="font-semibold text-white underline-offset-2 hover:underline"
-          >
-            Terms of Service
-          </button>{" "}
-          and the{" "}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); haptic("light"); setLegal("privacy"); }}
-            className="font-semibold text-white underline-offset-2 hover:underline"
-          >
-            Privacy Policy
-          </button>
-          , and confirm the details above are mine.
-        </Checkbox>
+      <ToggleRow
+        title="Let Tirbeo support see my account"
+        sub="For troubleshooting when you ask for help. Optional."
+        on={staffAccess}
+        onChange={setStaffAccess}
+      />
 
-        <ToggleRow
-          title="Let Tirbeo support see my account"
-          sub="For troubleshooting when you ask for help. Optional."
-          on={staffAccess}
-          onChange={setStaffAccess}
-        />
+      {error ? (
+        <p role="alert" className="form-notice form-notice-error mt-3">{error}</p>
+      ) : null}
 
-        {error ? (
-          <p className="mt-4 rounded-xl border border-[#ff7a7a]/25 bg-[rgba(245,124,124,0.06)] px-4 py-3 text-[13.5px] text-[#ff7a7a]">
-            {error}
-          </p>
-        ) : null}
-
-        <Button
-          type="submit"
-          variant="primary"
-          loading={busy}
-          disabled={!accepted || busy}
-          className="mt-3"
-        >
-          {busy ? "Working…" : "Continue"}
-        </Button>
-      </form>
-    </>,
+      <Button
+        type="submit"
+        variant="primary"
+        loading={busy}
+        disabled={!accepted || busy}
+        className="mt-4"
+      >
+        {busy ? "Working…" : "Continue"}
+      </Button>
+    </form>,
+    {
+      title: "One thing left",
+      sub: "Tirbeo hasn't got your agreement on record yet. Tick it below to keep going.",
+    },
   );
 }
 

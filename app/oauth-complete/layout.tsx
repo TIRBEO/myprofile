@@ -5,8 +5,8 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono-seg", d
 
 /** Fonts for this route segment only — the OAuth completion flow mirrors
     the Instagram-quiet dark design of the Tirbeo Accounts app
-    (accounts.tirbeo.com), with a #101014 canvas behind a photograph, a glass
-    plate card, white/[0.09] hairlines, the one #0064c8 accent for primary
+    (accounts.tirbeo.com), with a black canvas behind a photograph, a glass
+    plate card, white/[0.09] hairlines, the one dark-red accent for primary
     fills, and transparent inputs on a white/[0.07] plate. */
 export default function OAuthCompleteLayout({ children }: { children: React.ReactNode }) {
   return (

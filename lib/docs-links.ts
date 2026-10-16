@@ -81,7 +81,7 @@ const GUIDES: Record<string, GuideLink[]> = {
     { slug: "language-dates", label: "What changes and what doesn't" },
   ],
   "/settings/appearance": [
-    { slug: "theme-choice", label: "Dark, light and following the system" },
+    { slug: "theme-choice", label: "The black palette" },
   ],
   "/settings/edit-profile": [
     { slug: "change-name", label: "Changing your name" },

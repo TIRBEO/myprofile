@@ -433,44 +433,40 @@ export const PACK_B: DocArticle[] = [
   },
   {
     slug: "theme-choice",
-    title: "Dark, light and system theme",
-    sub: "Three palettes on Appearance, and why System follows your device instead of picking one.",
+    title: "The black palette",
+    sub: "One palette across the account apps — a black canvas, plates lifted off it, blue for the things you can press.",
     category: "Getting around",
-    keywords: "theme dark light system appearance mode night colors palette follow device contrast",
+    keywords: "theme dark black appearance mode night colors palette contrast charcoal",
     updated: REVIEWED,
     intro: [
-      "Appearance offers three choices, each shown as a small preview of how it looks. System isn't a fourth colour: it means match whatever your device is set to, and flip with it when the device does.",
-      "The choice is kept in this browser, so a different device or browser starts back on System until you set it. It's a display preference and touches nothing about your data.",
+      "Appearance shows a single theme, drawn as a small preview rather than described. Tirbeo sits on black: the canvas is #000 and everything on it is a slightly lighter plate, so a card, a field and a pressed row are all recognisable at a glance. Blue is kept for the actions.",
+      "It's a display preference and touches nothing about your data, so nothing you save here changes what is stored or who can see it.",
     ],
     steps: [
       {
-        title: "Read the three options",
-        body: "System says match your device's appearance; Dark is a deep charcoal built for night; Light is clean white with soft grey edges. Each row carries a miniature of its palette, so you can see the contrast before choosing.",
+        title: "Read the preview",
+        body: "The miniature on Appearance is painted with the exact colors the app uses, so what you approve there is what every other settings screen gives you — no surprises after the fact.",
         href: "/settings/appearance",
         hrefLabel: "Appearance",
       },
       {
-        title: "Choose, and it applies instantly",
-        body: "Press a row and the palette changes across the app right away, with no reload. If you pick System, the page keeps listening to the device, so a scheduled light/dark change on your machine moves the app with it.",
-      },
-      {
-        title: "Stop following the device if you want a fixed look",
-        body: "Pin Dark or Light to keep the same palette no matter what your device does. Switch back to System to hand the decision back to the operating system.",
+        title: "Nothing to switch",
+        body: "The app no longer follows your device's light/dark setting, so a scheduled change on your machine won't move it mid-task. Text stays light on a solid panel, and the blue you see marks what you can press.",
       },
     ],
     notes: [
       {
-        q: "Does my theme carry to another browser?",
-        a: "No. It's stored in this browser's own record, like the rest of these settings, so each place you open starts on System until you choose again.",
+        q: "Is there a light mode?",
+        a: "No. The account apps were rebuilt around one black palette so this app, accounts and the sign-in pages all match; the earlier light scheme was a second design that drifted from the first.",
       },
       {
-        q: "Which is the right one?",
-        a: "Whichever you can read. System is the sensible default because it matches the rest of your device, but nothing here judges a fixed choice.",
+        q: "Will my eyes thank me at noon?",
+        a: "Probably. A dark app in a bright room is a matter of taste, not of correctness — if you'd rather have the light scheme back, say so from Help and support and the team can weigh it.",
       },
     ],
     related: [
-      { label: "Appearance", href: "/settings/appearance" },
       { label: "Language", href: "/settings/language" },
+      { label: "Help and support", href: "/settings/help/support" },
     ],
   },
   {
