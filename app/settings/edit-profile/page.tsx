@@ -36,6 +36,7 @@ import { formatDate, monthNames, weekdayNames } from "@/lib/dates";
 import { checkUsername, type UsernameStatus } from "@/lib/api-client";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { trackError, trackEvent } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
 import {
   Calendar as CalendarIcon,
@@ -220,8 +221,13 @@ export default function EditProfilePage() {
     setSaving(false);
     if (!result.ok) {
       if (result.errors) {
+        trackEvent("settings.profile_save_failed", {
+          detail: "invalid",
+          metadata: { fields: Object.keys(result.errors) },
+        });
         toast.error(Object.values(result.errors)[0] ?? "Some fields need attention");
       } else {
+        trackError("edit-profile.commit", new Error(result.message ?? "profile save refused"));
         haptic("error");
         toast.error(result.message ?? "The change could not be saved.");
       }
@@ -229,6 +235,9 @@ export default function EditProfilePage() {
     }
     setBaseline(result.outcome.profile);
     setForm(result.outcome.profile);
+    trackEvent("settings.profile_updated", {
+      metadata: { unsupported: result.outcome.unsupported.length },
+    });
     if (result.outcome.unsupported.length > 0) {
       toast.error(
         `Saved — kept on this device only: ${result.outcome.unsupported.join(", ")}`,
@@ -470,7 +479,7 @@ export default function EditProfilePage() {
                       Tap to add a banner
                     </span>
                   )}
-                  <span className="pointer-events-none absolute top-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-scrim text-white">
+                  <span className="pointer-events-none absolute top-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-scrim text-accent-fg">
                     <Pencil className="size-[15px]" />
                   </span>
                 </Button>

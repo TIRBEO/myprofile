@@ -524,7 +524,7 @@ export default function ArticlePage() {
                   if (voice.playing) voice.pause();
                   else voice.play();
                 }}
-                className="size-11 bg-accent text-white hover:brightness-110 active:brightness-95 hover:text-fg"
+                className="size-11 bg-accent text-accent-fg hover:brightness-110 active:brightness-95"
                 icon={
                   voice.playing ? (
                     <Pause className="size-[19px]" strokeWidth={2.4} />

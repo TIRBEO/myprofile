@@ -4,12 +4,12 @@
    OAuth completion screen — the Accounts app's sign-in surface
 
    Visual design: the same shell the accounts app signs people in with,
-   through the classes ported into globals.css — `.login-page` canvas
-   (charcoal, two-tone from 1280px up), a transparent borderless
-   `.login-card` column that scales in em, `--field` plates, one
-   dark-red accent for the action fill, and the fixed wordmark + legal
-   bar. No photograph, no glass plate: an account is created on the
-   same surface that signs people in, so it looks like it.
+   through the classes ported into globals.css — `.login-page` canvas (pure
+   black with one soft falloff, no photograph), a transparent borderless
+   `.login-card` column that scales in em, `--field` plates, the single
+   indigo action fill, and the fixed wordmark + legal bar. No glass plate: an
+   account is created on the same surface that signs people in, so it looks
+   like it.
 
    ─────────────────────────────────────────────────────────────
    All logic preserved: API calls (oauth/pending, username-exists,
@@ -26,6 +26,7 @@ import { ProfilePicture } from "@/components/profile-picture";
 import { AvatarEditor } from "@/components/avatar-editor";
 import { ProviderGlyph } from "@/components/provider-glyph";
 import { haptic } from "@/lib/haptics";
+import { emailDomain, trackError, trackEvent, withRef } from "@/lib/telemetry";
 
 function cn(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
@@ -85,7 +86,9 @@ function fetchPending(token: string): Promise<Pending & Partial<PendingError>> {
       if (d?.error) { pendingQueries.delete(token); return { ...d, error: d.error } as Pending & PendingError; }
       return d as Pending;
     })
-    .catch(() => {
+    .catch((err) => {
+      // The page shows its own retry message; telemetry keeps the cause.
+      trackError("oauth-complete.fetch-pending", err);
       pendingQueries.delete(token);
       return { email: "", name: "", photoUrl: null, error: "Tirbeo couldn't be reached. Check your connection and try again.", retryable: true } as Pending & PendingError;
     });
@@ -189,7 +192,7 @@ const LEGAL: Record<LegalKind, { title: string; intro: string; sections: { title
 
 /* ──────────────────────────────────────────────────────────────
    Page primitives — the accounts auth kit, class for class: one pill
-   shape for every action, dark-red for the fill, field plates behind a
+   shape for every action, the indigo accent for the fill, field plates behind a
    label, and no card of its own (the .login-card in globals.css is that).
    ═════════════════════════════════════════════════════════════ */
 
@@ -201,7 +204,7 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const BUTTON_BASE =
   "relative inline-flex w-full select-none items-center justify-center gap-2 overflow-hidden " +
-  "rounded-[18px] font-semibold normal-case tracking-[-0.01em] whitespace-nowrap " +
+  "rounded-full font-semibold normal-case tracking-[-0.01em] whitespace-nowrap " +
   "transition-[background-color,color,border-color,opacity,transform,box-shadow] duration-150 " +
   "disabled:pointer-events-none";
 
@@ -211,7 +214,7 @@ const BUTTON_SIZE: Record<"sm" | "md" | "lg", string> = {
   lg: "h-[56px] px-6 text-[15px]",
 };
 
-/** Primary — the accounts `.login-cta` recipe: dark-red fill, darker on
+/** Primary — the accounts `.login-cta` recipe: accounts-blue fill, darker on
     press, the disabled plate rather than a faded-out button. On a
     type="submit" inside the card, globals.css adds the gradient + lift. */
 function Button({
@@ -234,7 +237,7 @@ function Button({
         BUTTON_SIZE[size],
         variant === "primary"
           ? cn(
-              "bg-ig text-white hover:bg-ig-hover active:bg-ig-press active:scale-[0.995]",
+              "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press active:scale-[0.995]",
               "disabled:bg-surface-3 disabled:text-placeholder disabled:opacity-100 disabled:shadow-none",
             )
           : cn(
@@ -287,7 +290,7 @@ function Field({label, hint, error, required, optional, children, className}: {
       {label ? (
         <label className="tb-label">
           {label}
-          {required ? <span className="text-danger-text"> *</span> : null}
+          {required ? <span className="text-accent-2"> *</span> : null}
           {optional ? <span className="font-normal text-text-4"> (optional)</span> : null}
         </label>
       ) : null}
@@ -434,18 +437,18 @@ function Checkbox({checked, onChange, children}: {
       }}
       className={cn(
         "group flex w-full cursor-pointer items-start gap-3 rounded-xl text-left transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-press",
       )}
     >
       <span
         aria-hidden
         className={cn(
           "mt-[1px] grid size-5 shrink-0 place-items-center rounded-[6px] border-2 transition-colors duration-150",
-          checked ? "border-white bg-white" : "border-white/30 group-hover:border-white/60",
+          checked ? "border-accent bg-accent" : "border-track group-hover:border-border-strong",
         )}
       >
         {checked ? (
-          <svg viewBox="0 0 24 24" className="size-3.5 text-black" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" className="size-3.5 text-accent-fg" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 6 9 17l-5-5" />
           </svg>
         ) : null}
@@ -481,7 +484,7 @@ function Agreement({onOpen}: {onOpen: (kind: LegalKind) => void}) {
   );
 }
 
-/** IG toggle row — dark-red when on, the track colour when off. */
+/** IG toggle row — the indigo accent when on, the track colour when off. */
 function ToggleRow({title, sub, on, onChange}: {
   title: string;
   sub: string;
@@ -512,7 +515,7 @@ function ToggleRow({title, sub, on, onChange}: {
       >
         <span
           className={cn(
-            "block size-6 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
+            "block size-6 rounded-full bg-accent-fg shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
             "transition-transform duration-200 ease-out motion-reduce:transition-none",
             on ? "translate-x-[22px]" : "translate-x-[2px]",
           )}
@@ -569,20 +572,32 @@ function PanelSkeleton() {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Logo — the accounts BrandMark wordmark (logo-white.webp), which the
-   `.page-brand` rule parks in the top-left corner at every width.
+   Logo — the accounts BrandMark wordmark: two cuts (dark ink for
+   the light canvas, white for the black one), one shown via the
+   `.brand-mark` rules in globals.css; `.page-brand` parks it in
+   the top-left corner at every width.
    ═════════════════════════════════════════════════════════════ */
 
 function BrandMark({className = ""}: {className?: string}) {
   return (
-    <img
-      src="/logo-white.webp"
-      alt="Tirbeo"
-      width={600}
-      height={200}
-      decoding="async"
-      className={cn("h-[30px] w-auto object-contain", className)}
-    />
+    <>
+      <img
+        src="/logo-dark.webp"
+        alt="Tirbeo"
+        width={600}
+        height={200}
+        decoding="async"
+        className={cn("brand-mark h-[30px] w-auto object-contain", className)}
+      />
+      <img
+        src="/logo-white.webp"
+        alt="Tirbeo"
+        width={600}
+        height={200}
+        decoding="async"
+        className={cn("brand-mark h-[30px] w-auto object-contain", className)}
+      />
+    </>
   );
 }
 
@@ -608,7 +623,7 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
       aria-label={doc.title}
     >
       {/* Scrim — canvas, dimmed */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
+      <div className="absolute inset-0 bg-scrim backdrop-blur-[2px]" />
 
       {/* Panel — glass plate on a hairline */}
       <div
@@ -661,7 +676,7 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
             className={cn(
               BUTTON_BASE,
               BUTTON_SIZE.md,
-              "bg-ig text-white hover:bg-ig-hover active:bg-ig-press",
+              "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
               "disabled:bg-surface-3 disabled:text-placeholder",
             )}
           >
@@ -784,7 +799,8 @@ function Complete() {
             setUsernameMsg("Couldn't check availability — the name is verified when you submit.");
           }
         })
-        .catch(() => {
+        .catch((err) => {
+          trackError("oauth-complete.username-check", err);
           if (!dead) {
             setUsernameState("idle");
             setUsernameMsg("");
@@ -818,6 +834,15 @@ function Complete() {
     reader.onload = () => setEditorSrc(String(reader.result));
     reader.onerror = () => setError("Your browser couldn't open that photo.");
     reader.readAsDataURL(file);
+  }
+
+  /* Metadata for the auth telemetry: provider and the email's DOMAIN only —
+     telemetry never carries the address, the token or the password. */
+  function authMeta() {
+    return {
+      provider: pending?.provider || undefined,
+      emailDomain: emailDomain(pending?.email),
+    };
   }
 
   async function submit(e: React.FormEvent) {
@@ -859,6 +884,10 @@ function Complete() {
           const fresh = await recheckPending(signupToken);
           if (fresh.existingAccount || fresh.existingLink) {
             setPending(fresh);
+            trackEvent("auth.login_failed", {
+              detail: "account_exists",
+              metadata: authMeta(),
+            });
             haptic("error");
             setBusy(false);
             return;
@@ -866,7 +895,13 @@ function Complete() {
         }
         /* The account's reason beats ours: a taken username, a breached
            password, an expired link — each needs a different fix. */
-        setError(d?.error || "Tirbeo couldn't finish this. Please try again.");
+        const reason = d?.error || "Tirbeo couldn't finish this. Please try again.";
+        trackEvent("auth.login_failed", {
+          detail: signupToken ? "oauth_complete_refused" : "consent_refused",
+          metadata: { ...authMeta(), status: res.status },
+        });
+        // A refusal carrying an event id gets quoted, so support can find it.
+        setError(withRef(reason, { data: d }));
         // The server has the last word on the name, so make the field say so
         // and keep "Create account" disabled until it is changed.
         if (d?.usernameTaken) {
@@ -877,8 +912,17 @@ function Complete() {
         setBusy(false);
         return;
       }
+      trackEvent("auth.oauth_complete", {
+        detail: signupToken ? "signup" : "consent",
+        metadata: authMeta(),
+      });
       window.location.href = d.redirect_to || finishTarget;
-    } catch {
+    } catch (err) {
+      trackError("oauth-complete.submit", err);
+      trackEvent("auth.login_failed", {
+        detail: "network",
+        metadata: authMeta(),
+      });
       setError("Tirbeo couldn't be reached. Check your connection and try again.");
       haptic("error");
       setBusy(false);
@@ -887,7 +931,7 @@ function Complete() {
 
   /* ─────────────────────────────────────────────────────
      Shell — the accounts sign-in surface. `.login-page` paints the
-     canvas (flat charcoal, the two-tone split from 1280px up), the
+     canvas (flat black, the two-tone split from 1280px up), the
      wordmark rides the top-left corner, `.login-card` is the em-scaled
      column, and the muted legal bar sits under everything. Every rule
      is globals.css, ported from the accounts app — this only assembles
@@ -1152,7 +1196,7 @@ function Complete() {
             aria-hidden
             className={cn(
               "pointer-events-none absolute right-0 bottom-1 z-20 grid size-[38px] place-items-center rounded-full",
-              "border-[3px] border-bg bg-ig text-white",
+              "border-[3px] border-bg bg-ig text-accent-fg",
               "shadow-[0_6px_14px_-6px_rgba(0,0,0,0.7)]",
             )}
           >

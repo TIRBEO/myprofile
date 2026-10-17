@@ -7,6 +7,7 @@ import { cn } from "@/components/ig-ui";
 import { LIVE, ROW } from "@/components/settings-shell";
 import type { DeviceKind } from "@/lib/device";
 import { haptic } from "@/lib/haptics";
+import { trackEvent } from "@/lib/telemetry";
 
 /* ═══════════════════════════════════════════════════════════════════
    The device tile
@@ -78,7 +79,13 @@ export function DeviceRow({
   return (
     <Link
       href={href}
-      onClick={() => haptic("light")}
+      onClick={() => {
+        haptic("light");
+        // Opening one machine's page is a user action worth a quiet record.
+        trackEvent("settings.device_viewed", {
+          metadata: { kind: kind ?? "computer", current: !!current },
+        });
+      }}
       className={cn(ROW, LIVE)}
     >
       <DeviceTile kind={kind} tone={tone} />

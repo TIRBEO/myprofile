@@ -139,6 +139,46 @@ export function pushSetting<T>(key: string, value: T): void {
   persist(key, value);
 }
 
+/** Whether the store already holds a value for `key` — the account bag, the
+    local mirror, or a legacy per-store slot. Lets a caller tell "nothing saved
+    yet" from "saved, and it happens to be empty" (which a default-only read
+    can't, since both resolve to the default). */
+export function hasStored(key: string): boolean {
+  if (Object.prototype.hasOwnProperty.call(bag ?? readMirror(), key)) return true;
+  if (typeof window !== "undefined") {
+    try {
+      if (window.localStorage.getItem(key) != null) return true;
+    } catch {
+      /* unreadable slot — treat as absent */
+    }
+  }
+  return false;
+}
+
+const adopted = new Set<string>();
+
+/** One-time adoption of a value a store kept in a raw localStorage slot before
+    it moved onto the account bag. Once the bag has landed, if it holds nothing
+    for `key` but the legacy slot does, carry that value over — the account wins
+    where it already has one — and drop the raw slot, so an existing user keeps
+    their data on every device. Idempotent and cheap: safe to call on every
+    read, it runs at most once per key per session. */
+export function adoptLegacy(key: string): void {
+  if (typeof window === "undefined" || adopted.has(key)) return;
+  adopted.add(key);
+  void ensureSettings().then((source) => {
+    if (Object.prototype.hasOwnProperty.call(source, key)) return;
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw == null) return;
+      pushSetting(key, JSON.parse(raw) as unknown);
+      window.localStorage.removeItem(key);
+    } catch {
+      /* not JSON we recognise — leave the slot; the store's default stands */
+    }
+  });
+}
+
 function persist(key: string, value: unknown): void {
   /* Through lib/api, not a raw fetch: the brain gates every cookie-authed
      write on a double-submit token, and a hand-rolled request here would be

@@ -159,7 +159,7 @@ function Answered({ event, red }: { event: ActivityEvent; red: boolean }) {
       title={red ? `You said this wasn’t you${when}` : `You said this was you${when}`}
       className={cn(
         "grid size-[18px] place-items-center rounded-full",
-        red ? "bg-danger text-white" : "bg-success/18 text-success-text",
+        red ? "bg-danger text-accent-fg" : "bg-success/18 text-success-text",
       )}
     >
       {red ? (

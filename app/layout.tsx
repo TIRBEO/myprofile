@@ -26,7 +26,7 @@ export const viewport: Viewport = {
   // the canvas underneath it instead of always being black.
   themeColor: [
     { media: "(prefers-color-scheme: dark)", color: "#000000" },
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: light)", color: "#f2f2f5" },
   ],
 };
 

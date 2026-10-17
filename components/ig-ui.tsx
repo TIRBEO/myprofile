@@ -335,7 +335,7 @@ export function Switch({
     >
       <span
         className={cn(
-          "block size-6 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
+          "block size-6 rounded-full bg-accent-fg shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
           "transition-transform duration-200 ease-out motion-reduce:transition-none",
           on ? "translate-x-[22px]" : "translate-x-[2px]",
         )}
@@ -348,27 +348,27 @@ export function Switch({
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
 type ButtonSize = "sm" | "md" | "lg";
 
-/* The accounts-app button skins: one sky fill, one hairline outline,
-   one quiet text, one red — 18px pills, semibold, tight tracking. */
+/* The accounts-app button skins: one royal-blue fill, one hairline outline,
+   one quiet text, one red — full pills, semibold, tight tracking. */
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-ig text-white hover:bg-ig-hover active:bg-ig-press active:scale-[0.995]",
+  primary: "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press active:scale-[0.995]",
   secondary:
     "border border-btn-line bg-transparent text-text-2 hover:border-btn-line-hover hover:bg-hover hover:text-fg",
   ghost: "text-text-3 hover:bg-hover hover:text-fg",
-  danger: "bg-danger text-white hover:bg-[#e4283a] active:brightness-95",
+  danger: "bg-danger text-accent-fg hover:bg-danger-hover active:brightness-95",
   link: "min-h-10 rounded-full px-1 text-[15px] font-semibold text-text-3 hover:text-fg",
 };
 
 /** Every full-width action button in settings is built from these two, so a
     "Save" and a "Delete" can't drift apart in size, only in fill. */
 export const PILL_BASE =
-  "flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[18px] px-4 py-2.5 " +
+  "flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 " +
   "text-center text-[15px] leading-snug font-semibold tracking-[-0.01em] outline-none transition " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export const PILL_FILL = {
-  primary: "bg-ig text-white hover:bg-ig-hover active:bg-ig-press",
-  danger: "bg-danger text-white hover:bg-[#e4283a] active:brightness-95",
+  primary: "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
+  danger: "bg-danger text-accent-fg hover:bg-danger-hover active:brightness-95",
   /** The accounts secondary is a hairline outline, never a grey slab — a
       filled one sits next to the accent-filled one and reads as the disabled pair. */
   outline:
@@ -380,9 +380,9 @@ export const PILL_FILL = {
 export const PILL_DISABLED = "pointer-events-none opacity-55";
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "h-10 rounded-[18px] px-4 text-[14px] gap-1.5",
-  md: "h-12 rounded-[18px] px-5 text-[15px] gap-2",
-  lg: "h-[56px] rounded-[18px] px-6 text-[15px] gap-2",
+  sm: "h-10 rounded-full px-4 text-[14px] gap-1.5",
+  md: "h-12 rounded-full px-5 text-[15px] gap-2",
+  lg: "h-[56px] rounded-full px-6 text-[15px] gap-2",
 };
 
 export function Button({
@@ -454,7 +454,7 @@ export function IconButton({
 }
 
 /** Segmented control. Exactly one option is active — the accounts recipe:
-    a grey plate container with a raised charcoal pill on the choice. */
+    a plate container with a raised pill on the choice. */
 export function Segmented<T extends string>({
   value,
   options,
@@ -510,7 +510,7 @@ export function Segmented<T extends string>({
 /* The accounts field: a grey plate, borderless until focus, then an
    accent border plus a soft accent ring. The whole box is the target. */
 const CONTROL =
-  "w-full rounded-2xl border border-transparent bg-field px-4 text-[16px] text-fg outline-none " +
+  "w-full rounded-2xl border border-border bg-field px-4 text-[16px] text-fg outline-none " +
   "placeholder:text-placeholder " +
   "transition-[border-color,box-shadow,background-color] duration-150 " +
   "hover:bg-field-hover " +
@@ -734,7 +734,7 @@ export function Chip({
         "inline-flex min-h-9 touch-manipulation items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13.5px] font-semibold whitespace-nowrap outline-none transition-colors",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         active
-          ? "border-transparent bg-ig text-white hover:bg-ig-hover"
+          ? "border-transparent bg-ig text-accent-fg hover:bg-ig-hover"
           : "border-border-strong bg-transparent text-text-2 hover:bg-hover hover:text-fg",
         className,
       )}
@@ -1518,11 +1518,11 @@ export function SheetActions({
         onClick={onConfirm}
         disabled={disabled || loading}
         className={cn(
-          "flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-[18px] px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] outline-none transition",
+          "flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] outline-none transition",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
           confirmVariant === "danger"
-            ? "bg-danger text-white hover:bg-[#e4283a] active:brightness-95"
-            : "bg-ig text-white hover:bg-ig-hover active:bg-ig-press",
+            ? "bg-danger text-accent-fg hover:bg-danger-hover active:brightness-95"
+            : "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
           (disabled || loading) && "pointer-events-none opacity-55",
         )}
       >
@@ -1532,7 +1532,7 @@ export function SheetActions({
       <button
         type="button"
         onClick={() => (deferredClose ? deferredClose() : onCancel())}
-        className="flex min-h-[48px] flex-1 items-center justify-center rounded-[18px] border border-btn-line bg-transparent px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] text-text-2 outline-none transition hover:border-btn-line-hover hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex min-h-[48px] flex-1 items-center justify-center rounded-full border border-btn-line bg-transparent px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] text-text-2 outline-none transition hover:border-btn-line-hover hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         {cancelLabel}
       </button>

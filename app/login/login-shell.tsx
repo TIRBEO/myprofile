@@ -7,6 +7,7 @@
 
 import { AuthShell, BrandMark, LegalBar, PostComments, StoryFan } from "@/components/auth-shell";
 import { useT } from "@/lib/i18n";
+import { trackEvent } from "@/lib/telemetry";
 
 export default function LoginShell({ origin }: { origin: string }) {
   const t = useT();
@@ -41,14 +42,22 @@ export default function LoginShell({ origin }: { origin: string }) {
         }
       >
         {base ? (
-          <a href={back} className="login-cta">
+          <a
+            href={back}
+            className="login-cta"
+            onClick={() => {
+              // The sign-in itself happens in the accounts app; this is the
+              // honest record of the hand-off being taken.
+              trackEvent("auth.login_submit", { detail: "accounts_handoff" });
+            }}
+          >
             {t("Sign in")}
           </a>
         ) : (
           <p className="form-notice" style={{ textAlign: "left", marginTop: 0 }}>
             Development mode: set{" "}
-            <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">NEXT_PUBLIC_ACCOUNTS_URL</code>{" "}
-            in <code className="rounded bg-white/10 px-1 py-0.5 text-[12px]">.env.local</code> to point at
+            <code className="rounded bg-fg/10 px-1 py-0.5 text-[12px]">NEXT_PUBLIC_ACCOUNTS_URL</code>{" "}
+            in <code className="rounded bg-fg/10 px-1 py-0.5 text-[12px]">.env.local</code> to point at
             the accounts app, or sign in there first and open this site on the same origin (localhost) so
             the session cookie is sent.
           </p>

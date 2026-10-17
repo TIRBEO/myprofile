@@ -17,6 +17,7 @@ import {
 import { ago, formatDate } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { trackError, withRef } from "@/lib/telemetry";
 import { CircleAlert, Clock, ShieldQuestion } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -109,11 +110,17 @@ export default function AccountStatusDetailPage({ section, item }: { section: st
       toast.success("Review requested — we'll answer on this page");
       // The decision stops being appealable on the account now; re-read so
       // the lists agree with what was just filed.
-      void loadAccountChecks().catch(() => {});
+      void loadAccountChecks().catch((err) => {
+        trackError("status-item.refresh-after-appeal", err);
+      });
     } catch (err) {
       haptic("error");
+      trackError("status-item.appeal", err);
       toast.error(
-        err instanceof ApiError && err.message ? err.message : "The request couldn't be filed.",
+        withRef(
+          err instanceof ApiError && err.message ? err.message : "The request couldn't be filed.",
+          err,
+        ),
       );
     } finally {
       setFiling(false);

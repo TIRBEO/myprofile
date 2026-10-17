@@ -20,6 +20,7 @@ import { describeUserAgent, type DeviceKind } from "@/lib/device";
 import { coordsOf } from "@/lib/coords";
 import { apiJson } from "@/lib/api";
 import { withProof, type ReauthProof } from "@/lib/reauth";
+import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
 
 const LOG_STORE = "tirbeo:devices:log";
 
@@ -167,27 +168,18 @@ export async function signOutMany(ids: string[], proof: ReauthProof = {}): Promi
   return ended;
 }
 
-/* ── Local sign-out notes (a convenience, kept only in this browser) ── */
+/* ── Sign-out notes (the log of endings you performed, kept on the account) ── */
 
 export function readLog(): SessionEvent[] {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(LOG_STORE);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Partial<SessionEvent>[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((event): event is SessionEvent => typeof event?.label === "string");
-  } catch {
-    return [];
-  }
+  adoptLegacy(LOG_STORE);
+  const parsed = getStored<unknown>(LOG_STORE, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((event): event is SessionEvent => typeof event?.label === "string");
 }
 
 function logEvent(kind: SessionEvent["kind"], label: string) {
   const next = [{ id: newId(), at: Date.now(), kind, label }, ...readLog()].slice(0, MAX_LOG);
-  try {
-    localStorage.setItem(LOG_STORE, JSON.stringify(next));
-  } catch {
-    /* private mode — the note simply isn't kept between visits */
-  }
+  setStored(LOG_STORE, next);
   return next;
 }

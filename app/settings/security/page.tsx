@@ -24,6 +24,7 @@ import {
 } from "@/lib/security";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
 import { getStaySignedIn, setStaySignedIn } from "@/lib/session";
 import { Download, Eye, EyeOff } from "lucide-react";
@@ -68,7 +69,10 @@ export default function SecurityPage() {
     Promise.allSettled([
       readKeys()
         .then((keys) => setPasskeys(keys.length))
-        .catch(() => setPasskeys(0)),
+        .catch((err) => {
+          trackError("security.read-passkeys", err);
+          setPasskeys(0);
+        }),
       readSecurityStatus()
         .then((status) => {
           setStatusUnknown(false);
@@ -76,9 +80,10 @@ export default function SecurityPage() {
           setRecoveryEmail(status.recoveryEmail);
           setRecoveryVerified(status.recoveryEmailVerified);
         })
-        .catch(() => {
+        .catch((err) => {
           /* An address the account never told us is not one we can print, so the
              row says it couldn't be read rather than guessing at it. */
+          trackError("security.read-status", err);
           setStatusUnknown(true);
         }),
     ]).then(() => setReady(true));
@@ -93,6 +98,7 @@ export default function SecurityPage() {
   function toggleSavedLogin(on: boolean) {
     setStaySignedIn(on);
     setSavedLogin(on);
+    trackEvent("settings.stay_signed_in_changed", { metadata: { on } });
     toast.success(
       on ? "You'll stay signed in on this device" : "You'll sign out after 1 hour of inactivity",
     );
@@ -102,6 +108,10 @@ export default function SecurityPage() {
     setRecoveryEmail(email);
     setRecoveryVerified(true);
     setRecoverySheet(false);
+    // Only the address's domain is quotable — never the full email.
+    trackEvent("settings.recovery_email_changed", {
+      metadata: { domain: email.includes("@") ? email.split("@")[1] : undefined },
+    });
     toast.success("Recovery email confirmed");
   }
 
@@ -327,7 +337,17 @@ function ChangePasswordSheet({
         : { code: code.join("") }
       : {};
     try {
+      // Which second factor went with the change, recorded as a method name —
+      // the code itself never leaves this function.
+      if (needs2FA) {
+        trackEvent(useBackup ? "auth.backup_code_used" : "auth.2fa_submit", {
+          detail: "password_change",
+        });
+      }
       await changePassword(form.current, form.next, factor);
+      trackEvent("settings.password_changed", {
+        metadata: { secondFactor: needs2FA ? (useBackup ? "backup_code" : "totp") : "none" },
+      });
       onSaved();
     } catch (err) {
       haptic("error");
@@ -341,16 +361,23 @@ function ChangePasswordSheet({
            code is cleared so the next one can be typed fresh. */
         setNeeds2FA(true);
         setCode(["", "", "", "", "", ""]);
+        trackEvent("auth.2fa_failed", {
+          detail: badCode ? "code_refused" : "factor_required",
+        });
         setError(
           badCode
             ? "That code wasn’t accepted. Try the one showing right now."
             : "Enter the 6-digit code from your authenticator app to continue.",
         );
       } else {
+        trackError("security.password-change", err);
         setError(
-          err instanceof ApiError && err.message
-            ? err.message
-            : "The password couldn’t be updated. Nothing has changed — try again.",
+          withRef(
+            err instanceof ApiError && err.message
+              ? err.message
+              : "The password couldn’t be updated. Nothing has changed — try again.",
+            err,
+          ),
         );
       }
     } finally {
@@ -519,7 +546,10 @@ function RecoverySheet({
 
   function refused(err: unknown, fallback: string) {
     haptic("error");
-    setError(err instanceof ApiError && err.message ? err.message : fallback);
+    trackError("security.recovery-email", err);
+    setError(
+      withRef(err instanceof ApiError && err.message ? err.message : fallback, err),
+    );
   }
 
   async function sendCode(): Promise<boolean> {
@@ -528,6 +558,12 @@ function RecoverySheet({
     setError(null);
     try {
       const ok = await sendRecoveryCode(email.trim());
+      trackEvent("settings.recovery_code_sent", {
+        metadata: {
+          delivered: ok,
+          domain: email.trim().includes("@") ? email.trim().split("@")[1] : undefined,
+        },
+      });
       setDelivered(ok);
       setCode(["", "", "", "", "", ""]);
       setStep("otp");
@@ -560,10 +596,14 @@ function RecoverySheet({
       onVerified(email.trim());
     } catch (err) {
       haptic("error");
+      trackError("security.recovery-verify", err);
       setError(
-        err instanceof ApiError && err.message
-          ? err.message
-          : "That code wasn’t accepted. Ask for a fresh one and try again.",
+        withRef(
+          err instanceof ApiError && err.message
+            ? err.message
+            : "That code wasn’t accepted. Ask for a fresh one and try again.",
+          err,
+        ),
       );
       setCode(["", "", "", "", "", ""]);
     } finally {

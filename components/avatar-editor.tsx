@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button, IconButton, Sheet, SheetActions, cn } from "@/components/ig-ui";
+import { trackError, trackEvent } from "@/lib/telemetry";
 import { RotateCcw, RotateCw } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -96,6 +97,7 @@ export function AvatarEditor({
       c.height = OUT;
       const ctx = c.getContext("2d");
       if (!ctx || !frame) {
+        trackError("avatar-editor.canvas", new Error("2d context or frame unavailable"));
         onCancel();
         return;
       }
@@ -118,9 +120,16 @@ export function AvatarEditor({
         img.naturalHeight * s,
       );
       ctx.restore();
+      trackEvent("settings.avatar_cropped", {
+        detail: "jpeg",
+        metadata: { size: OUT, zoom: Number(zoom.toFixed(2)), rotated: rot !== 0 },
+      });
       onApply(c.toDataURL("image/jpeg", 0.9));
     };
-    img.onerror = () => onCancel();
+    img.onerror = () => {
+      trackError("avatar-editor.image", new Error("avatar image failed to decode"));
+      onCancel();
+    };
     img.src = src;
   }
 

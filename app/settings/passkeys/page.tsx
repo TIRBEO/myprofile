@@ -25,6 +25,7 @@ import { formatDate } from "@/lib/dates";
 import { guessDevice } from "@/lib/device";
 import { useReauthGuard } from "@/components/reauth-sheet";
 import { wasDeclined } from "@/lib/reauth";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
 import { usePageRefresh } from "@/lib/page-refresh";
 
@@ -50,7 +51,10 @@ export default function PasskeysPage() {
   /** Re-read from the account rather than editing what's on screen — the id,
       the name and the instant are all the account's to decide. */
   async function refresh() {
-    setKeys(await readKeys().catch(() => keys ?? []));
+    setKeys(await readKeys().catch((err) => {
+      trackError("passkeys.read", err);
+      return keys ?? [];
+    }));
   }
 
   useEffect(() => {
@@ -60,7 +64,12 @@ export default function PasskeysPage() {
 
   const load = () => {
     setFailed(false);
-    readKeys().then(setKeys).catch(() => setFailed(true));
+    readKeys()
+      .then(setKeys)
+      .catch((err) => {
+        trackError("passkeys.load", err);
+        setFailed(true);
+      });
   };
 
   usePageRefresh(load);
@@ -171,7 +180,9 @@ function AddSheet({ onClose, onAdded }: { onClose: () => void; onAdded: (key: Pa
     setBusy(true);
     setError(null);
     try {
-      onAdded(await addPasskey(name));
+      const key = await addPasskey(name);
+      trackEvent("settings.passkey_added", { metadata: { name: key.name } });
+      onAdded(key);
     } catch (err) {
       setBusy(false);
       // Walking away from the device's prompt is an answer, not a fault.
@@ -179,7 +190,13 @@ function AddSheet({ onClose, onAdded }: { onClose: () => void; onAdded: (key: Pa
         onClose();
         return;
       }
-      setError(err instanceof Error && err.message ? err.message : "The passkey wasn’t added");
+      trackError("passkeys.add", err);
+      setError(
+        withRef(
+          err instanceof Error && err.message ? err.message : "The passkey wasn’t added",
+          err,
+        ),
+      );
     }
   }
 
@@ -236,12 +253,19 @@ function RemoveSheet({
     setError(null);
     try {
       await guard((proof) => removePasskey(passkey.id, proof));
+      trackEvent("settings.passkey_removed", { metadata: { name: passkey.name } });
       await onRemoved();
     } catch (err) {
       setBusy(false);
       // Backing out of the check leaves the passkey exactly where it was.
       if (wasDeclined(err)) return;
-      setError(err instanceof Error && err.message ? err.message : "The passkey wasn’t removed");
+      trackError("passkeys.remove", err);
+      setError(
+        withRef(
+          err instanceof Error && err.message ? err.message : "The passkey wasn’t removed",
+          err,
+        ),
+      );
     }
   }
 

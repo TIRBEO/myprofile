@@ -171,7 +171,7 @@ function Answered({ entry }: { entry: ChangeEntry }) {
       }
       className={cn(
         "grid size-[18px] shrink-0 place-items-center rounded-full",
-        disputed ? "bg-danger text-white" : "bg-success/18 text-success-text",
+        disputed ? "bg-danger text-accent-fg" : "bg-success/18 text-success-text",
       )}
     >
       {disputed ? (

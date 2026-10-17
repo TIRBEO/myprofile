@@ -9,6 +9,8 @@
    support API when one exists and nothing else has to change.
    ═══════════════════════════════════════════════════════════════════ */
 
+import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
+
 const STORE = "tirbeo:support-requests";
 
 export const MAX_REQUESTS = 20;
@@ -29,29 +31,24 @@ export type SupportRequest = {
 
 function readStored(): SupportRequest[] {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORE);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Partial<SupportRequest>[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (item): item is SupportRequest =>
-          typeof item?.id === "string" &&
-          typeof item?.at === "number" &&
-          typeof item?.topic === "string" &&
-          typeof item?.message === "string",
-      )
-      .map((item) => ({
-        ...item,
-        origin:
-          item.origin && typeof item.origin.slug === "string" && typeof item.origin.title === "string"
-            ? item.origin
-            : undefined,
-      }));
-  } catch {
-    return [];
-  }
+  adoptLegacy(STORE);
+  const parsed = getStored<unknown>(STORE, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter(
+      (item): item is SupportRequest =>
+        typeof item?.id === "string" &&
+        typeof item?.at === "number" &&
+        typeof item?.topic === "string" &&
+        typeof item?.message === "string",
+    )
+    .map((item) => ({
+      ...item,
+      origin:
+        item.origin && typeof item.origin.slug === "string" && typeof item.origin.title === "string"
+          ? item.origin
+          : undefined,
+    }));
 }
 
 export function readRequests(): SupportRequest[] {
@@ -71,10 +68,6 @@ export function addRequest(
     origin,
   };
   const stored = [next, ...readStored()].slice(0, MAX_REQUESTS);
-  try {
-    localStorage.setItem(STORE, JSON.stringify(stored));
-  } catch {
-    /* private mode — the request holds for this visit and no longer */
-  }
+  setStored(STORE, stored);
   return readRequests();
 }

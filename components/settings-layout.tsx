@@ -19,6 +19,7 @@ import { AccountLockScreen } from "@/components/account-lock";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { ProfilePicture } from "@/components/profile-picture";
 import { displayName, useProfile } from "@/lib/profile";
+import { trackEvent } from "@/lib/telemetry";
 import { LOCK_HREFS, lockAllows, useAccountLock, useWelcome } from "@/lib/account-state";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -370,7 +371,7 @@ function SideRail({
         <button
           type="button"
           onClick={onSignOut}
-          className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-[18px] bg-danger px-3.5 text-[15px] font-semibold tracking-[-0.01em] text-white outline-none transition-colors hover:bg-[#e4283a] active:brightness-95"
+          className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-full bg-danger px-3.5 text-[15px] font-semibold tracking-[-0.01em] text-accent-fg outline-none transition-colors hover:bg-danger-hover active:brightness-95"
         >
           <LogOut className="size-[18px] shrink-0" strokeWidth={2.2} />
           {t("Log out")}
@@ -447,6 +448,9 @@ export function SignOutSheet({ onClose }: { onClose: () => void }) {
           confirmLabel="Log out"
           confirmVariant="danger"
           onConfirm={() => {
+            // This device's own session ends — the server-side revoke rides
+            // inside endSessionAndLeave's logout call.
+            trackEvent("settings.session_revoked", { detail: "current_device" });
             /* Revoke server session + cookies, then land on the accounts
                login — the app that owns the cookie. */
             endSessionAndLeave();

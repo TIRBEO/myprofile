@@ -5,66 +5,90 @@ import { useEffect, useState } from "react";
 
 import { cn } from "@/components/ig-ui";
 import { SectionTitle, SettingsPage } from "@/components/settings-shell";
-import { THEMES, ThemeDef, ThemeId, applyTheme } from "@/lib/theme";
+import { trackEvent } from "@/lib/telemetry";
+import { THEMES, ThemeDef, ThemeId, applyTheme, readTheme } from "@/lib/theme";
 
 /* ═══════════════════════════════════════════════════════════════════
-   Appearance — two palettes, and picking one applies it immediately.
-   Both are ink-first: the contrast lives in the foreground (near-black
-   text, dark blue actions, dark red danger), so the light theme is not
-   built out of pale accents.
+   Appearance — three choices, and picking one applies it immediately.
 
-   The selection is read off <html data-theme> rather than local state,
-   because that attribute is what the boot script, the account sync and
-   this page all agree on. A MutationObserver keeps the tick honest when
-   another device changes the choice.
+   The tick reads the *stored preference*, not the resolved palette: with
+   "Follow device" selected, <html data-theme> says light or dark, and
+   matching on that would tick the wrong tile. A MutationObserver on
+   data-theme re-reads the preference so the tick stays honest when the
+   account sync or another device changes it.
+
+   Both palettes are ink-first: the contrast lives in the foreground
+   (white text on black, near-black on white) and one royal blue marks
+   the actions.
    ═══════════════════════════════════════════════════════════════════ */
 
 export default function AppearancePage() {
-  const [current, setCurrent] = useState<ThemeId | null>(null);
+  const [pref, setPref] = useState<ThemeId | null>(null);
+  const [osLight, setOsLight] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
-    const show = () => {
-      const attr = root.getAttribute("data-theme");
-      setCurrent((attr === "light" || attr === "dark") ? attr : null);
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const refresh = () => setPref(readTheme());
+    const onScheme = () => {
+      setOsLight(mq.matches);
+      refresh();
     };
-    show();
-    const watch = new MutationObserver(show);
+    onScheme();
+    mq.addEventListener("change", onScheme);
+    const watch = new MutationObserver(refresh);
     watch.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => watch.disconnect();
+    return () => {
+      mq.removeEventListener("change", onScheme);
+      watch.disconnect();
+    };
   }, []);
+
+  const current: ThemeId | null = pref;
 
   return (
     <SettingsPage title="Appearance">
       <SectionTitle desc="Pick a palette. It applies to this device at once and follows your account everywhere else you sign in.">
         Theme
       </SectionTitle>
-      <div className="grid max-w-[460px] grid-cols-2 gap-3">
+      <div className="grid max-w-[620px] grid-cols-3 gap-3">
         {THEMES.map((def) => (
           <ThemeTile
             key={def.id}
             def={def}
+            swatch={def.id === "system" ? swatchFor(osLight ? "light" : "dark") : def.swatch}
             selected={current === def.id}
-            onSelect={() => applyTheme(def.id)}
+            onSelect={() => {
+              applyTheme(def.id);
+              trackEvent("settings.theme_changed", { metadata: { theme: def.id } });
+            }}
           />
         ))}
       </div>
       <p className="mt-4 text-[13.5px] leading-relaxed text-muted">
         {THEMES.find((d) => d.id === current)?.description ??
-          "Sign-in and security screens are always dark — they are the one surface every reader should see the same way."}
+          "Midnight is a black canvas with graphite plates; Daylight is pale grey with white ones."}
       </p>
     </SettingsPage>
   );
+}
+
+/** The concrete swatches behind the "Follow device" tile, so its preview
+    shows what the device is actually getting rather than a stock image. */
+function swatchFor(id: "light" | "dark") {
+  return THEMES.find((d) => d.id === id)!.swatch;
 }
 
 /* ── One sample screen, and the word under it ────────────────────── */
 
 function ThemeTile({
   def,
+  swatch,
   selected,
   onSelect,
 }: {
   def: ThemeDef;
+  swatch: ThemeDef["swatch"];
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -80,7 +104,7 @@ function ThemeTile({
           : "border-border bg-card hover:border-border-strong",
       )}
     >
-      <Preview def={def} />
+      <Preview swatch={swatch} />
       <span className="flex min-w-0 items-center gap-1 px-0.5 pb-0.5">
         <span
           className={cn(
@@ -147,14 +171,14 @@ function Row({ p, w, sub, on }: { p: Record<string, string>; w: number; sub: num
   );
 }
 
-function Preview({ def }: { def: ThemeDef }) {
+function Preview({ swatch }: { swatch: ThemeDef["swatch"] }) {
   const p = {
-    canvas: def.swatch.bg,
-    bg: def.swatch.card,
-    ink: def.swatch.ink,
-    line: def.swatch.line,
-    soft: def.swatch.line,
-    bar: def.swatch.bar,
+    canvas: swatch.bg,
+    bg: swatch.card,
+    ink: swatch.ink,
+    line: swatch.line,
+    soft: swatch.line,
+    bar: swatch.bar,
   };
   return (
     <span

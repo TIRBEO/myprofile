@@ -1,9 +1,13 @@
 "use client";
 
 /* ── Theme ────────────────────────────────────────────────────────
-   Two palettes — light is the default, dark is one tap away. Both are
-   ink-first: the foreground carries the contrast (near-black text, dark
-   red actions, dark red danger) so neither theme depends on pale accents.
+   Three choices, and the default is the one that asks for nothing: follow
+   the device. A pinned Midnight or Daylight wins over the device.
+
+   The dark scheme is a #26262a charcoal canvas with #1a1a1d near-black
+   plates; the light one is #e9eaee behind white plates. Both are ink-first —
+   the foreground carries the contrast (white text on charcoal, near-black on
+   white) and one sky blue (#0a84ff) marks everything you can press.
 
    The palette itself lives in globals.css keyed off <html data-theme>,
    so applying it is a single attribute write — no inline var churn.  */
@@ -26,53 +30,64 @@ export const THEME_KEY = "tirbeo:theme";
 
 export const THEMES: ThemeDef[] = [
   {
-    id: "light",
-    label: "Daylight",
-    description: "White canvas, near-black ink, dark red for what matters",
-    scheme: "light",
-    swatch: { bg: "#ffffff", bar: "#d92c3f", card: "#f6f7f9", line: "#d5dae1", ink: "#414855" },
+    id: "system",
+    label: "Follow device",
+    description: "Uses the light or dark setting your phone or computer is already on",
+    scheme: "dark",
+    swatch: { bg: "#26262a", bar: "#0d6ecf", card: "#1a1a1d", line: "#2e2e32", ink: "#a1a1a8" },
   },
   {
     id: "dark",
-    label: "Black",
-    description: "Black canvas, elevated plates, dark red for what you can press",
+    label: "Midnight",
+    description: "Charcoal canvas, near-black plates, sky blue for what you can press",
     scheme: "dark",
-    swatch: { bg: "#000000", bar: "#d92c3f", card: "#0e0e11", line: "#23262c", ink: "#9ba1ab" },
+    swatch: { bg: "#26262a", bar: "#0d6ecf", card: "#1a1a1d", line: "#2e2e32", ink: "#a1a1a8" },
+  },
+  {
+    id: "light",
+    label: "Daylight",
+    description: "Pale grey canvas, white plates, near-black ink, sky blue for what matters",
+    scheme: "light",
+    swatch: { bg: "#e9eaee", bar: "#0d6ecf", card: "#ffffff", line: "#dfe1e8", ink: "#6e727c" },
   },
 ];
 
 /** Ids that may come back from a stored preference — not the choices offered. */
 const KNOWN_IDS: string[] = ["system", "dark", "light"];
 
+/** What a preference with nothing behind it should resolve to. Accounts
+    follows the OS outright; myprofile can pin a choice, so a pinned value
+    always beats this — but nobody has picked one yet, so the device wins. */
+export const DEFAULT_THEME: ThemeId = "system";
 export function isThemeId(v: unknown): v is ThemeId {
   return typeof v === "string" && KNOWN_IDS.includes(v);
 }
 
 export function readTheme(): ThemeId {
-  if (typeof window === "undefined") return "light";
+  if (typeof window === "undefined") return DEFAULT_THEME;
   // The account bag is the truth once it has landed; the raw localStorage slot
   // is what the first-paint boot script wrote and the offline fallback.
   const fromBag = getStored<string | null>(THEME_KEY, null);
   if (isThemeId(fromBag)) return fromBag;
   try {
     const saved = window.localStorage.getItem(THEME_KEY);
-    return isThemeId(saved) ? saved : "light";
+    return isThemeId(saved) ? saved : DEFAULT_THEME;
   } catch {
-    return "light";
+    return DEFAULT_THEME;
   }
 }
 
 export type ResolvedTheme = "dark" | "light";
 
-/** The stored preference resolves to a palette. `system` — reachable from an
-    older build's saved choice — follows the device, and falls back to light. */
+/** The stored preference resolves to a palette. `system` follows the device,
+    and falls back to dark where the media query is unavailable. */
 export function resolveTheme(id: ThemeId): ResolvedTheme {
   if (id === "dark") return "dark";
   if (id === "light") return "light";
-  if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-    return "dark";
+  if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: light)").matches) {
+    return "light";
   }
-  return "light";
+  return "dark";
 }
 
 /**
@@ -113,4 +128,4 @@ export function onSystemThemeChange(onChange: () => void) {
 
 /** Inlined in <head> so the palette is correct on the very first paint.
     Mirrors resolveTheme without importing anything — it runs before React. */
-export const THEME_BOOT = `(function(){try{var k="${THEME_KEY}";var v=localStorage.getItem(k);var t=(v==="dark"||v==="light"||v==="system")?v:"light";var d=t==="dark"||(t==="system"&&window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);var a=d?"dark":"light";document.documentElement.setAttribute("data-theme",a);document.documentElement.style.colorScheme=a;}catch(e){}})();`;
+export const THEME_BOOT = `(function(){try{var k="${THEME_KEY}";var v=localStorage.getItem(k);var t=(v==="dark"||v==="light"||v==="system")?v:"system";var a=t==="light"||(t==="system"&&window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark";document.documentElement.setAttribute("data-theme",a);document.documentElement.style.colorScheme=a;}catch(e){}})();`;

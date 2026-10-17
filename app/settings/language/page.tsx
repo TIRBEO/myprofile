@@ -14,6 +14,7 @@ import {
 import { LANGS, useLanguage, type Lang } from "@/lib/language";
 import { reloadSettings } from "@/lib/remote-store";
 import { usePageRefresh } from "@/lib/page-refresh";
+import { trackEvent } from "@/lib/telemetry";
 import { formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 
@@ -49,6 +50,7 @@ export default function LanguagePage() {
   function pick(next: Lang) {
     if (next.id === id) return;
     choose(next.id);
+    trackEvent("settings.language_changed", { metadata: { from: id, to: next.id } });
     toast.info(`Tirbeo now speaks ${next.endonym}`);
   }
 

@@ -7,6 +7,7 @@ import { Group, Helper, PageSkeleton, PillButton, PillStack, SettingsPage, Stati
 import { GRACE_DAYS, countdownLabel } from "@/lib/delete-account";
 import { apiCancelDeletion, useAccountState } from "@/lib/account-lifecycle";
 import { formatDate } from "@/lib/dates";
+import { trackError, trackEvent } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 
@@ -37,9 +38,11 @@ export default function DeleteAccountPage() {
     setBusy(true);
     try {
       await apiCancelDeletion();
+      trackEvent("settings.account_deletion_cancelled", { detail: "delete_account_page" });
       haptic("success");
       toast.info("Deletion cancelled — your account stays open");
-    } catch {
+    } catch (err) {
+      trackError("delete-account.cancel", err);
       toast.error("Couldn't cancel the deletion — please try again");
     } finally {
       setBusy(false);

@@ -9,6 +9,7 @@ import { GRACE_DAYS, finalAt } from "@/lib/delete-account";
 import { apiRequestDeletionCode, apiVerifyDeletion } from "@/lib/account-lifecycle";
 import { LOCK_HREF } from "@/lib/account-state";
 import { formatDate } from "@/lib/dates";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { useProfile } from "@/lib/profile";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
@@ -75,15 +76,20 @@ export default function ConfirmDeletionPage() {
       if (!live.current) return false;
       setSentTo(reply.email || null);
       setAgainIn(CODE_SECONDS);
+      trackEvent("settings.deletion_code_requested");
       toast.info(reply.message);
       return true;
     } catch (err) {
       if (!live.current) return false;
       haptic("error");
+      trackError("confirm-deletion.request-code", err);
       setError(
-        err instanceof Error && err.message
-          ? err.message
-          : "The account couldn’t send the code right now. Nothing was deleted.",
+        withRef(
+          err instanceof Error && err.message
+            ? err.message
+            : "The account couldn’t send the code right now. Nothing was deleted.",
+          err,
+        ),
       );
       return false;
     } finally {
@@ -101,6 +107,7 @@ export default function ConfirmDeletionPage() {
     try {
       await apiVerifyDeletion(code.join(""), null);
       if (!live.current) return;
+      trackEvent("settings.account_deletion_requested");
       haptic("heavy");
       toast.info("Deletion scheduled");
       /* The account closes to that one screen the moment this is asked for, so
@@ -109,9 +116,13 @@ export default function ConfirmDeletionPage() {
     } catch (err) {
       if (!live.current) return;
       haptic("error");
+      trackError("confirm-deletion.verify", err);
       setCode(BLANK_CODE);
       setError(
-        err instanceof Error && err.message ? err.message : "That code couldn’t be checked",
+        withRef(
+          err instanceof Error && err.message ? err.message : "That code couldn’t be checked",
+          err,
+        ),
       );
     } finally {
       if (live.current) setBusy(false);

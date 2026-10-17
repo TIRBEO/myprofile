@@ -13,6 +13,8 @@
    Kept separate from lib/your-activity, which IS the account's real record.
    ═══════════════════════════════════════════════════════════════════ */
 
+import { adoptLegacy, getStored, hasStored, setStored } from "@/lib/remote-store";
+
 const STORE = "tirbeo:your-activity:deleted";
 
 /** How long deleted content stays recoverable. */
@@ -48,33 +50,28 @@ function seedDeleted(): DeletedItem[] {
 
 export function readDeleted(): DeletedItem[] {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORE);
-    if (!raw) {
-      const seeded = seedDeleted();
-      writeDeleted(seeded);
-      return seeded;
-    }
-    const parsed = JSON.parse(raw) as Partial<DeletedItem>[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (item): item is DeletedItem =>
-          typeof item?.label === "string" && typeof item?.deletedAt === "number",
-      )
-      .sort((a, b) => b.deletedAt - a.deletedAt)
-      .slice(0, MAX_DELETED);
-  } catch {
-    return [];
+  adoptLegacy(STORE);
+  // Nothing saved anywhere yet — a fresh account — so lay down the tray once
+  // and persist it. `hasStored` keeps a tray the user emptied (an empty array)
+  // from looking like an unset store and reseeding itself.
+  if (!hasStored(STORE)) {
+    const seeded = seedDeleted();
+    writeDeleted(seeded);
+    return seeded;
   }
+  const parsed = getStored<unknown>(STORE, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter(
+      (item): item is DeletedItem =>
+        typeof item?.label === "string" && typeof item?.deletedAt === "number",
+    )
+    .sort((a, b) => b.deletedAt - a.deletedAt)
+    .slice(0, MAX_DELETED);
 }
 
 function writeDeleted(items: DeletedItem[]) {
-  try {
-    localStorage.setItem(STORE, JSON.stringify(items.slice(0, MAX_DELETED)));
-  } catch {
-    /* private mode — the tray simply isn't kept between visits */
-  }
+  setStored(STORE, items.slice(0, MAX_DELETED));
 }
 
 /** Whole days before an item leaves the tray for good, never below zero. */

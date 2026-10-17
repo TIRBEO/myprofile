@@ -10,6 +10,7 @@ import { type Device, readDevices, signOutMany } from "@/lib/devices";
 import { useReauthGuard } from "@/components/reauth-sheet";
 import { wasDeclined } from "@/lib/reauth";
 import { ago } from "@/lib/dates";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { usePageRefresh } from "@/lib/page-refresh";
@@ -38,7 +39,10 @@ export default function SignOutDevicesPage() {
     setFailed(false);
     readDevices()
       .then((devices) => setOthers(devices.filter((device) => !device.current)))
-      .catch(() => setFailed(true));
+      .catch((err) => {
+        trackError("devices/sign-out.read", err);
+        setFailed(true);
+      });
   };
 
   usePageRefresh(load);
@@ -72,6 +76,10 @@ export default function SignOutDevicesPage() {
        works once, so it can't fund three separate deletes. */
     try {
       const n = await guard((proof) => signOutMany(picked, proof));
+      trackEvent("settings.session_revoked", {
+        detail: "multi_select",
+        metadata: { count: n },
+      });
       setConfirming(false);
       haptic("success");
       toast.success(`Signed out of ${n} ${n === 1 ? "device" : "devices"}`);
@@ -81,7 +89,8 @@ export default function SignOutDevicesPage() {
          question on screen, so it can be answered again. */
       if (wasDeclined(err)) return;
       haptic("error");
-      toast.error(err?.message || "The sessions couldn't be ended. Nothing was signed out.");
+      trackError("devices.sign-out-many", err);
+      toast.error(withRef(err?.message || "The sessions couldn't be ended. Nothing was signed out.", err));
     }
   }
 

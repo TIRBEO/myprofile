@@ -46,9 +46,11 @@ const SESSION_COOKIE = "__session";
  * `__session` cookie yet — the account row is only written when the form is
  * submitted. Guarding it bounced the visitor to the accounts login with
  * `redirect_to` pointing straight back here, and back again forever. `/login`
- * is the signed-out fallback, so it is public by definition.
+ * is the signed-out fallback, so it is public by definition. `/blocked` is the
+ * interruption screen a banned/suspended visitor is sent to *because* they have
+ * no usable session — gating it would bounce them back to login forever.
  */
-const PUBLIC_PATHS = ["/login", "/oauth-complete"];
+const PUBLIC_PATHS = ["/login", "/oauth-complete", "/blocked"];
 
 function secretKey(): Uint8Array | null {
   const secret = process.env.JWT_SECRET;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
 
 /* ═══════════════════════════════════════════════════════════════════
    The account's own requests, and what became of them
@@ -61,30 +62,23 @@ export const REQUEST_KINDS: RequestKind[] = ["deactivation", "deletion", "appeal
 
 function read(): AccountRequest[] {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORE);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (row): row is AccountRequest =>
-        typeof row?.id === "string" &&
-        typeof row?.at === "number" &&
-        (row?.closedAt === null || typeof row?.closedAt === "number") &&
-        REQUEST_KINDS.includes(row.kind) &&
-        row.outcome in OUTCOME_LABEL,
-    );
-  } catch {
-    return [];
-  }
+  adoptLegacy(STORE);
+  const parsed = getStored<unknown>(STORE, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(
+    (row): row is AccountRequest =>
+      typeof row?.id === "string" &&
+      typeof row?.at === "number" &&
+      (row?.closedAt === null || typeof row?.closedAt === "number") &&
+      REQUEST_KINDS.includes(row.kind) &&
+      row.outcome in OUTCOME_LABEL,
+  );
 }
 
 function write(list: AccountRequest[]): void {
-  try {
-    localStorage.setItem(STORE, JSON.stringify(list));
-  } catch {
-    /* private mode — the request still holds for this session */
-  }
+  setStored(STORE, list);
+  // The account's own state changed — tell the gate, which listens here as
+  // well as on remote-store's mirror landing in another tab.
   if (typeof window !== "undefined") window.dispatchEvent(new Event(ACCOUNT_EVENT));
 }
 

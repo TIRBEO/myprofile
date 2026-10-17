@@ -269,7 +269,7 @@ export function SectionTitle({
   );
 }
 
-/** A section of rows, boxed the accounts way: a rounded charcoal plate with a
+/** A section of rows, boxed the accounts way: a rounded plate with a
     hairline frame and full-width dividers between the lines. The heading
     above says what the block is; the frame says where it ends. */
 export function Group({
@@ -356,7 +356,7 @@ export function SwitchVisual({ on }: { on: boolean }) {
     >
       <span
         className={cn(
-          "block size-6 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.35)] transition-transform duration-200 ease-out motion-reduce:transition-none",
+          "block size-6 rounded-full bg-accent-fg shadow-[0_1px_3px_rgb(0_0_0/0.35)] transition-transform duration-200 ease-out motion-reduce:transition-none",
           on ? "translate-x-[22px]" : "translate-x-[2px]",
         )}
       />

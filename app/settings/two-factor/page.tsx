@@ -30,6 +30,7 @@ import { formatKey, secretFromUri } from "@/lib/totp";
 import { formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
 import { Check, Copy } from "lucide-react";
 
@@ -91,10 +92,12 @@ export default function TwoFactorPage() {
   async function beginSetup() {
     try {
       setUri(await guard((proof) => startSetup(proof)));
+      trackEvent("settings.2fa_setup_started");
     } catch (err) {
       if (wasDeclined(err)) return;
+      trackError("two-factor.start-setup", err);
       haptic("error");
-      toast.error(err instanceof Error ? err.message : "Couldn’t reach the account service");
+      toast.error(withRef(err instanceof Error ? err.message : "Couldn’t reach the account service", err));
     }
   }
 
@@ -103,9 +106,11 @@ export default function TwoFactorPage() {
     set({ ...prev, ...next });
     try {
       await saveTwoFactorPrefs(next);
+      trackEvent("settings.2fa_pref_changed", { metadata: { ...next } });
     } catch (err) {
       set(prev);
-      toast.error(err instanceof Error ? err.message : "Couldn’t save that change");
+      trackError("two-factor.save-pref", err);
+      toast.error(withRef(err instanceof Error ? err.message : "Couldn’t save that change", err));
     }
   }
 
@@ -239,16 +244,24 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
     if (!ready || busy) return;
     setBusy(true);
     setError(null);
+    // The code about to be spent — as a method name, never the code.
+    trackEvent(useBackup ? "auth.backup_code_used" : "auth.2fa_submit", {
+      detail: "2fa_disable",
+    });
     try {
       await guard((proof) =>
         disableAuthenticator(useBackup ? { backupCode: backup.trim() } : { code: code.join("") }, proof),
       );
+      trackEvent("settings.2fa_disabled", { metadata: { via: useBackup ? "backup_code" : "totp" } });
       onConfirm();
     } catch (err) {
       haptic("error");
       // Walking away from the extra question changes nothing — the sheet stays
       // up with the code already typed.
-      if (!wasDeclined(err)) setError(err instanceof Error ? err.message : "Couldn’t reach the account service");
+      if (!wasDeclined(err)) {
+        trackError("two-factor.disable", err);
+        setError(withRef(err instanceof Error ? err.message : "Couldn’t reach the account service", err));
+      }
       setCode(["", "", "", "", "", ""]);
       setBackup("");
     } finally {
@@ -362,12 +375,16 @@ function AuthenticatorSheet({
     if (!codeFull || busy) return;
     setBusy(true);
     setError(null);
+    trackEvent("auth.2fa_submit", { detail: "2fa_setup_confirm" });
     try {
       // The code IS the proof here, so this call goes straight through.
-      onVerified(await confirmSetup(code.join("")));
+      const fresh = await confirmSetup(code.join(""));
+      trackEvent("settings.2fa_enabled", { metadata: { codesMinted: fresh.codes.length } });
+      onVerified(fresh);
     } catch (err) {
       haptic("error");
-      setError(err instanceof Error ? err.message : "Couldn’t verify that code");
+      trackError("two-factor.confirm-setup", err);
+      setError(withRef(err instanceof Error ? err.message : "Couldn’t verify that code", err));
       setCode(["", "", "", "", "", ""]);
     } finally {
       setBusy(false);
@@ -378,7 +395,8 @@ function AuthenticatorSheet({
     try {
       await navigator.clipboard.writeText(secret);
       setCopied(true);
-    } catch {
+    } catch (err) {
+      trackError("two-factor.copy-key", err);
       /* clipboard blocked — the key is still readable on screen */
     }
   }

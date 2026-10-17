@@ -8,7 +8,7 @@ import { useT } from "@/lib/i18n";
 /* ═══════════════════════════════════════════════════════════════════
    The auth shell — the accounts app's sign-in frame, ported.
 
-   A bare em-scaled column (.login-card) on the charcoal canvas, the
+   A bare em-scaled column (.login-card) on the black canvas, the
    wordmark pinned top-left, and at PC widths the login mode carries
    two decorations: a fan of story previews on the left and a post
    with a live comments feed on the right. All purely illustrative —
@@ -18,14 +18,24 @@ import { useT } from "@/lib/i18n";
 
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <img
-      src="/logo-white.webp"
-      alt="Tirbeo"
-      width={600}
-      height={200}
-      decoding="async"
-      className={cn("h-[30px] w-auto object-contain", className)}
-    />
+    <>
+      <img
+        src="/logo-dark.webp"
+        alt="Tirbeo"
+        width={600}
+        height={200}
+        decoding="async"
+        className={cn("brand-mark w-auto object-contain h-[30px]", className)}
+      />
+      <img
+        src="/logo-white.webp"
+        alt="Tirbeo"
+        width={600}
+        height={200}
+        decoding="async"
+        className={cn("brand-mark w-auto object-contain h-[30px]", className)}
+      />
+    </>
   );
 }
 

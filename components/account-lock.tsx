@@ -47,6 +47,7 @@ import { ago, formatDate, formatStamp } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 import { useProfile } from "@/lib/profile";
 import { useToast } from "@/lib/use-toast";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 
 /** One sentence in is enough to read, but not enough to review. */
 const MIN_CHARS = 40;
@@ -199,6 +200,7 @@ function Deactivated({ lock }: { lock: Lock }) {
     setBusy(true);
     try {
       await apiReactivate();
+      trackEvent("settings.account_reactivated", { detail: "lock_screen" });
       if (record) writeWelcome({ kind: "reactivated", at: Date.now(), from: record.at });
       haptic("success");
     } finally {
@@ -283,6 +285,7 @@ function Deletion({ lock }: { lock: Lock }) {
     setBusy(true);
     try {
       await apiCancelDeletion();
+      trackEvent("settings.account_deletion_cancelled", { detail: "lock_screen" });
       writeWelcome({ kind: "deletion-cancelled", at: Date.now(), from: asked });
       haptic("success");
     } finally {
@@ -382,6 +385,7 @@ function Restricted({ lock }: { lock: Lock }) {
 
   function carryOn() {
     skipRestriction(item.id);
+    trackEvent("settings.restriction_acknowledged", { metadata: { decision: item.id } });
     haptic("light");
     toast.success("Marked as read — carry on");
     router.replace("/settings");
@@ -396,13 +400,18 @@ function Restricted({ lock }: { lock: Lock }) {
       skipRestriction(item.id);
       setAppealRow(filed);
       setSheetOpen(false);
+      trackEvent("settings.appeal_filed", { metadata: { decision: item.id, appeal: filed?.id } });
       haptic("success");
       toast.success("Review requested — we'll answer under Account status");
       router.replace("/settings");
     } catch (err) {
+      trackError("account-lock.appeal", err);
       haptic("error");
       toast.error(
-        err instanceof Error && err.message ? err.message : "The appeal couldn't be filed.",
+        withRef(
+          err instanceof Error && err.message ? err.message : "The appeal couldn't be filed.",
+          err,
+        ),
       );
     }
   }

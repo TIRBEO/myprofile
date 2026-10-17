@@ -6,6 +6,7 @@ import { downloadCodesPdf } from "@/lib/backup-codes";
 import type { RevealedCodes } from "@/lib/two-factor";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
+import { trackError, trackEvent } from "@/lib/telemetry";
 import { Check, Copy, Download } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -36,14 +37,20 @@ export function BackupCodesSheet({
       .then(() => {
         setCopied(true);
         haptic("success");
+        // Counts only — the codes themselves never belong in telemetry.
+        trackEvent("settings.backup_codes_copied", { metadata: { count: set.codes.length } });
         toast.success("Codes copied");
         window.setTimeout(() => setCopied(false), 1800);
       })
-      .catch(() => toast.error("Couldn't reach the clipboard"));
+      .catch((err) => {
+        trackError("backup-codes.copy", err);
+        toast.error("Couldn't reach the clipboard");
+      });
   }
 
   function download() {
     downloadCodesPdf(set, stamp);
+    trackEvent("settings.backup_codes_downloaded", { metadata: { count: set.codes.length } });
     toast.success("PDF downloaded");
   }
 

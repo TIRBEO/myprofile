@@ -13,25 +13,22 @@
    form with this article already attached to the request.
    ═══════════════════════════════════════════════════════════════════ */
 
+import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
+
 const STORE = "tirbeo:docs-helpful";
 
 export type DocVote = "yes" | "no";
 
 function readAll(): Record<string, DocVote> {
   if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(STORE);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const out: Record<string, DocVote> = {};
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (value === "yes" || value === "no") out[key] = value;
-    }
-    return out;
-  } catch {
-    return {};
+  // Carry a pre-sync vote onto the account once, then read the bag.
+  adoptLegacy(STORE);
+  const parsed = getStored<Record<string, unknown>>(STORE, {});
+  const out: Record<string, DocVote> = {};
+  for (const [key, value] of Object.entries(parsed ?? {})) {
+    if (value === "yes" || value === "no") out[key] = value;
   }
+  return out;
 }
 
 export function readVotes(): Record<string, DocVote> {
@@ -44,10 +41,6 @@ export function setVote(slug: string, vote: DocVote): Record<string, DocVote> {
   const all = readAll();
   if (all[slug] === vote) delete all[slug];
   else all[slug] = vote;
-  try {
-    localStorage.setItem(STORE, JSON.stringify(all));
-  } catch {
-    /* private mode — the answer holds for this visit and no longer */
-  }
+  setStored(STORE, all);
   return all;
 }

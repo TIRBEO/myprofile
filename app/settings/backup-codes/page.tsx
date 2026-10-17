@@ -17,6 +17,7 @@ import { wasDeclined } from "@/lib/reauth";
 import { CODE_COUNT, MINTS_PER_HOUR, type RevealedCodes, regenerateCodes, useTwoFactorState } from "@/lib/two-factor";
 import { ago, formatStamp } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -78,7 +79,9 @@ export default function BackupCodesPage() {
     try {
       // The brain refuses a bare session, so the guard asks once and the retry
       // carries the answer. Cancelled means nothing was generated.
-      setCodes(await guard((proof) => regenerateCodes(proof)));
+      const fresh = await guard((proof) => regenerateCodes(proof));
+      setCodes(fresh);
+      trackEvent("settings.backup_codes_regenerated", { metadata: { count: fresh.codes.length } });
       setConfirming(false);
       refresh();
     } catch (err) {
@@ -86,7 +89,8 @@ export default function BackupCodesPage() {
       // screen, so it can be answered again.
       if (wasDeclined(err)) return;
       setConfirming(false);
-      toast.error(err instanceof Error ? err.message : "Couldn’t reach the account service");
+      trackError("backup-codes.regenerate", err);
+      toast.error(withRef(err instanceof Error ? err.message : "Couldn’t reach the account service", err));
     } finally {
       setBusy(false);
     }

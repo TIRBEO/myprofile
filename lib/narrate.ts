@@ -33,6 +33,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
 
 export type NarrationBlock = { id: string; text: string };
 
@@ -125,24 +126,16 @@ export const RATES = [0.85, 1, 1.25, 1.5];
 const PREF_DEFAULT: NarrationPref = { voice: null, rate: 1 };
 
 export function readPref(): NarrationPref {
-  try {
-    const raw = localStorage.getItem(PREF_STORE);
-    if (!raw) return PREF_DEFAULT;
-    const parsed = JSON.parse(raw) as Partial<NarrationPref>;
-    const rate = typeof parsed.rate === "number" && RATES.includes(parsed.rate) ? parsed.rate : 1;
-    return { voice: typeof parsed.voice === "string" ? parsed.voice : null, rate };
-  } catch {
-    return PREF_DEFAULT;
-  }
+  // The account bag is the truth once it lands; a pre-sync reader gets the
+  // legacy slot through adoptLegacy and getStored's own fallback.
+  adoptLegacy(PREF_STORE);
+  const parsed = getStored<Partial<NarrationPref>>(PREF_STORE, PREF_DEFAULT);
+  const rate = typeof parsed?.rate === "number" && RATES.includes(parsed.rate) ? parsed.rate : 1;
+  return { voice: typeof parsed?.voice === "string" ? parsed.voice : null, rate };
 }
 
 function writePref(next: NarrationPref) {
-  try {
-    localStorage.setItem(PREF_STORE, JSON.stringify(next));
-  } catch {
-    /* A private window that refuses to store keeps reading; the choice just
-       doesn't survive the tab. */
-  }
+  setStored(PREF_STORE, next);
 }
 
 /** One sentence at a time — Chrome drops an utterance that runs past about

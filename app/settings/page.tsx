@@ -16,6 +16,7 @@ import { useProfile, displayName } from "@/lib/profile";
 import { readEmailPrefs } from "@/lib/notification-prefs";
 import { useTwoFactorState } from "@/lib/two-factor";
 import { haptic } from "@/lib/haptics";
+import { trackError } from "@/lib/telemetry";
 
 /* ═══════════════════════════════════════════════════════════════════
    The hub.
@@ -78,7 +79,8 @@ export default function SettingsIndex() {
       .then((prefs) => {
         if (live) setEmailPaused(prefs.emailPaused === true);
       })
-      .catch(() => {
+      .catch((err) => {
+        trackError("settings.hub.read-email-prefs", err);
         if (live) setEmailPaused(null);
       });
     return () => {

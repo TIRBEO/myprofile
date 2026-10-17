@@ -19,6 +19,7 @@ import { dayLabel, formatShortDate } from "@/lib/dates";
 import { describeUserAgent } from "@/lib/device";
 import { coordsOf } from "@/lib/coords";
 import { apiJson } from "@/lib/api";
+import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
 
 const OVERLAY = "tirbeo:login-activity:answers";
 export const MAX_EVENTS = 40;
@@ -122,26 +123,19 @@ function cap(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/* ── Device-local answers (the only thing that isn't the server's) ───── */
+/* ── Your answers (the review marks, now kept on the account) ─────────── */
 
 type Overlay = { reviews: Record<string, { review: Review; reviewedAt: number }>; local: ActivityEvent[] };
 
 function readOverlay(): Overlay {
   if (typeof window === "undefined") return { reviews: {}, local: [] };
-  try {
-    const parsed = JSON.parse(localStorage.getItem(OVERLAY) || "") as Overlay;
-    return { reviews: parsed?.reviews || {}, local: Array.isArray(parsed?.local) ? parsed.local : [] };
-  } catch {
-    return { reviews: {}, local: [] };
-  }
+  adoptLegacy(OVERLAY);
+  const parsed = getStored<Partial<Overlay>>(OVERLAY, { reviews: {}, local: [] });
+  return { reviews: parsed?.reviews || {}, local: Array.isArray(parsed?.local) ? parsed.local : [] };
 }
 
 function writeOverlay(next: Overlay) {
-  try {
-    localStorage.setItem(OVERLAY, JSON.stringify(next));
-  } catch {
-    /* private mode — the answer still holds for this session */
-  }
+  setStored(OVERLAY, next);
 }
 
 // The list as last read, so the synchronous answer helpers can return a

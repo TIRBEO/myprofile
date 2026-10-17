@@ -14,6 +14,7 @@ import { LoadFailed } from "@/components/page-loading";
 import { DeviceRow } from "@/components/device-tile";
 import { type Device, type SessionEvent, readDevices, readLog } from "@/lib/devices";
 import { ago, formatStamp } from "@/lib/dates";
+import { trackError } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
 import { LogOut } from "lucide-react";
 
@@ -36,7 +37,12 @@ export default function DevicesPage() {
 
   const load = () => {
     setFailed(false);
-    readDevices().then(setDevices).catch(() => setFailed(true));
+    readDevices()
+      .then(setDevices)
+      .catch((err) => {
+        trackError("devices.read", err);
+        setFailed(true);
+      });
     setEvents(readLog());
   };
 

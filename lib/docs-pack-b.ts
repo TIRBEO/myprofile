@@ -436,7 +436,7 @@ export const PACK_B: DocArticle[] = [
     title: "The black palette",
     sub: "One palette across the account apps — a black canvas, plates lifted off it, blue for the things you can press.",
     category: "Getting around",
-    keywords: "theme dark black appearance mode night colors palette contrast charcoal",
+    keywords: "theme dark black appearance mode night colors palette contrast midnight",
     updated: REVIEWED,
     intro: [
       "Appearance shows a single theme, drawn as a small preview rather than described. Tirbeo sits on black: the canvas is #000 and everything on it is a slightly lighter plate, so a card, a field and a pressed row are all recognisable at a glance. Blue is kept for the actions.",

@@ -29,6 +29,7 @@ import { useReauthGuard } from "@/components/reauth-sheet";
 import { wasDeclined } from "@/lib/reauth";
 import { placeFor } from "@/lib/places";
 import { ago, formatDate, formatStamp } from "@/lib/dates";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { usePageRefresh } from "@/lib/page-refresh";
@@ -55,7 +56,12 @@ export default function DeviceDetailPage({ id }: { id: string }) {
 
   const load = () => {
     setFailed(false);
-    findDevice(id).then(setDevice).catch(() => setFailed(true));
+    findDevice(id)
+      .then(setDevice)
+      .catch((err) => {
+        trackError("device-detail.read", err);
+        setFailed(true);
+      });
   };
 
   usePageRefresh(load);
@@ -100,9 +106,17 @@ export default function DeviceDetailPage({ id }: { id: string }) {
       // Backing out of the check leaves the session exactly where it was.
       if (wasDeclined(err)) return;
       haptic("error");
-      toast.error(err instanceof Error && err.message ? err.message : `${machine.name} wasn't signed out`);
+      trackError("device-detail.sign-out", err);
+      toast.error(
+        withRef(
+          err instanceof Error && err.message ? err.message : `${machine.name} wasn't signed out`,
+          err,
+        ),
+      );
       return;
     }
+    // One named machine lost its session — the kind the settings audit wants.
+    trackEvent("settings.device_revoked", { detail: machine.kind });
     haptic("success");
     toast.success(`${machine.name} signed out`);
     router.push("/settings/devices");

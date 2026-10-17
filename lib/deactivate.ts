@@ -1,6 +1,7 @@
 "use client";
 
 import { closeRequest, openRequest } from "@/lib/account-history";
+import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
 
 /* ═══════════════════════════════════════════════════════════════════
    Temporary deactivation
@@ -34,36 +35,25 @@ export const REASONS = [
 
 export function readDeactivation(): Deactivation | null {
   if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(STORE);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Deactivation>;
-    if (typeof parsed?.at !== "number" || typeof parsed?.reason !== "string") return null;
-    return { at: parsed.at, reason: parsed.reason };
-  } catch {
-    return null;
-  }
+  adoptLegacy(STORE);
+  const parsed = getStored<Partial<Deactivation> | null>(STORE, null);
+  if (!parsed || typeof parsed.at !== "number" || typeof parsed.reason !== "string") return null;
+  return { at: parsed.at, reason: parsed.reason };
 }
 
 /** Hides the profile and returns the record of it being hidden. */
 export function deactivate(reason: string): Deactivation {
   const record: Deactivation = { at: Date.now(), reason };
-  try {
-    localStorage.setItem(STORE, JSON.stringify(record));
-  } catch {
-    /* private mode — the deactivation still holds for this session */
-  }
+  setStored(STORE, record);
   openRequest("deactivation", "deactivation");
   return record;
 }
 
-/** Signs back in from wherever the profile was hidden. */
+/** Signs back in from wherever the profile was hidden. Clearing the bag value
+    is what ends it — a null means no record, so a reactivation is seen on
+    every device, not just this browser. */
 export function reactivate(): null {
-  try {
-    localStorage.removeItem(STORE);
-  } catch {
-    /* private mode — nothing to clear */
-  }
+  setStored(STORE, null);
   closeRequest("deactivation", "restored");
   return null;
 }

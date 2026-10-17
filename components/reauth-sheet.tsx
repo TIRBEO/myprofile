@@ -12,6 +12,7 @@ import {
 import { OtpInput } from "@/components/otp-input";
 import { haptic } from "@/lib/haptics";
 import { ApiError } from "@/lib/api";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import {
   ReauthDeclined,
   needsReauth,
@@ -100,6 +101,11 @@ export function ReauthSheet({
   function submit() {
     if (!ready) return;
     haptic("medium");
+    // Which door was answered — never the answer itself.
+    trackEvent("auth.2fa_submit", {
+      detail: method === "password" ? "password_proof" : `${method}_proof`,
+      metadata: { method },
+    });
     if (method === "password") return onProof({ password });
     // The emailed code and the authenticator code are different proofs to the
     // service, and it reads them from different fields — a mix-up here would
@@ -117,7 +123,13 @@ export function ReauthSheet({
       setAgainIn(CODE_SECONDS);
       haptic("success");
     } catch (err) {
-      setNotice(err instanceof Error && err.message ? err.message : "The code couldn't be sent");
+      trackError("reauth.send-code", err);
+      setNotice(
+        withRef(
+          err instanceof Error && err.message ? err.message : "The code couldn't be sent",
+          err,
+        ),
+      );
     } finally {
       setSending(false);
     }
@@ -252,11 +264,19 @@ export function useReauthGuard() {
           // A refused proof belongs to this dialog, so it comes back to this
           // dialog. Anything else is the action's own problem.
           if (!complaint || !Object.keys(proof).length) throw err;
+          trackEvent("auth.reauth_failed", {
+            detail: "proof_refused",
+            metadata: { code: err instanceof ApiError ? err.code : undefined },
+          });
           ask = { ...ask, error: complaint };
         }
       }
       const answer = await open.current(ask.methods, ask.error);
-      if (!answer) throw new ReauthDeclined();
+      if (!answer) {
+        // Walking away is an answer too — the action never ran.
+        trackEvent("auth.reauth_declined", { detail: "sheet_closed" });
+        throw new ReauthDeclined();
+      }
       proof = answer;
     }
   }, []);

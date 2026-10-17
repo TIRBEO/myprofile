@@ -25,6 +25,7 @@ import { useReauthGuard } from "@/components/reauth-sheet";
 import { wasDeclined } from "@/lib/reauth";
 import { endSession, loginUrl } from "@/lib/session";
 import { ago, formatDate } from "@/lib/dates";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { haptic } from "@/lib/haptics";
 import { useToast } from "@/lib/use-toast";
 import { usePageRefresh } from "@/lib/page-refresh";
@@ -61,7 +62,8 @@ export default function ConnectedAppsPage() {
       window.location.assign(await connect(provider.id));
     } catch (err: any) {
       setOpening(null);
-      toast.error(err?.message || `Couldn't start connecting ${provider.name}.`);
+      trackError("connected-apps.connect", err);
+      toast.error(withRef(err?.message || `Couldn't start connecting ${provider.name}.`, err));
     }
   }
 
@@ -73,6 +75,7 @@ export default function ConnectedAppsPage() {
       // The guard runs the revoke, and when the account service refuses it
       // asks how to prove it's you and tries the same call again.
       await guard((proof) => disconnect(target.id, proof));
+      trackEvent("settings.connected_app_disconnected", { metadata: { provider: target.id } });
       haptic("success");
       toast.success(`Disconnected ${target.name}`);
       // Losing the provider that signed you in ends the visit: revoke this
@@ -82,7 +85,10 @@ export default function ConnectedAppsPage() {
       window.location.replace(loginUrl());
     } catch (err: any) {
       // Backing out of the check leaves the link connected and says nothing.
-      if (!wasDeclined(err)) toast.error(err?.message || `Couldn't disconnect ${target.name}.`);
+      if (!wasDeclined(err)) {
+        trackError("connected-apps.disconnect", err);
+        toast.error(withRef(err?.message || `Couldn't disconnect ${target.name}.`, err));
+      }
       setConfirming(null);
     } finally {
       setBusy(false);

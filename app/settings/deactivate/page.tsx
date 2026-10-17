@@ -18,6 +18,7 @@ import {
 import { REASONS } from "@/lib/deactivate";
 import { GRACE_DAYS } from "@/lib/delete-account";
 import { formatStamp } from "@/lib/dates";
+import { trackError, trackEvent } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { apiDeactivate, apiReactivate, useAccountState } from "@/lib/account-lifecycle";
@@ -84,9 +85,11 @@ export default function DeactivatePage() {
     setBusy(true);
     try {
       await apiDeactivate(given() || null);
+      trackEvent("settings.account_deactivated");
       haptic("heavy");
       toast.error("Your profile is now hidden");
-    } catch {
+    } catch (err) {
+      trackError("deactivate.submit", err);
       toast.error("Couldn't deactivate the account — please try again");
     } finally {
       setBusy(false);
@@ -97,9 +100,11 @@ export default function DeactivatePage() {
     setBusy(true);
     try {
       await apiReactivate();
+      trackEvent("settings.account_reactivated", { detail: "deactivate_page" });
       haptic("success");
       toast.success("Welcome back — your profile is visible again");
-    } catch {
+    } catch (err) {
+      trackError("deactivate.reactivate", err);
       toast.error("Couldn't reactivate the account — please try again");
     } finally {
       setBusy(false);

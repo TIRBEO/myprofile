@@ -26,6 +26,7 @@ import {
   type StatusSection,
 } from "@/lib/account-status";
 import { ACCOUNT_EVENT, requestFor } from "@/lib/account-history";
+import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
 
 export type LockKind = "deletion" | "deactivated" | "restriction";
 
@@ -57,23 +58,14 @@ const SKIP_STORE = "tirbeo:account-status:skipped";
 
 export function readSkips(): string[] {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(SKIP_STORE);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-  } catch {
-    return [];
-  }
+  adoptLegacy(SKIP_STORE);
+  const parsed = getStored<unknown>(SKIP_STORE, []);
+  return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
 }
 
 export function skipRestriction(id: string): void {
   const next = [...new Set([...readSkips(), id])];
-  try {
-    localStorage.setItem(SKIP_STORE, JSON.stringify(next));
-  } catch {
-    /* private mode — the acknowledgement still holds for this session */
-  }
+  setStored(SKIP_STORE, next);
   accountStateChanged();
 }
 
@@ -170,30 +162,24 @@ export type Welcome = {
     interrupting someone who closed the tab and came back tomorrow. */
 const WELCOME_WINDOW = 5 * 60_000;
 
+/* The bag holds the receipt as an object; `useSyncExternalStore` compares
+   snapshots by identity, so the getSnapshot returns the value stringified —
+   equal content yields an equal string, and the screen only repaints when the
+   receipt actually changes. */
 function rawWelcome(): string {
   if (typeof window === "undefined") return "";
-  try {
-    return localStorage.getItem(WELCOME_STORE) ?? "";
-  } catch {
-    return "";
-  }
+  adoptLegacy(WELCOME_STORE);
+  const value = getStored<Welcome | null>(WELCOME_STORE, null);
+  return value ? JSON.stringify(value) : "";
 }
 
 export function writeWelcome(welcome: Welcome): void {
-  try {
-    localStorage.setItem(WELCOME_STORE, JSON.stringify(welcome));
-  } catch {
-    /* private mode — the screen still shows for this session */
-  }
+  setStored(WELCOME_STORE, welcome);
   accountStateChanged();
 }
 
 export function clearWelcome(): void {
-  try {
-    localStorage.removeItem(WELCOME_STORE);
-  } catch {
-    /* nothing to clear */
-  }
+  setStored(WELCOME_STORE, null);
   accountStateChanged();
 }
 
