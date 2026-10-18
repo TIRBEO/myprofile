@@ -217,13 +217,13 @@ const CORE: DocArticle[] = [
   {
     slug: "data-copy",
     title: "Taking a copy of your data, and taking it back",
-    sub: "Build an archive of what this browser holds, and undo something you deleted before the clock runs out.",
+    sub: "Build an archive of what this browser holds — and what a delete means here, where there is no per-item tray.",
     category: "Your data",
     keywords: "export download archive copy json html restore undelete trash deleted gdpr backup",
     updated: REVIEWED,
     intro: [
       "An archive is everything this browser holds about you: your details, the choices you've saved, the sign-ins, the devices and the changes you've made. It is built on the spot and handed to you as a file — nothing is emailed, and no copy is kept anywhere.",
-      "Deleted things are the other half of this. Nothing disappears the moment you delete it; it waits in Recently deleted for thirty days, and you can put it back from there.",
+      "Taking something back is the other half, and here it applies to the account rather than to items. Tirbeo holds no notes, albums or files of yours, so there is no individual delete to undo and no Recently deleted tray to undo it from. The one deletion with a window on it is the account's own, and the archive is what you keep of everything else.",
     ],
     steps: [
       {
@@ -247,15 +247,10 @@ const CORE: DocArticle[] = [
         },
       },
       {
-        title: "Get something back before its clock runs out",
-        body: "Recently deleted groups what's waiting by the day it leaves. Open an item and restore puts it back exactly where it was; delete it for good instead and it leaves the tray immediately.",
-        href: "/settings/recently-deleted",
-        hrefLabel: "Recently deleted",
-        figure: {
-          route: "/settings/recently-deleted",
-          target: 'main a[href^="/settings/recently-deleted/"]',
-          caption: "The number on the right is how many days are left before it goes for good.",
-        },
+        title: "What you can still take back",
+        body: "The account, within its window. Filing a deletion starts a thirty-day countdown and the same screen that filed it carries a cancel; let it run out and the record is gone, and support cannot recover it either. There is no tray for individual things, because there is nothing individual to delete — which is why the archive above is the copy worth having before you go.",
+        href: "/settings/delete-account",
+        hrefLabel: "Delete account",
       },
     ],
     notes: [
@@ -541,11 +536,11 @@ const CORE: DocArticle[] = [
     notes: [
       {
         q: "Is a deletion in this build real?",
-        a: "It's local. The plan, the countdown and the reason are written to this browser because there's no server holding an account to delete. Clearing the site's data does the same job today.",
+        a: "Yes. The request goes to the account and comes back as its state, so the countdown is the same on a device you've never signed in on before and clearing this browser's site data does not cancel it. Cancelling is a thing you have to do on purpose, from the screen that says it.",
       },
       {
         q: "Can I bring back something I deleted for good?",
-        a: "Not from Recently deleted — that tray is the thirty-day window for individual items, and an item you removed from it early is gone from the list. This is the difference between deleting one thing and closing the account.",
+        a: "There is nothing individual to bring back, because Tirbeo holds no notes, albums or files of yours — so there is no per-item delete, and no tray those items would sit in. The deletion that exists is the account's, and its thirty-day window is the only undo here. Once it closes, support cannot reach past it either.",
       },
     ],
     related: [

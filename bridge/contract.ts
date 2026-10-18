@@ -19,6 +19,9 @@ export type WireField = {
       timestamp on the row — passing one through unchanged puts a time into the
       form and a bare date into a `DateTime` column. */
   kind?: "date";
+  /** How a writable field reaches the row. Almost all of them ride the profile
+      PATCH; `phoneNumber` cannot — see `PHONE_WRITE` below. */
+  writeVia?: "profilePatch" | "phonesEndpoint";
   note?: string;
 };
 
@@ -40,7 +43,13 @@ export const PROFILE_FIELDS: WireField[] = [
   { local: "location", wire: "location", writable: true },
   { local: "website", wire: "website", writable: true },
   { local: "email", wire: "email", writable: false, note: "login identity — changed through the auth flow, never here" },
-  { local: "phone", wire: "phoneNumber", writable: false, note: "recovery number — owned by /api/security/phones" },
+  {
+    local: "phone",
+    wire: "phoneNumber",
+    writable: true,
+    writeVia: "phonesEndpoint",
+    note: "user_phone.number is a real column, written by PHONE_WRITE — the profile PATCH has no phone key in its schema",
+  },
   { local: "jobRole", wire: "companyRole", writable: true },
   { local: "jobCompany", wire: "companyName", writable: true },
   { local: "jobPlace", wire: "jobPlace", writable: true },
@@ -57,6 +66,46 @@ export const UNSUPPORTED_FIELDS = [
   { local: "followers", reason: "counted from the social graph, not editable" },
   { local: "following", reason: "counted from the social graph, not editable" },
 ];
+
+/**
+ * The phone number's own write.
+ *
+ * `phoneNumber` is stored — `user_phone.number`, and the profile read answers
+ * it back — but the profile PATCH body is validated against a strict schema
+ * that names no phone key. Sending `phoneNumber` there is answered "Not a
+ * field you can change here", and because that answer rejects the whole body,
+ * it takes an unchanged website or job title down with it. So the number rides
+ * the endpoint that owns its column: `POST /api/security/phones` stores a
+ * typed number, `DELETE` clears the row. Both are already on this app's
+ * same-origin allow-list under `security`.
+ */
+export const PHONE_WRITE = {
+  path: "/api/security/phones",
+  /** What the account stores: the grouping a person types is spacing, not part
+      of the number. Same strip the phone endpoint applies before it validates. */
+  normalize(value: string): string {
+    return value.trim().replace(/[\s\-()]/g, "");
+  },
+  request(next: string, previous: string): { path: string; method: "POST" | "DELETE"; body: { number: string } } {
+    const value = PHONE_WRITE.normalize(next);
+    /* A cleared number still names the old one, because that endpoint writes
+       the change row and an empty `metadata.phoneNumber` there says nothing
+       about what went away. */
+    return value
+      ? { path: PHONE_WRITE.path, method: "POST", body: { number: value } }
+      : { path: PHONE_WRITE.path, method: "DELETE", body: { number: previous } };
+  },
+} as const;
+
+/** Which local key a wire field name belongs to.
+    *Upstream* field errors arrive named by the row (`companyRole`,
+    `jobStarted`), while every screen looks its notes up by the form's own key
+    (`jobRole`, `jobStartedOn`) — mapping them here is what lets an error the
+    account reported land under the input that caused it. */
+export function localFieldFor(wireKey: string): string {
+  const field = PROFILE_FIELDS.find((f) => f.wire === wireKey);
+  return field ? field.local : wireKey;
+}
 
 /** A row timestamp and a form date are the same fact in two shapes; neither
     side should have to know about the other's format. */
@@ -77,6 +126,10 @@ export function toWire(local: Record<string, unknown>): Record<string, unknown> 
   const out: Record<string, unknown> = {};
   for (const f of PROFILE_FIELDS) {
     if (!f.writable) continue;
+    /* A field with its own endpoint is deliberately not put in the profile
+       PATCH: the strict schema there names no phone key, and one unknown key
+       refuses the whole body — the rest of the edit would be lost with it. */
+    if (f.writeVia && f.writeVia !== "profilePatch") continue;
     if (local[f.local] === undefined) continue;
     out[f.wire] = f.kind === "date" ? toWireDate(local[f.local]) : local[f.local];
   }

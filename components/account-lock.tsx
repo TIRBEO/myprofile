@@ -24,9 +24,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
-import { Button, Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Textarea, cn } from "@/components/ig-ui";
+import { Button, Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Skeleton, Textarea, cn } from "@/components/ig-ui";
 import { ProfilePicture } from "@/components/profile-picture";
-import { Prose, StatementBody, StatementHead, StatementSection } from "@/components/statement";
+import { Prose, StatementHead, StatementScreen } from "@/components/statement";
 import {
   clearWelcome,
   skipRestriction,
@@ -54,70 +54,54 @@ const MIN_CHARS = 40;
 const MAX_CHARS = 900;
 
 export function AccountLockScreen() {
-  const lock = useAccountLock();
+  const { lock, loading } = useAccountLock();
   const welcome = useWelcome();
 
   return (
     <div className="bg-bg">
-      {/* No header on purpose. There is nowhere above this page to go back to. */}
+      {/* The first read hasn't answered, so this screen doesn't yet know which
+          of itself it is. It is shown by the gate for any path, which is the
+          one moment where the account's state is genuinely unknown — and a
+          dashboard is the wrong thing to render into an unknown. */}
+      {!lock && !welcome && loading ? <Checking /> : null}
       {lock?.kind === "deactivated" ? <Deactivated lock={lock} /> : null}
       {lock?.kind === "deletion" ? <Deletion lock={lock} /> : null}
       {lock?.kind === "restriction" ? <Restricted lock={lock} /> : null}
-      {/* A lock that has just been lifted is the only thing this screen shows
+      {/* A lock that has just been lifted is the only thing on this screen
           while the account is otherwise open. */}
       {!lock && welcome ? <BackAgain welcome={welcome} /> : null}
     </div>
   );
 }
 
-/* ── The one screen they are all built from ─────────────────────── */
-
-function Screen({
-  title,
-  lead,
-  meta,
-  hero,
-  mark,
-  blocks,
-  actions,
-  foot,
-}: {
-  title: string;
-  lead: React.ReactNode;
-  /** The dated line under the headline — when this began. */
-  meta?: React.ReactNode;
-  /** The one number that matters, larger than any text around it. */
-  hero?: React.ReactNode;
-  /** What sits at the top of the column: the face, or the ringed tick. */
-  mark?: React.ReactNode;
-  blocks: { label: string; body: React.ReactNode }[];
-  actions: React.ReactNode;
-  foot?: React.ReactNode;
-}) {
+/** The shape of the screen the answer is going to be, in bars. Same column,
+    same headline, same hairlines — so the page doesn't move when it fills in. */
+function Checking() {
   return (
     <div className="flex min-h-dvh flex-col">
       <div className="mx-auto w-full max-w-[560px] flex-1 px-5 pt-1 pb-10 sm:px-6 sm:pt-3">
-        <StatementHead title={title} sub={lead} meta={meta} hero={hero} mark={mark} />
-
-        <StatementBody>
-          {blocks.map((block) => (
-            <StatementSection key={block.label} label={block.label}>
-              {block.body}
-            </StatementSection>
+        <StatementHead
+          title="Checking your account"
+          sub="One moment while we read whether it's open."
+          mark={<Skeleton className="size-[92px] rounded-full" />}
+        />
+        <div className="mt-2 flex flex-col gap-6">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="border-t border-divider pt-4">
+              <Skeleton className="h-[17px] w-[140px] rounded-full" />
+              <div className="mt-3 space-y-2.5">
+                <Skeleton className="h-[13px] w-[92%] rounded-full" />
+                <Skeleton className="h-[13px] w-[78%] rounded-full" />
+              </div>
+            </div>
           ))}
-        </StatementBody>
-
-        {foot ? <Prose className="mt-8 text-[12.5px] leading-relaxed text-muted">{foot}</Prose> : null}
-      </div>
-
-      {/* The action stays put while the explanation scrolls behind it, so
-          there is never a moment where you've read this far and can't act. */}
-      <div className="sticky bottom-0 border-t border-divider bg-bg/92 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
-        <div className="mx-auto flex w-full max-w-[560px] flex-col gap-2">{actions}</div>
+        </div>
       </div>
     </div>
   );
 }
+
+/* ── The one screen they are all built from ─────────────────────── */
 
 function Full({
   label,
@@ -209,7 +193,7 @@ function Deactivated({ lock }: { lock: Lock }) {
   }
 
   return (
-    <Screen
+    <StatementScreen
       title={lock.title}
       lead={lock.sub}
       meta={record ? `Paused on ${formatStamp(record.at)}` : null}
@@ -277,10 +261,6 @@ function Deletion({ lock }: { lock: Lock }) {
     return () => window.clearInterval(id);
   }, []);
 
-  if (finalAtMs == null) return null;
-  const left = remaining(finalAtMs, now);
-  const gone = Math.min(1, Math.max(0, (now - asked) / (finalAtMs - asked)));
-
   async function keepIt() {
     setBusy(true);
     try {
@@ -293,8 +273,55 @@ function Deletion({ lock }: { lock: Lock }) {
     }
   }
 
+  if (finalAtMs == null) {
+    /* The clock is the page, and the date is the account's to give. Printing
+       one worked out here would be a promise the account didn't make, and a
+       blank screen is what this used to be — so it says what's missing, and
+       keeps the one action that is safe either way. */
+    return (
+      <StatementScreen
+        title={lock.title}
+        lead={lock.sub}
+        blocks={[
+          {
+            label: "Why this happened",
+            body: (
+              <Prose>
+                You asked for this account to be closed. Nothing else asked for it and nothing has
+                run yet.
+              </Prose>
+            ),
+          },
+          {
+            label: "What this means",
+            body: (
+              <Prose>
+                The account reports a deletion in progress but hasn&apos;t given the date it becomes
+                final, so there&apos;s no clock to count here. Nothing has been deleted because of
+                that — it&apos;s only this page that can&apos;t show a number it doesn&apos;t have.
+              </Prose>
+            ),
+          },
+          {
+            label: "What you can do",
+            body: (
+              <Prose>
+                Reload to ask the account again, or keep it open below. Cancelling works whether or
+                not the date has arrived.
+              </Prose>
+            ),
+          },
+        ]}
+        actions={<Full label={busy ? "Cancelling…" : "Keep my account"} onClick={keepIt} />}
+        foot="Nothing on this screen is a guess. Where the account was silent, this says so rather than filling the gap."
+      />
+    );
+  }
+  const left = remaining(finalAtMs, now);
+  const gone = Math.min(1, Math.max(0, (now - asked) / (finalAtMs - asked)));
+
   return (
-    <Screen
+    <StatementScreen
       title={lock.title}
       lead={lock.sub}
       meta={`Asked for on ${formatStamp(asked)}`}
@@ -418,7 +445,7 @@ function Restricted({ lock }: { lock: Lock }) {
 
   return (
     <>
-      <Screen
+      <StatementScreen
         title={item.title}
         lead={item.sub}
         meta={`Decided on ${formatDate(item.at)} · ${ago(item.at)}`}
@@ -492,7 +519,7 @@ function BackAgain({ welcome }: { welcome: Welcome }) {
   }
 
   return (
-    <Screen
+    <StatementScreen
       title={paused ? "You're back" : "Your account stays open"}
       lead={
         paused

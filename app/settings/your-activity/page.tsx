@@ -29,7 +29,6 @@ import {
   type DayRow,
   type GroupKey,
 } from "@/lib/your-activity";
-import { KEEP_DAYS } from "@/lib/deleted-items";
 import { formatShortDate, longDay, todayWord, weekdayShort } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 
@@ -202,11 +201,6 @@ export default function YourActivityPage() {
 
       <SectionTitle>Your records</SectionTitle>
       <Group>
-        <LinkRow
-          href="/settings/recently-deleted"
-          title="Recently deleted"
-          sub={`Gone for good ${KEEP_DAYS} days after you delete it.`}
-        />
         <LinkRow
           href="/settings/activity-log"
           title="Account history"

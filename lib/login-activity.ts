@@ -6,20 +6,26 @@
    The account's real sign-in ledger: every successful and blocked attempt
    from `security.login-history`, plus the notable security changes from
    `security.events` (password changed, two-factor on, passkey added, signed
-   out). Both are read from the brain over this app's own origin.
+   out). All three are read from the brain over this app's own origin, and a
+   read that fails is said out loud — an empty list only ever means the
+   account answered and had nothing to show.
 
-   The one thing kept on the device is your answer to "was this you" — the
-   page says so out loud, and the brain has no notion of a review. Those marks
-   are an overlay keyed by the server's own event id, so they survive a reload
-   and re-attach to the same record next time it's read.
+   Your answer to "was this you" goes to the account when the account has a
+   place for it. A change row (`security.events` hands back the ledger's own
+   id) is answered with `POST /api/user/changes/:id/answer`, which writes a
+   record of its own, dated by the server; the row is only marked answered
+   once that call has accepted it. A sign-in row is not a change — the
+   sign-in ledger (`user_logins`) has no review field and the brain refuses
+   an answer addressed at one — so on those rows the mark is kept on this
+   device, and the page says which of the two you are looking at.
    ═══════════════════════════════════════════════════════════════════ */
 
 import { appLocale } from "@/lib/language";
 import { dayLabel, formatShortDate } from "@/lib/dates";
 import { describeUserAgent } from "@/lib/device";
 import { coordsOf } from "@/lib/coords";
-import { apiJson } from "@/lib/api";
-import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
+import { apiJson, apiSend } from "@/lib/api";
+import { adoptLegacy, getStored, persistNow, setStored } from "@/lib/remote-store";
 
 const OVERLAY = "tirbeo:login-activity:answers";
 export const MAX_EVENTS = 40;
@@ -41,15 +47,17 @@ export type ActivityEvent = {
   method: string;
   /** The sign-in this page is being read from. */
   current: boolean;
-  /** Marked by the system as worth a look — a blocked attempt, a new country. */
-  suspicious: boolean;
-  /** Your answer to "was this you", kept on the device. Absent means never
-      answered, which is what the log's "Review" marker is for. */
+  /** Whether the account can hold an answer on this row at all. True for a
+      change (the ledger's own id, and `user/changes/:id/answer` takes it);
+      false for a sign-in, which the ledger keeps without a review field. */
+  answerable: boolean;
+  /** Your answer to "was this you". Absent means never answered, which is
+      what the log's "Review" marker is for. */
   review?: Review | null;
   /** When you answered — so the page can say "you confirmed this 2 min ago". */
   reviewedAt?: number | null;
-  /** Only on an entry this screen caused — what it actually did. */
-  note?: string;
+  /** Which record the answer is: the account's, or this device's only. */
+  reviewKept?: "account" | "device" | null;
 };
 
 export type Review = "me" | "not-me";
@@ -123,39 +131,111 @@ function cap(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/* ── Your answers (the review marks, now kept on the account) ─────────── */
+/* ── Your answers ─────────────────────────────────────────────────── */
 
-type Overlay = { reviews: Record<string, { review: Review; reviewedAt: number }>; local: ActivityEvent[] };
+/** A device-side copy of an answer: what the account holds for a change row,
+    and the whole record for a sign-in row (which has nowhere else to be). */
+type CachedAnswer = { review: Review; at: number; kept: "account" | "device" };
+
+type Overlay = { answers: Record<string, CachedAnswer> };
 
 function readOverlay(): Overlay {
-  if (typeof window === "undefined") return { reviews: {}, local: [] };
+  if (typeof window === "undefined") return { answers: {} };
   adoptLegacy(OVERLAY);
-  const parsed = getStored<Partial<Overlay>>(OVERLAY, { reviews: {}, local: [] });
-  return { reviews: parsed?.reviews || {}, local: Array.isArray(parsed?.local) ? parsed.local : [] };
+  const parsed = getStored<Partial<Overlay>>(OVERLAY, { answers: {} });
+  const answers: Record<string, CachedAnswer> = {};
+  // The bag's shape changed once: an older `reviews` map is read as answers
+  // kept on this device, so a mark given before this page could send anything
+  // still shows — and nothing written by the account is second-guessed.
+  const legacy = (parsed as unknown as { reviews?: Record<string, { review: Review; reviewedAt: number }> })?.reviews;
+  for (const [id, row] of Object.entries(legacy || {})) {
+    if (row?.review === "me" || row?.review === "not-me")
+      answers[id] = { review: row.review, at: Number(row.reviewedAt) || Date.now(), kept: "device" };
+  }
+  for (const [id, row] of Object.entries(parsed?.answers || {})) {
+    if (row?.review === "me" || row?.review === "not-me")
+      answers[id] = { review: row.review, at: Number(row.at) || Date.now(), kept: row.kept === "account" ? "account" : "device" };
+  }
+  return { answers };
 }
 
-function writeOverlay(next: Overlay) {
-  setStored(OVERLAY, next);
+/** The answers the account itself holds, folded from `user/changes`. */
+type ChangeAnswerRow = { id: string; said: { answer: string; at: string } | null };
+
+async function readAccountAnswers(): Promise<Map<string, { review: Review; at: number }>> {
+  const reply = await apiJson<{ changes: ChangeAnswerRow[] }>("/api/user/changes?limit=200");
+  const out = new Map<string, { review: Review; at: number }>();
+  for (const row of reply.changes || []) {
+    const answer = row?.said?.answer;
+    if (answer !== "recognised" && answer !== "not-me") continue;
+    const at = Date.parse(row.said?.at || "");
+    out.set(row.id, { review: answer === "not-me" ? "not-me" : "me", at: Number.isNaN(at) ? Date.now() : at });
+  }
+  return out;
 }
 
-// The list as last read, so the synchronous answer helpers can return a
-// merged view without re-fetching (a review never needs fresh server data).
+/** One answer, written where it belongs and never before it is true:
+    the account first for a row it can hold, then the device cache. */
+async function writeAnswer(id: string, review: Review | null, answerable: boolean): Promise<void> {
+  if (answerable) {
+    /* The brain's own words for the two halves of the question, and `null`
+       for taking it back — which it records rather than erasing. */
+    await apiSend(`/api/user/changes/${id}/answer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ answer: review === null ? null : review === "not-me" ? "not-me" : "recognised" }),
+    });
+  }
+
+  const overlay = readOverlay();
+  const before = overlay.answers[id];
+  const at = Date.now();
+  if (review === null) delete overlay.answers[id];
+  else overlay.answers[id] = { review, at, kept: answerable ? "account" : "device" };
+
+  if (answerable) {
+    /* A cache of an answer the account already holds: if this write is
+       refused the answer is still true, it just won't show on this device
+       until the next read. The account's copy is the one that counts. */
+    setStored(OVERLAY, overlay);
+    return;
+  }
+
+  // A device-only mark is the only copy there is, so it is awaited — a
+  // refusal means the answer was not kept, and the page has to say so.
+  setStored(OVERLAY, overlay);
+  try {
+    await persistNow(OVERLAY, overlay);
+  } catch (err) {
+    const back = readOverlay();
+    if (before) back.answers[id] = before;
+    else delete back.answers[id];
+    setStored(OVERLAY, back);
+    throw err;
+  }
+}
+
+// The list as last read, so the synchronous helpers can return a merged view
+// without re-fetching (an answer never needs fresh server data).
 let lastEvents: ActivityEvent[] = [];
 
 /**
  * The merged log: sign-ins and blocked attempts from login-history, security
- * changes from the events feed, this device's answers layered on top. Newest
- * first, capped. Marks the newest sign-in on this machine's address as current.
+ * changes from the events feed, and every answer the account holds folded onto
+ * the row it was given about. Newest first, capped. Marks the newest sign-in on
+ * this machine's address as current. Throws when the account won't answer — a
+ * blank list here means "nothing recorded", never "the read failed".
  */
 export async function readEvents(): Promise<ActivityEvent[]> {
-  const [history, security, sessions] = await Promise.all([
-    apiJson<{ logs: LoginRow[] }>("/api/security/login-history?limit=40").catch(() => ({ logs: [] as LoginRow[] })),
-    apiJson<{ events: SecurityEventRow[] }>("/api/security/events?limit=40").catch(() => ({ events: [] as SecurityEventRow[] })),
-    apiJson<{ ipAddress: string | null; isCurrent: boolean }[]>("/api/security/sessions").catch(() => []),
+  const [history, security, sessions, answered] = await Promise.all([
+    apiJson<{ logs: LoginRow[] }>("/api/security/login-history?limit=40"),
+    apiJson<{ events: SecurityEventRow[] }>("/api/security/events?limit=40"),
+    apiJson<{ ipAddress: string | null; isCurrent: boolean }[]>("/api/security/sessions"),
+    readAccountAnswers(),
   ]);
 
   const currentIp = sessions.find((s) => s.isCurrent)?.ipAddress || null;
-  const { reviews, local } = readOverlay();
+  const cached = readOverlay().answers;
 
   const signinEvents: ActivityEvent[] = history.logs.map((row) => ({
     id: row.id,
@@ -167,7 +247,9 @@ export async function readEvents(): Promise<ActivityEvent[]> {
     coords: coordsOf(row.coords),
     method: methodLabel(row.method),
     current: false,
-    suspicious: false,
+    // The sign-in ledger has no review column, and the brain refuses an
+    // answer addressed at one — so an answer here is a device mark.
+    answerable: false,
   }));
 
   // Only the newest sign-in that arrived on this machine's address is "here".
@@ -190,15 +272,19 @@ export async function readEvents(): Promise<ActivityEvent[]> {
       coords: coordsOf(e.coords),
       method: "This device",
       current: false,
-      suspicious: false,
+      answerable: true,
     }));
 
-  const merged = [...signinEvents, ...securityEvents, ...local]
+  const merged = [...signinEvents, ...securityEvents]
     .sort((a, b) => b.at - a.at)
     .slice(0, MAX_EVENTS)
     .map((event) => {
-      const answer = reviews[event.id];
-      return answer ? { ...event, review: answer.review, reviewedAt: answer.reviewedAt } : event;
+      // The account wins: it is dated by the server and the same on any device.
+      const server = answered.get(event.id);
+      if (server) return { ...event, review: server.review, reviewedAt: server.at, reviewKept: "account" as const };
+      const local = cached[event.id];
+      if (local) return { ...event, review: local.review, reviewedAt: local.at, reviewKept: local.kept };
+      return event;
     });
 
   lastEvents = merged;
@@ -217,51 +303,43 @@ function applyAnswer(next: ActivityEvent[]) {
   return next;
 }
 
-/** The answer to "was this you", written with the moment it was given. Both
-    halves of the question are an answer, so both are kept. */
-export function answerEvent(id: string, review: Review): ActivityEvent[] {
-  const overlay = readOverlay();
-  overlay.reviews[id] = { review, reviewedAt: Date.now() };
-  writeOverlay(overlay);
+/** The answer to "was this you". The row is marked only after the account has
+    accepted it (or, on a sign-in row, after the device has kept it), so a
+    refusal leaves the log asking and the page free to try again. */
+export async function answerEvent(id: string, review: Review): Promise<ActivityEvent[]> {
+  const event = lastEvents.find((row) => row.id === id);
+  await writeAnswer(id, review, !!event?.answerable);
+  const at = Date.now();
+  const kept = event?.answerable ? "account" : "device";
   return applyAnswer(
-    lastEvents.map((event) => (event.id === id ? { ...event, review, reviewedAt: overlay.reviews[id].reviewedAt } : event)),
+    lastEvents.map((row) => (row.id === id ? { ...row, review, reviewedAt: at, reviewKept: kept } : row)),
   );
 }
 
 /** Take the answer back — the record goes unsigned and the log asks again. */
-export function clearAnswer(id: string): ActivityEvent[] {
-  const overlay = readOverlay();
-  delete overlay.reviews[id];
-  overlay.local = overlay.local.map((e) => (e.id === id ? { ...e, review: null, reviewedAt: null } : e));
-  writeOverlay(overlay);
-  return applyAnswer(lastEvents.map((event) => (event.id === id ? { ...event, review: null, reviewedAt: null } : event)));
+export async function clearAnswer(id: string): Promise<ActivityEvent[]> {
+  const event = lastEvents.find((row) => row.id === id);
+  await writeAnswer(id, null, !!event?.answerable);
+  return applyAnswer(
+    lastEvents.map((row) =>
+      row.id === id ? { ...row, review: null, reviewedAt: null, reviewKept: null } : row,
+    ),
+  );
 }
 
-/** Add the sign-out-everywhere you just performed, so the log carries the
-    thing you did here and not only the things that happened to the account. */
-export function logSignOutEverywhere(devices: number): ActivityEvent[] {
-  const now = Date.now();
-  const current = lastEvents.find((e) => e.current) ?? lastEvents[0];
-  const entry: ActivityEvent = {
-    id: `${now.toString(36)}-signout`,
-    at: now,
-    kind: "signout",
-    device: "This device",
-    location: current?.location ?? "Unknown location",
-    ip: current?.ip ?? "",
-    coords: current?.coords ?? null,
-    method: "Signed out from the login log",
-    current: true,
-    suspicious: false,
-    review: "me",
-    reviewedAt: now,
-    note: `Ended ${devices} ${devices === 1 ? "session" : "sessions"} on every other machine.`,
-  };
-  const overlay = readOverlay();
-  overlay.reviews[entry.id] = { review: "me", reviewedAt: now };
-  overlay.local = [entry, ...overlay.local];
-  writeOverlay(overlay);
-  return applyAnswer([entry, ...lastEvents].sort((a, b) => b.at - a.at).slice(0, MAX_EVENTS));
+/** Where an answer lives, in the page's own words. Nothing is claimed to be on
+    the account that isn't. */
+export function answerKeptLabel(event: ActivityEvent): string {
+  return event.reviewKept === "account"
+    ? "The account has your answer."
+    : "Kept on this device only — the sign-in ledger has nowhere to hold a review.";
+}
+
+/** The sign-out-everywhere you just performed is a real ledger row
+    (`sessions.revoked_all`), so this only re-reads: nothing is written down
+    here that the account did not record itself. */
+export async function logSignOutEverywhere(): Promise<ActivityEvent[]> {
+  return readEvents();
 }
 
 /**

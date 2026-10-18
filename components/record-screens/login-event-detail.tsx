@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sheet } from "@/components/ig-ui";
+import { Sheet, useAction } from "@/components/ig-ui";
 import { EVENT_ICONS } from "@/components/event-icons";
 import { MapCard } from "@/components/map-card";
 import {
@@ -57,6 +57,12 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
   const [signedOutAll, setSignedOutAll] = useState(0);
   const toast = useToast();
   const { guard, reauthDialog } = useReauthGuard();
+  /* One in-flight flag per decision, so the button the person actually
+     pressed is the one that shows it's working — and can't be pressed twice. */
+  const confirmMe = useAction();
+  const confirmNot = useAction();
+  const undoAnswer = useAction();
+  const endSessions = useAction();
 
   const load = () => {
     setFailed(false);
@@ -108,8 +114,8 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
         : EVENT_TITLE[record.kind];
 
   /** Say it was you. The record stops asking, here and in the log. */
-  function thatWasMe() {
-    const [next] = answerEvent(record.id, "me").filter((e) => e.id === record.id);
+  async function thatWasMe() {
+    const [next] = (await answerEvent(record.id, "me")).filter((e) => e.id === record.id);
     setEvent(next);
     setConfirmNotMe(false);
     haptic("success");
@@ -117,8 +123,8 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
   }
 
   /** Say it wasn't you. The mark lands on the record and lifts the log to red. */
-  function notMeConfirmed() {
-    const [next] = answerEvent(record.id, "not-me").filter((e) => e.id === record.id);
+  async function notMeConfirmed() {
+    const [next] = (await answerEvent(record.id, "not-me")).filter((e) => e.id === record.id);
     setEvent(next);
     setConfirmNotMe(false);
     haptic("error");
@@ -126,8 +132,8 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
   }
 
   /** Take the answer back, so the record goes into the log as unreviewed. */
-  function changeAnswer() {
-    const [next] = clearAnswer(record.id).filter((e) => e.id === record.id);
+  async function changeAnswer() {
+    const [next] = (await clearAnswer(record.id)).filter((e) => e.id === record.id);
     setEvent(next);
     haptic("light");
   }
@@ -143,9 +149,9 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
       toast.error(err instanceof Error && err.message ? err.message : "No sessions were ended.");
       return;
     }
-    if (others) logSignOutEverywhere(others);
+    await logSignOutEverywhere();
     if (answer === null)
-      setEvent(answerEvent(record.id, "not-me").find((e) => e.id === record.id) ?? event);
+      setEvent((await answerEvent(record.id, "not-me")).find((e) => e.id === record.id) ?? event);
     setConfirmNotMe(false);
     haptic("success");
     toast.success(
@@ -203,7 +209,12 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
 
       {answer === null ? (
         <PillStack>
-          <PillButton label="This was me" tone="primary" onClick={thatWasMe} />
+          <PillButton
+            label="This was me"
+            tone="primary"
+            loading={confirmMe.pending}
+            onClick={() => confirmMe.run(thatWasMe)}
+          />
           <PillButton label="That wasn't me" tone="danger" onClick={askWasThisYou} />
         </PillStack>
       ) : confirmed ? (
@@ -212,7 +223,12 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
             You confirmed this{record.reviewedAt ? `, ${ago(record.reviewedAt)}` : ""}.
           </Helper>
           <PillStack>
-            <PillButton label="Change my answer" tone="outline" onClick={changeAnswer} />
+            <PillButton
+              label="Change my answer"
+              tone="outline"
+              loading={undoAnswer.pending}
+              onClick={() => undoAnswer.run(changeAnswer)}
+            />
           </PillStack>
         </>
       ) : (
@@ -231,12 +247,18 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
               label={signedOutAll ? "Logged out everywhere" : "Log out of all sessions"}
               tone="danger"
               disabled={signedOutAll > 0}
-              onClick={signOutAll}
+              loading={endSessions.pending}
+              onClick={() => endSessions.run(signOutAll)}
             />
             {signedOutAll ? (
               <PillButton label="Change your password" tone="primary" href="/settings/security" />
             ) : null}
-            <PillButton label="Change my answer" tone="outline" onClick={changeAnswer} />
+            <PillButton
+              label="Change my answer"
+              tone="outline"
+              loading={undoAnswer.pending}
+              onClick={() => undoAnswer.run(changeAnswer)}
+            />
           </PillStack>
         </>
       )}
@@ -253,13 +275,15 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
                 label="Yes, that’s me"
                 sub="Marks the entry as checked. Nothing about the session changes."
                 tone="primary"
-                onClick={thatWasMe}
+                loading={confirmMe.pending}
+                onClick={() => confirmMe.run(thatWasMe)}
               />
               <PillButton
                 label="No, that wasn’t me"
                 sub="Marks it in red and puts the log-out on the page beside this record."
                 tone="danger"
-                onClick={notMeConfirmed}
+                loading={confirmNot.pending}
+                onClick={() => confirmNot.run(notMeConfirmed)}
               />
               <PillButton label="Let me look again" tone="outline" onClick={() => setConfirmNotMe(false)} />
             </div>

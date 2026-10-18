@@ -13,10 +13,16 @@
    screen it shows can never disagree, and no page has to remember to
    check. Anything that isn't the screen for the current state is
    unreachable while that state lasts.
+
+   A lock has no address. It used to have one of its own, which meant a
+   screen whose whole meaning was "your account is closed" could be opened
+   when it wasn't — and, worse, that the page for the step before it could
+   be skipped by typing a URL. The gate now puts the screen up over whatever
+   path you asked for, so there is nothing to type and nothing to skip.
    ═══════════════════════════════════════════════════════════════════ */
 
 import { useSyncExternalStore, useEffect } from "react";
-import { getAccountState, loadAccountState } from "@/lib/account-lifecycle";
+import { accountStateLoaded, getAccountState, loadAccountState } from "@/lib/account-lifecycle";
 import {
   loadAccountChecks,
   loadAppeals,
@@ -32,8 +38,6 @@ export type LockKind = "deletion" | "deactivated" | "restriction";
 
 export type Lock = {
   kind: LockKind;
-  /** The one page that is reachable while this holds. */
-  href: string;
   /** A restriction can be read and set aside; the other two cannot. */
   skippable: boolean;
   title: string;
@@ -41,16 +45,6 @@ export type Lock = {
   /** Only set for a restriction, which has to name the rule it rests on. */
   decision?: { section: StatusSection; item: StatusItem };
 };
-
-export const LOCK_HREF: Record<LockKind, string> = {
-  deletion: "/settings/deletion-pending",
-  deactivated: "/settings/deactivated",
-  restriction: "/settings/restricted",
-};
-
-/** Every page that only exists while a lock holds — reached from one, with no
-    lock, is a page that has nothing left to say. */
-export const LOCK_HREFS: string[] = Object.values(LOCK_HREF);
 
 /** A restriction stops nagging once it's been answered or set aside; the
     decision itself stays on the account-status pages either way. */
@@ -100,7 +94,6 @@ export function readLock(): Lock | null {
   if (account?.deletionPending) {
     return {
       kind: "deletion",
-      href: LOCK_HREF.deletion,
       skippable: false,
       title: "Your account is scheduled for deletion",
       sub: "Nothing else on the account is open while that clock runs. This is the one page you can reach, and the only choice on it is to stop it.",
@@ -110,7 +103,6 @@ export function readLock(): Lock | null {
   if (account?.deactivated) {
     return {
       kind: "deactivated",
-      href: LOCK_HREF.deactivated,
       skippable: false,
       title: "Your account is deactivated",
       sub: "Everything is where you left it. Reactivate it and it all comes back — until you do, this is the only page the account opens.",
@@ -121,7 +113,6 @@ export function readLock(): Lock | null {
   if (decision) {
     return {
       kind: "restriction",
-      href: LOCK_HREF.restriction,
       skippable: true,
       title: decision.item.title,
       sub: `A decision about your account has to be read before anything else. You can appeal it here, or set it aside and carry on — either way it stays listed under Account status.`,
@@ -130,12 +121,6 @@ export function readLock(): Lock | null {
   }
 
   return null;
-}
-
-/** Whether a path is the page the current lock allows. */
-export function lockAllows(lock: Lock | null, pathname: string): boolean {
-  if (!lock) return true;
-  return pathname === lock.href || pathname.startsWith(lock.href + "/");
 }
 
 /* ── The screen after a lock is lifted ───────────────────────────
@@ -245,15 +230,22 @@ function currentKey(): string {
     if (CACHE.size > 16) CACHE.clear();
     CACHE.set(key, lock);
   }
-  return key;
+  /* The loading bit is part of the snapshot, not a second store: the answer
+     "no lock" looks identical to "the account hasn't been asked yet", and a
+     snapshot that didn't change between the two would leave the gate showing
+     the dashboard to an account that is about to be told it is closed. */
+  return accountStateLoaded() ? key : `?${key}`;
 }
 
-/** The lock in force, re-read whenever the route changes, a state is
-    announced, or a fresh read from the brain lands. `null` means the account
-    is open normally. The first mount pulls the real state so a page opened
-    cold reflects the account rather than an empty browser cache. */
-export function useAccountLock(): Lock | null {
-  const key = useSyncExternalStore(subscribe, currentKey, () => "");
+/** The lock in force, and whether the account has been asked yet. Re-read
+    whenever the route changes, a state is announced, or a fresh read from the
+    brain lands. `lock === null` with `loading === false` means the account is
+    open normally; `lock === null` with `loading === true` means nobody knows
+    yet, which is not the same thing and must not render the dashboard.
+    The first mount pulls the real state so a page opened cold reflects the
+    account rather than an empty browser cache. */
+export function useAccountLock(): { lock: Lock | null; loading: boolean } {
+  const snapshot = useSyncExternalStore(subscribe, currentKey, () => "");
   useEffect(() => {
     void loadAccountState();
     // The checks and the appeals are read from the account too, so the
@@ -262,5 +254,7 @@ export function useAccountLock(): Lock | null {
     void loadAccountChecks().catch(() => {});
     void loadAppeals().catch(() => {});
   }, []);
-  return key ? (CACHE.get(key) ?? null) : null;
+  const loading = snapshot.startsWith("?");
+  const key = loading ? snapshot.slice(1) : snapshot;
+  return { lock: key ? (CACHE.get(key) ?? null) : null, loading };
 }

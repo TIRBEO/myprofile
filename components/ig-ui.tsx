@@ -348,12 +348,16 @@ export function Switch({
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
 type ButtonSize = "sm" | "md" | "lg";
 
-/* The accounts-app button skins: one royal-blue fill, one hairline outline,
-   one quiet text, one red — full pills, semibold, tight tracking. */
+/* The button skins: one accent fill, one `systemFill` grey, one quiet text,
+   one red — full pills, semibold, tight tracking. */
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press active:scale-[0.995]",
+  primary: "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
+  /* Apple's secondary is a filled grey, not an outlined one. The label has to
+     be the accent colour for that to read as a control: a grey pill with grey
+     words beside a blue one is indistinguishable from a disabled pair, and
+     the fill alone carries no "you can press this" at all. */
   secondary:
-    "border border-btn-line bg-transparent text-text-2 hover:border-btn-line-hover hover:bg-hover hover:text-fg",
+    "bg-fill text-accent-text hover:bg-fill-hover active:bg-fill-press",
   ghost: "text-text-3 hover:bg-hover hover:text-fg",
   danger: "bg-danger text-accent-fg hover:bg-danger-hover active:brightness-95",
   link: "min-h-10 rounded-full px-1 text-[15px] font-semibold text-text-3 hover:text-fg",
@@ -369,10 +373,11 @@ export const PILL_BASE =
 export const PILL_FILL = {
   primary: "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
   danger: "bg-danger text-accent-fg hover:bg-danger-hover active:brightness-95",
-  /** The accounts secondary is a hairline outline, never a grey slab — a
-      filled one sits next to the accent-filled one and reads as the disabled pair. */
-  outline:
-    "border border-btn-line bg-transparent text-text-2 hover:border-btn-line-hover hover:bg-hover hover:text-fg",
+  /** The quiet action beside a loud one. `outline` is the name 60 call sites
+      use for "the not-primary button"; it is no longer an outline, because
+      Apple draws that one filled with `systemFill` and labelled in the accent
+      colour — the blue words are what stop it reading as a disabled control. */
+  outline: "bg-fill text-accent-text hover:bg-fill-hover active:bg-fill-press",
 } as const;
 
 /** A filled button that can't be used yet still has to read as accent-coloured, or as
@@ -409,7 +414,7 @@ export function Button({
       disabled={disabled || loading}
       className={cn(
         "inline-flex touch-manipulation items-center justify-center font-semibold tracking-[-0.01em] whitespace-nowrap",
-        "transition-[filter,background-color,transform,opacity] duration-100 active:scale-[0.985]",
+        "transition-[filter,background-color,opacity] duration-100 active:opacity-65",
         "disabled:pointer-events-none disabled:opacity-45",
         variant === "link" ? "text-[14px] font-medium" : BUTTON_SIZE[size],
         BUTTON_VARIANT[variant],
@@ -1339,9 +1344,9 @@ export function Sheet({
                 (closing
                   ? "animate-sheet-down sm:animate-scale-out"
                   : "animate-sheet-up sm:animate-scale-in"),
-              "rounded-t-[22px] bg-surface",
+              "rounded-t-xl bg-surface",
               "shadow-[0_-30px_90px_-20px_rgb(0_0_0/0.7)]",
-              "sm:rounded-[22px] sm:border sm:border-hairline sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
+              "sm:rounded-xl sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
               width === "lg" ? "sm:max-w-[560px]" : "sm:max-w-[420px]",
             )}
             style={{
@@ -1377,7 +1382,7 @@ export function Sheet({
               >
                 <div className="min-w-0 flex-1">
                   {title ? (
-                    <h2 className="text-[19px] leading-snug font-bold tracking-[-0.02em] text-balance">
+                    <h2 className="text-[20px] leading-snug font-semibold tracking-[-0.02em] text-balance">
                       {title}
                     </h2>
                   ) : null}
@@ -1532,7 +1537,11 @@ export function SheetActions({
       <button
         type="button"
         onClick={() => (deferredClose ? deferredClose() : onCancel())}
-        className="flex min-h-[48px] flex-1 items-center justify-center rounded-full border border-btn-line bg-transparent px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] text-text-2 outline-none transition hover:border-btn-line-hover hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className={cn(
+          "flex min-h-[48px] flex-1 items-center justify-center rounded-full px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] outline-none transition",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+          PILL_FILL.outline,
+        )}
       >
         {cancelLabel}
       </button>
@@ -1543,18 +1552,32 @@ export function SheetActions({
 /**
  * Escape-to-close plus scroll lock, for overlays built by hand (the
  * navigation drawer). `Sheet` composes this internally.
+ *
+ * The lock is reference-counted and lives on <html>, not <body>: two overlays
+ * stacked (a sheet opening a confirm on top of it) used to hand the body back
+ * its old `overflow: hidden` when the inner one closed, which left the page
+ * unscrollable for good. The scrollbar slot is reserved by
+ * `scrollbar-gutter: stable` in globals.css, so nothing is added to the
+ * padding — that compensation is what made the page jump sideways the instant
+ * a popup opened.
  */
+let overlaysOpen = 0;
+
+function lockPageScroll() {
+  const root = document.documentElement;
+  if (overlaysOpen++ === 0) root.setAttribute("data-scroll-lock", "1");
+  return () => {
+    overlaysOpen = Math.max(0, overlaysOpen - 1);
+    if (!overlaysOpen) root.removeAttribute("data-scroll-lock");
+  };
+}
+
 export function useOverlay(onClose: () => void) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
   useEffect(() => {
-    const { body } = document;
-    const prevOverflow = body.style.overflow;
-    const prevPad = body.style.paddingRight;
-    const gap = window.innerWidth - document.documentElement.clientWidth;
-    body.style.overflow = "hidden";
-    if (gap > 0) body.style.paddingRight = `${gap}px`;
+    const unlock = lockPageScroll();
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -1564,8 +1587,7 @@ export function useOverlay(onClose: () => void) {
     document.addEventListener("keydown", onKeyDown);
 
     return () => {
-      body.style.overflow = prevOverflow;
-      body.style.paddingRight = prevPad;
+      unlock();
       document.removeEventListener("keydown", onKeyDown);
     };
   }, []);

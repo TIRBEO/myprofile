@@ -41,7 +41,7 @@ const ACCOUNT_TRACES = [
   "tirbeo:login-activity:answers", // was-this-you answers
   "tirbeo:narration", // per-account voice-over choices
   "tirbeo:support-requests", // support tickets opened from here
-  "tirbeo:your-activity:deleted", // the recently-deleted tray
+  "tirbeo:your-activity:deleted", // the retired recently-deleted tray — see lib/retired-tray.ts
   "tirbeo:welcome-back", // the one-time welcome note
   "tirbeo:token-user", // the cached token's copy of who is signed in
 ];

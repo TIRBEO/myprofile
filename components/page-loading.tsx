@@ -16,11 +16,13 @@ import { Helper, PillButton, PillStack, SettingsPage } from "@/components/settin
 
 /** One row of a Group: a title bar, its explanation, and the value that
     will sit at the end of the line. Padding and heights mirror ROW/TITLE/SUB
-    so nothing moves when the data lands. */
+    so nothing moves when the data lands — which is a promise about arithmetic,
+    not about appearance: the text box a 17px title and a 15px sub-line make
+    together is 48px, so the bars sit inside a 48px box rather than setting one. */
 function Row({ trailing = true }: { trailing?: boolean }) {
   return (
-    <div className="flex items-center gap-4 px-4 py-[15px] sm:px-5 sm:py-[17px]">
-      <span className="min-w-0 flex-1 space-y-[7px]">
+    <div className="flex min-h-[48px] items-center gap-4 px-4 py-[15px] sm:px-5 sm:py-[17px]">
+      <span className="flex min-w-0 flex-1 flex-col justify-center gap-[7px]">
         <Skeleton className="h-[15px] w-[46%] rounded-full" />
         <Skeleton className="h-[12px] w-[72%] rounded-full" />
       </span>
@@ -55,7 +57,7 @@ export function SectionSkeleton({
   return (
     <div className={lead ? undefined : "mt-9"}>
       {lead ? <Skeleton className="mt-5 mb-1 h-[14px] w-[85%] rounded-full" /> : null}
-      <Skeleton className="mb-3 h-[17px] w-[140px] rounded-full" />
+      <Skeleton className="mb-3 h-[20px] w-[140px] rounded-full" />
       <RowsSkeleton count={count} trailing={trailing} />
     </div>
   );
@@ -67,8 +69,8 @@ export function ToggleRowsSkeleton({ count = 3 }: { count?: number }) {
   return (
     <div className="list-divide">
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="flex items-center gap-4 px-4 py-[15px] sm:px-5 sm:py-[17px]">
-          <span className="min-w-0 flex-1 space-y-[7px]">
+        <div key={i} className="flex min-h-[48px] items-center gap-4 px-4 py-[15px] sm:px-5 sm:py-[17px]">
+          <span className="flex min-w-0 flex-1 flex-col justify-center gap-[7px]">
             <Skeleton className="h-[15px] w-[52%] rounded-full" />
             <Skeleton className="h-[12px] w-[78%] rounded-full" />
           </span>
@@ -97,7 +99,7 @@ export function SkeletonPage({
   return (
     <SettingsPage title={title}>
       {lead ? <Skeleton className="mt-5 mb-1 h-[14px] w-[85%] rounded-full" /> : null}
-      <Skeleton className="mt-9 mb-3 h-[17px] w-[140px] rounded-full" />
+      <Skeleton className="mt-9 mb-3 h-[20px] w-[140px] rounded-full" />
       <RowsSkeleton count={count} trailing={trailing} />
     </SettingsPage>
   );
@@ -108,7 +110,7 @@ export function SkeletonPage({
 export function TogglePageSkeleton({ title, count = 4 }: { title: string; count?: number }) {
   return (
     <SettingsPage title={title}>
-      <Skeleton className="mt-9 mb-3 h-[17px] w-[140px] rounded-full" />
+      <Skeleton className="mt-9 mb-3 h-[20px] w-[140px] rounded-full" />
       <ToggleRowsSkeleton count={count} />
     </SettingsPage>
   );

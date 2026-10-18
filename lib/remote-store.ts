@@ -14,9 +14,14 @@
    instead of each keeping its own — the reason these screens were localStorage
    bound at all was only that the account API did not have somewhere to put
    them. Now it does (preferences.user_preferences.misc.settings).
+
+A write the account refuses is not dropped: the switch goes back to where the
+account says it is, and the failure is reported to anyone listening
+(subscribePersistFailures) — which is what the settings shell turns into a
+toast with a way to try again beside it.
    ═══════════════════════════════════════════════════════════════════ */
 
-import { apiSend } from "@/lib/api";
+import { apiJson } from "@/lib/api";
 
 type Bag = Record<string, unknown>;
 
@@ -28,6 +33,20 @@ const listeners = new Set<() => void>();
 let bag: Bag | null = null;
 let loading: Promise<Bag> | null = null;
 let loaded = false;
+
+/* ── Write failures ───────────────────────────────────────────────
+   A switch moves the moment it is tapped, and the write to the account
+   happens behind it. When that write is refused the screen has to say so —
+   so every failure is remembered, reported to whoever is listening, and
+   kept for a retry. `confirmed` is the bag as the account last answered,
+   which is what a refused optimistic value rolls back to. */
+
+export type PersistFailure = { key: string; value: unknown; error: unknown };
+
+const failListeners = new Set<(failure: PersistFailure) => void>();
+const failed = new Map<string, unknown>();
+const pending = new Set<string>();
+let confirmed: Bag | null = null;
 
 function readMirror(): Bag {
   if (typeof window === "undefined") return {};
@@ -76,6 +95,7 @@ export function ensureSettings(): Promise<Bag> {
       const server: Bag =
         json && typeof json.settings === "object" && json.settings ? json.settings : {};
       bag = { ...(bag as Bag), ...server }; // server wins where it has a value
+      confirmed = { ...server };
       loaded = true;
       writeMirror(bag as Bag);
       emit();
@@ -117,8 +137,8 @@ export function getStored<T>(key: string, fallback: T): T {
 }
 
 /** Optimistic write: update bag + mirrors now, persist to the server behind
-    the scenes. Returns nothing; a failed persist leaves the local value and
-    the next load reconciles. */
+    the scenes. Returns nothing; a persist that the account refuses rolls this
+    key back to the account's answer and reports the failure. */
 export function setStored<T>(key: string, value: T): void {
   bag = { ...(bag ?? readMirror()), [key]: value };
   writeMirror(bag);
@@ -182,15 +202,98 @@ export function adoptLegacy(key: string): void {
 function persist(key: string, value: unknown): void {
   /* Through lib/api, not a raw fetch: the brain gates every cookie-authed
      write on a double-submit token, and a hand-rolled request here would be
-     answered 403 — quietly, since nothing reads this reply. */
-  void apiSend("/api/settings", {
+     answered 403 — quietly, which is the thing this whole block exists to
+     stop. The reply is the account's merged bag, so a write that succeeded
+     settles on the account's answer rather than on what this device hoped;
+     a write that was refused rolls the switch back and reports it. */
+  pending.add(key);
+  failed.delete(key);
+  void apiJson<{ settings?: Bag }>("/api/settings", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ [key]: value }),
-  }).catch(() => {
-    /* the write lives in the mirror; it will be re-sent on the next change
-       that succeeds, or a reload that comes back online */
-  });
+  })
+    .then((reply) => {
+      pending.delete(key);
+      const server = reply?.settings;
+      if (server && typeof server === "object") adopt(server);
+    })
+    .catch((error) => {
+      pending.delete(key);
+      failed.set(key, value);
+      rollBack(key);
+      for (const listener of [...failListeners]) listener({ key, value, error });
+    });
+}
+
+/** The account's answer becomes the local truth, except for keys another
+    write is still carrying — that one is newer than this reply. */
+function adopt(server: Bag): void {
+  confirmed = { ...(confirmed || {}), ...server };
+  const current = bag ?? readMirror();
+  const next: Bag = { ...current };
+  for (const [key, value] of Object.entries(server)) {
+    if (pending.has(key)) continue;
+    next[key] = value;
+  }
+  bag = next;
+  writeMirror(next);
+  emit();
+}
+
+/** A refused write puts the switch back where the account says it is. With
+    no account answer to go back to (a first load that never landed), the
+    local value stands and the failure is only reported. */
+function rollBack(key: string): void {
+  if (!confirmed || !Object.prototype.hasOwnProperty.call(confirmed, key)) return;
+  if (Object.prototype.hasOwnProperty.call(bag ?? {}, key) && bag![key] === confirmed[key]) return;
+  bag = { ...(bag ?? {}), [key]: confirmed[key] };
+  writeMirror(bag);
+  mirrorPerStore(key, bag[key]);
+  emit();
+}
+
+/** Every write this session could not land, newest values only. A page that
+    offers "try again" reads this before it asks. */
+export function failedWrites(): { key: string; value: unknown }[] {
+  return [...failed.entries()].map(([key, value]) => ({ key, value }));
+}
+
+/** Sends the values the account refused. Resolves once every retry has been
+    answered; a retry that fails again is reported the same way. */
+export async function retryWrites(): Promise<void> {
+  const queue = [...failed.entries()];
+  failed.clear();
+  await Promise.all(queue.map(([key, value]) => persistNow(key, value)));
+}
+
+/** One write, awaited — for callers that need to know the answer rather than
+    watch a switch settle (a security toggle that shows a toast either way). */
+export async function persistNow(key: string, value: unknown): Promise<void> {
+  pending.add(key);
+  try {
+    const reply = await apiJson<{ settings?: Bag }>("/api/settings", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ [key]: value }),
+    });
+    pending.delete(key);
+    failed.delete(key);
+    if (reply?.settings && typeof reply.settings === "object") adopt(reply.settings);
+  } catch (error) {
+    pending.delete(key);
+    failed.set(key, value);
+    throw error;
+  }
+}
+
+export function subscribePersistFailures(
+  listener: (failure: PersistFailure) => void,
+): () => void {
+  failListeners.add(listener);
+  return () => {
+    failListeners.delete(listener);
+  };
 }
 
 export function subscribeSettings(listener: () => void): () => void {

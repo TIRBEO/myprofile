@@ -117,6 +117,14 @@ export default function LoginActivityPage() {
       <Helper className="mt-8">
         Locations are traced from network addresses — they name a city, not a place.
       </Helper>
+
+      {/* Which of the two answers the account can actually hold, said before
+          someone reads a tick on a sign-in as a record nobody keeps. */}
+      <Helper>
+        Your answer goes to the account on a change — a password, two-factor, a passkey, a
+        sign-out — and the account dates it. A sign-in has no review field in the ledger, so an
+        answer on one is kept on this device and said so on its page.
+      </Helper>
     </SettingsPage>
   );
 }

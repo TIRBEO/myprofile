@@ -27,6 +27,7 @@ import { haptic } from "@/lib/haptics";
 import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
 import { getStaySignedIn, setStaySignedIn } from "@/lib/session";
+import { ensureSettings, subscribeSettings } from "@/lib/remote-store";
 import { Download, Eye, EyeOff } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -35,12 +36,14 @@ import { Download, Eye, EyeOff } from "lucide-react";
    The card at the top reports the account's actual state rather than a
    slogan: whether an authenticator is on, and how many passkeys exist.
    Everything below it is one row per thing, and the whole row is the
-   tap target. "Saved login info" is the only switch here, and it drives
-   a real client session (lib/session). Logging out is the one red row,
-   and it asks in a sheet before it ends anything. Passwords are never
-   stored, and the recovery address is the account's own — read from the
-   brain, and marked unconfirmed until a code says whoever typed it can
-   actually read the mail.
+   tap target. "Saved login info" is the only switch here, and it is the
+   account's own policy (saveLoginInfo) — writing it is awaited, because
+   turning it off ends long sessions on other devices and the toast has to
+   say what the account did, not what this browser hoped. Logging out is
+   the one red row, and it asks in a sheet before it ends anything.
+   Passwords are never stored, and the recovery address is the account's
+   own — read from the brain, and marked unconfirmed until a code says
+   whoever typed it can actually read the mail.
    ═══════════════════════════════════════════════════════════════════ */
 
 export default function SecurityPage() {
@@ -63,6 +66,10 @@ export default function SecurityPage() {
   const load = useCallback(() => {
     setReady(false);
     setSavedLogin(getStaySignedIn());
+    // The switch answers for the account, not this browser: once the
+    // GET /api/settings bag lands, the control reads the server's
+    // saveLoginInfo rather than whatever this device kept last time.
+    void ensureSettings().then(() => setSavedLogin(getStaySignedIn()));
     // Both counts and states are the account's, so the page waits for the
     // pair of them rather than showing "0 passkeys / password set" and
     // correcting itself a moment later.
@@ -91,17 +98,38 @@ export default function SecurityPage() {
 
   useEffect(() => {
     load();
+    // When the store rolls a refused write back to the account's answer,
+    // the emit lands here and the switch follows it — no guessing.
+    const unsubscribe = subscribeSettings(() => setSavedLogin(getStaySignedIn()));
+    return unsubscribe;
   }, [load]);
 
   usePageRefresh(load);
 
-  function toggleSavedLogin(on: boolean) {
-    setStaySignedIn(on);
+  async function toggleSavedLogin(on: boolean) {
+    const previous = savedLogin;
     setSavedLogin(on);
-    trackEvent("settings.stay_signed_in_changed", { metadata: { on } });
-    toast.success(
-      on ? "You'll stay signed in on this device" : "You'll sign out after 1 hour of inactivity",
-    );
+    try {
+      // Awaited, so the toast below is a promise the account has accepted.
+      await setStaySignedIn(on);
+      trackEvent("settings.stay_signed_in_changed", { metadata: { on } });
+      toast.success(
+        on ? "You'll stay signed in on this device" : "You'll sign out after 1 hour of inactivity",
+      );
+    } catch (err) {
+      // The write was refused: show the account's answer (the store's own
+      // rollback restores the bag and re-paints this row when it lands).
+      trackError("security.stay-signed-in-save", err);
+      setSavedLogin(previous);
+      toast.error(
+        withRef(
+          err instanceof ApiError && err.message
+            ? err.message
+            : "Saved login info couldn’t be updated — nothing changed",
+          err,
+        ),
+      );
+    }
   }
 
   function verifyRecovery(email: string) {

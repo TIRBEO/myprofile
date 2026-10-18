@@ -20,7 +20,8 @@ import { PullToRefresh } from "@/components/pull-to-refresh";
 import { ProfilePicture } from "@/components/profile-picture";
 import { displayName, useProfile } from "@/lib/profile";
 import { trackEvent } from "@/lib/telemetry";
-import { LOCK_HREFS, lockAllows, useAccountLock, useWelcome } from "@/lib/account-state";
+import { useAccountLock, useWelcome } from "@/lib/account-state";
+import { retireDeletedTray } from "@/lib/retired-tray";
 
 /* ═══════════════════════════════════════════════════════════════════
    Account app shell
@@ -175,6 +176,15 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("tirbeo:session-expired", leave);
   }, [runProbe, leave]);
 
+  /* One cleanup per shell load, for the screen this app used to seed with
+     example rows. The tray is gone; the six invented items are still in the
+     bag of every browser that opened it, and an archive export reads whatever
+     the bag holds — so a copy of somebody's data could contain a trip plan
+     they never wrote. */
+  useEffect(() => {
+    retireDeletedTray();
+  }, []);
+
   /* A tab that was left standing is not a live session. Coming back to the
      foreground (or the window getting focus) re-asks — through the probe's own
      cache, so returning every thirty seconds costs nothing, and the first
@@ -256,35 +266,24 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
      A paused account, a scheduled deletion and an unread decision each shut
      the whole area down to their own screen. Nothing here is a notice on top
      of the page: the shell isn't rendered at all, so there's no rail to
-     navigate from and nothing of the dashboard to catch a glimpse of. The
-     redirect is what keeps it true once you're on the screen it allows —
-     back, or a typed-in URL, or a bookmark all come back here.            */
-  const lock = useAccountLock();
+     navigate from and nothing of the dashboard to catch a glimpse of.
+
+     That is decided by the render below and by nothing else. Those screens
+     have no URL of their own — the gate puts one up over whatever path you
+     asked for — so a typed address, a bookmark and the back button all reach
+     the same answer. The redirect that follows is the address bar catching
+     up with what's already on screen, not the thing enforcing it.          */
+  const { lock, loading } = useAccountLock();
   const welcome = useWelcome();
-  /* Coming back out of a pause, or calling off a deletion, leaves a receipt
-     behind. Until it's been acknowledged it holds the screen the same way a
-     lock does — and it stops the redirect from pulling the page out from
-     under it halfway through. */
-  const clearHref =
-    lock || welcome ? null : LOCK_HREFS.find((href) => pathname.startsWith(href));
 
   useEffect(() => {
-    if (lock && !lockAllows(lock, pathname)) router.replace(lock.href);
-    else if (!lock && !welcome && clearHref) router.replace("/settings");
-  }, [lock, welcome, pathname, clearHref, router]);
+    if ((lock || welcome) && pathname !== "/settings") router.replace("/settings");
+  }, [lock, welcome, pathname, router]);
 
-  if (lock && !lockAllows(lock, pathname)) return <AccountLockScreen />;
-  if (!lock && welcome) return <AccountLockScreen />;
-
-  /* The lock page is the one thing a locked account sees, and it sees it
-     without the rail, the palette or the sign-out sheet standing behind it. */
-  if (lock) {
-    return (
-      <div className="min-h-dvh bg-bg">
-        <main className="min-h-dvh">{children}</main>
-      </div>
-    );
-  }
+  /* Also while the first read is in flight: "the account hasn't been asked
+     yet" must not render the dashboard, because the answer could be that the
+     account is closed. */
+  if (lock || welcome || loading) return <AccountLockScreen />;
 
   return (
     <div className="min-h-dvh">

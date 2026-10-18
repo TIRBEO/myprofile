@@ -6,14 +6,16 @@ import { useRouter } from "next/navigation";
 import { LogOut, SearchX } from "lucide-react";
 import { Button, SearchField } from "@/components/ig-ui";
 import { SignOutSheet } from "@/components/settings-layout";
-import { ActionRow, Group, LinkRow, SettingsPage } from "@/components/settings-shell";
+import { ActionRow, Group, Helper, LinkRow, SettingsPage } from "@/components/settings-shell";
 import { ProfilePicture } from "@/components/profile-picture";
 import { RowsSkeleton } from "@/components/page-loading";
 import { NAV_GROUPS, searchNav } from "@/lib/nav";
-import { useLanguage } from "@/lib/language";
+import { LANGUAGE_KEY, useLanguage } from "@/lib/language";
+import { THEME_KEY } from "@/lib/theme";
 import { englishFor, useT } from "@/lib/i18n";
 import { useProfile, displayName } from "@/lib/profile";
 import { readEmailPrefs } from "@/lib/notification-prefs";
+import { failedWrites, retryWrites, subscribePersistFailures, subscribeSettings } from "@/lib/remote-store";
 import { useTwoFactorState } from "@/lib/two-factor";
 import { haptic } from "@/lib/haptics";
 import { trackError } from "@/lib/telemetry";
@@ -41,6 +43,23 @@ function badgeFor(href: string, values: Record<string, string | undefined>): str
   return values[href];
 }
 
+/* A refused settings write rolls back to the account's answer on the page
+   that took the tap — but the person reads the hub after the toast faded,
+   so this is where the switch that didn't stick has to be named. Keys are
+   the bag's; unknown ones keep their machine name rather than vanishing
+   behind a generic line. */
+const CONTROL_NAMES: Record<string, string> = {
+  saveLoginInfo: "Saved login info",
+  require2FA: "Require 2FA for sensitive actions",
+  twoFactorRequireForActions: "Require 2FA for sensitive actions",
+  twoFactorAlertSuspicious: "Alert on suspicious sign-in",
+  [THEME_KEY]: "Theme",
+  [LANGUAGE_KEY]: "Language",
+};
+function controlName(key: string): string {
+  return CONTROL_NAMES[key] ?? key.replace(/^tirbeo:/, "");
+}
+
 /** Where a wide screen is sent instead of the hub — the first real section
     in the rail, so /settings always lands somewhere that exists. */
 const WIDE_HOME = NAV_GROUPS[0].items[0].href;
@@ -60,6 +79,15 @@ export default function SettingsIndex() {
   const profile = useProfile();
   const { state: twoFactor } = useTwoFactorState();
   const [emailPaused, setEmailPaused] = useState<boolean | null>(null);
+  /* "The account wouldn't answer" is not the same fact as "email is on",
+     and hiding the badge pretends there is nothing to see: a failed read
+     keeps the badge blank AND says so beside a working retry. */
+  const [emailFailed, setEmailFailed] = useState(false);
+  const [emailNonce, setEmailNonce] = useState(0);
+  /* The controls the account refused, named — see CONTROL_NAMES. The queue
+     is the store's own; the banner is its voice. */
+  const [stuck, setStuck] = useState<string[] | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia(WIDE_QUERY);
@@ -75,18 +103,54 @@ export default function SettingsIndex() {
 
   useEffect(() => {
     let live = true;
+    setEmailFailed(false);
     readEmailPrefs()
       .then((prefs) => {
         if (live) setEmailPaused(prefs.emailPaused === true);
       })
       .catch((err) => {
         trackError("settings.hub.read-email-prefs", err);
-        if (live) setEmailPaused(null);
+        if (live) {
+          setEmailPaused(null);
+          setEmailFailed(true);
+        }
       });
     return () => {
       live = false;
     };
+  }, [emailNonce]);
+
+  /* The store reports every write the account refused; the queue is the
+     truth of what still hasn't landed. Rollbacks and adopts emit on the
+     settings channel too, so the banner tracks the queue rather than
+     remembering a snapshot — and clears itself when the queue empties. */
+  useEffect(() => {
+    const sync = () => {
+      const names = failedWrites().map((failure) => controlName(failure.key));
+      setStuck(names.length ? names : null);
+    };
+    sync(); // a refusal from another page, earlier this session, still queued
+    const unsubscribeSettings = subscribeSettings(sync);
+    const unsubscribeFailures = subscribePersistFailures(sync);
+    return () => {
+      unsubscribeSettings();
+      unsubscribeFailures();
+    };
   }, []);
+
+  async function retryStuck() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      // Re-sends exactly the refused values; a retry that fails again
+      // re-queues, so the banner stays with the names rather than vanishing.
+      await retryWrites();
+      const left = failedWrites().map((failure) => controlName(failure.key));
+      setStuck(left.length ? left : null);
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   // A wide screen is mid-redirect: draw nothing rather than flash the list
   // the rail already replaces.
@@ -125,6 +189,42 @@ export default function SettingsIndex() {
             <SearchField value={query} onChange={setQuery} placeholder={t("Search settings")} />
           </div>
         </div>
+
+        {/* The things that didn't stick, named — a switch silently returning
+            to the account's answer is indistinguishable from one nobody
+            touched unless the hub says so. */}
+        {stuck ? (
+          <div className="px-4 pt-2 sm:px-5" role="status">
+            <Helper tone="danger">
+              {`${stuck.join(", ")} ${stuck.length === 1 ? "didn’t save" : "didn’t save"} — your account is holding its own answer, not what you tapped. `}
+              <button
+                type="button"
+                className="font-semibold underline disabled:opacity-60"
+                onClick={retryStuck}
+                disabled={retrying}
+              >
+                {retrying ? "Trying…" : "Try again"}
+              </button>
+              .
+            </Helper>
+          </div>
+        ) : null}
+
+        {emailFailed ? (
+          <div className="px-4 pt-2 sm:px-5" role="status">
+            <Helper tone="danger">
+              {`Your email notification settings couldn’t be read, so that row shows no badge — that’s the app not answering, not a switch that’s off. `}
+              <button
+                type="button"
+                className="font-semibold underline"
+                onClick={() => setEmailNonce((n) => n + 1)}
+              >
+                Try again
+              </button>
+              .
+            </Helper>
+          </div>
+        ) : null}
 
         {/* The lists sit back inside the gutter the sticky bar, the account row
             and the search pill deliberately break. */}

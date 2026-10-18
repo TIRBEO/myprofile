@@ -14,7 +14,7 @@ import { SettingsLayout } from "@/components/settings-layout";
    needed, at the price of a function per page.
 
    The screens that genuinely cannot be prerendered keep their own functions:
-   the two bridge routes and the eight pages that address a single record by id. */
+   the two bridge routes and the seven screens that address a single record by id. */
 export default function SettingsGroupLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {

@@ -22,6 +22,7 @@
 
 import { fetchProfile } from "@/lib/api-client";
 import { clearAccountTraces } from "@/lib/account-cache";
+import { getStored, persistNow, setStored } from "@/lib/remote-store";
 
 const PREF_KEY = "tirbeo:security";
 const LAST_ACTIVE_KEY = "tirbeo:last-active";
@@ -126,6 +127,10 @@ export function endSession() {
     for (const key of [
       "tirbeo:security",
       "tirbeo:last-active",
+      // The bag's per-store slot for the account's saved-login policy. The
+      // policy belongs to the account that just signed out — the next person
+      // must not inherit its watchdog setting.
+      "saveLoginInfo",
       "tirbeo_session",
     ]) {
       window.localStorage.removeItem(key);
@@ -193,8 +198,20 @@ export async function probeSessionState(options?: { fresh?: boolean }): Promise<
   return probe.inFlight;
 }
 
+/**
+ * "Saved login info" is the account's `saveLoginInfo` policy, not a browser
+ * habit: the brain revokes every other long-lived session when it is off, and
+ * the inactivity watchdog below is this device's copy of the same answer.
+ * The watchdog reads this synchronously on every tick, so it takes the
+ * settings bag (which mirrors localStorage) and falls back to the legacy
+ * device slot for browsers that have not synced yet.
+ */
 export function getStaySignedIn(): boolean {
   if (typeof window === "undefined") return true;
+  return getStored<boolean>("saveLoginInfo", legacyStaySignedIn());
+}
+
+function legacyStaySignedIn(): boolean {
   try {
     const raw = window.localStorage.getItem(PREF_KEY);
     if (!raw) return true;
@@ -205,13 +222,25 @@ export function getStaySignedIn(): boolean {
   }
 }
 
-export function setStaySignedIn(on: boolean) {
+/**
+ * Writes the account's policy and waits for the answer — switching it off
+ * ends other devices' long sessions server-side, so the caller has to be
+ * able to say truthfully whether it landed. The optimistic bag write goes in
+ * first so the store's built-in rollback can restore the control (and report
+ * the failure) when the account refuses; a throw here means "nothing changed
+ * on the account".
+ */
+export async function setStaySignedIn(on: boolean): Promise<void> {
   try {
+    // The legacy slot keeps pre-sync devices and other tabs honest about the
+    // watchdog while the bag round trip is in the air.
     window.localStorage.setItem(PREF_KEY, JSON.stringify({ savedLogin: on }));
   } catch {
     /* private mode — the server cookie still reflects the account's choice */
   }
   if (!on) window.localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+  setStored("saveLoginInfo", on);
+  await persistNow("saveLoginInfo", on);
 }
 
 /**

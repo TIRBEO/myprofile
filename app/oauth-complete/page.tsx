@@ -237,12 +237,11 @@ function Button({
         BUTTON_SIZE[size],
         variant === "primary"
           ? cn(
-              "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press active:scale-[0.995]",
+              "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
               "disabled:bg-surface-3 disabled:text-placeholder disabled:opacity-100 disabled:shadow-none",
             )
           : cn(
-              "border border-btn-line bg-transparent text-text-2",
-              "hover:border-btn-line-hover hover:bg-hover hover:text-fg",
+              "bg-fill text-accent-text hover:bg-fill-hover active:bg-fill-press",
               "disabled:text-text-4 disabled:opacity-100",
             ),
         className,

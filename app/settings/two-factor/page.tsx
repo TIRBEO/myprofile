@@ -22,12 +22,12 @@ import {
   type TwoFactorState,
   confirmSetup,
   disableAuthenticator,
-  saveTwoFactorPrefs,
   startSetup,
   useTwoFactorState,
 } from "@/lib/two-factor";
 import { formatKey, secretFromUri } from "@/lib/totp";
 import { formatStamp } from "@/lib/dates";
+import { persistNow, setStored } from "@/lib/remote-store";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { trackError, trackEvent, withRef } from "@/lib/telemetry";
@@ -101,11 +101,30 @@ export default function TwoFactorPage() {
     }
   }
 
+  /** Bag keys the extra-security switches live under on the account — the
+      same names the settings read returns them under. `twoFactorAlertSuspicious`
+      absent means ON, which is the server's own default, so the switch never
+      shows "off" for a choice nobody has made. */
+  const PREF_KEYS = {
+    requireForActions: "twoFactorRequireForActions",
+    alertSuspicious: "twoFactorAlertSuspicious",
+  } as const;
+
+  /** Extra-security switches ride the account's settings write path: the
+      optimistic bag write lets the store roll a refused value back and name
+      it on the hub's failure channel, the awaited persistNow lets this toast
+      report what the account actually answered. Requiring 2FA for actions is
+      the policy column — the brain still refuses it without an enrolled
+      factor, and the row can't move until the authenticator is on. */
   async function savePref(next: Partial<Pick<TwoFactorState, "requireForActions" | "alertSuspicious">>) {
     const prev = state!;
     set({ ...prev, ...next });
     try {
-      await saveTwoFactorPrefs(next);
+      for (const [field, value] of Object.entries(next) as [keyof typeof PREF_KEYS, boolean][]) {
+        const key = PREF_KEYS[field];
+        setStored(key, value);
+        await persistNow(key, value);
+      }
       trackEvent("settings.2fa_pref_changed", { metadata: { ...next } });
     } catch (err) {
       set(prev);

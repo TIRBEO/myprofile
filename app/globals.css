@@ -3,35 +3,51 @@
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
-  /* Charcoal canvas with near-black plates — the references' ladder
-     (chat1.jpg, ref1.jpg): the page sits mid-grey, the panels sink below
-     it, and controls float back up as grey pills. */
-  --bg: #26262a;
-  --card: #1a1a1d;
-  --surface: #1a1a1d;
-  --surface-2: #262629;
-  --surface-3: #303034;
+  /* Apple's grouped tables, in Apple's order: the ground is the darkest thing
+     on the screen and every layer above it is lighter — plate, then control,
+     then the separator that sits between rows of the plate.
+
+     This app had it the other way round (a #1a1a1d plate sunk into a #26262a
+     page), and that inversion is the reason every section reads as a box
+     inside a box. Nothing else about the layout had to change to fix it.
+     systemGroupedBackground → cell → control → separator. */
+  --bg: #1c1c1e;
+  --card: #2c2c2e;
+  --surface: #2c2c2e;
+  --surface-2: #3a3a3c;
+  --surface-3: #48484a;
   --fg: #ffffff;
   --muted: #a1a1a8;
-  --link: #9aa6ff;
-  --text-2: #dcdce1;
+  --link: #64a5ff;
+  --text-2: #ebeaf0;
   --text-3: #a1a1a8;
-  --text-4: #87878e;
-  --placeholder: #71717a;
-  --border: #34343a;
-  --border-strong: #48484e;
-  --divider: #2e2e32;
-  --hover: #26262a;
-  --accent: #0d6ecf;
-  --accent-hover: #2b86e0;
-  --ig: #0d6ecf;
-  --ig-hover: #2b86e0;
-  --ig-press: #0a5cb0;
-  --accent-2: #64aaff;
+  --text-4: #8e8e93;
+  /* Was #72727a. The field colour moved up to #3a3a3c in this pass, and a
+     placeholder is the one text colour that has to be measured against the
+     *field* rather than the plate: at the old value it sat at 2.38:1 on the
+     new one, which is too faint to read as an instruction. Still the least
+     emphatic grey in the palette — `--text-4` and `--muted` both sit above it. */
+  --placeholder: #7c7c85;
+  --border: #48484a;
+  --border-strong: #5a5a5e;
+  --divider: #38383a;
+  /* A hover has to be lighter than the plate it is on. It used to be exactly
+     `--bg`, which was invisible on a dark page and read as a hole punched in
+     the row once the plate got lighter. */
+  --hover: #3a3a3c;
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --ig: #0a84ff;
+  --ig-hover: #409cff;
+  --ig-press: #0060c9;
+  --accent-2: #64a5ff;
   --accent-2-hover: #8ec5ff;
-  --accent-2-press: #0d6ecf;
+  --accent-2-press: #0a84ff;
   --accent-soft: rgba(10, 132, 255, 0.18);
-  --accent-text: #64aaff;
+  /* The fill and the text are two different blues on purpose: #0A84FF on a
+     control is Apple's, but the same blue as 15px words on a plate is 3.8:1,
+     so text uses Apple's increased-contrast systemBlue, which clears 4.5. */
+  --accent-text: #64a5ff;
   --accent-fg: #ffffff;
   --danger: #ff453a;
   --danger-hover: #e0342c;
@@ -40,13 +56,18 @@
   --success-text: #5ce070;
   --warn: #ffd60a;
   --warn-text: #e5c209;
-  --stack-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* `-apple-system` first, and no SF Pro by name. There is no SF Pro file or
+     licence in this repo, and where one *is* installed it matches this name
+     statically — which defeats the generic family that is the only route to
+     SF Pro's optical-size switching and per-size tracking. */
+  --stack-sans: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
   --stack-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --rail: #1b1b1e;
-  --scrim: rgb(10 10 12 / 68%);
-  --track: #4e4e56;
-  --focus-ring: #0d6ecf;
-  --autofill-fill: #2a2a2e;
+  --rail: #161618;
+  --scrim: rgb(0 0 0 / 62%);
+  --track: #48484a;
+  --focus-ring: #0a84ff;
+  --autofill-fill: #3a3a3c;
   --ink: #ffffff;
   --ink-fg: #000000;
   --shadow-sheet: 0 -20px 60px -12px rgb(0 0 0 / 68%);
@@ -54,21 +75,24 @@
   /* Accounts-app aliases — identical values, shared naming so component
      class strings (bg-field, text-text-3, border-hairline…) render the
      same in both apps. */
-  --field: #2a2a2e;
-  --field-hover: #323237;
-  --field-focus: #3a3a40;
-  --hairline: #2e2e32;
-  --btn-line: rgba(255, 255, 255, 0.16);
-  --btn-line-hover: rgba(255, 255, 255, 0.28);
-  --glass: rgba(26, 26, 29, 0.85);
-  --glass-2: rgba(26, 26, 29, 0.94);
-  --glass-3: #1a1a1d;
-  --accent-press: #0a5cb0;
+  --field: #3a3a3c;
+  --field-hover: #454549;
+  --field-focus: #4b4b4f;
+  /* Apple's `systemFill`: the grey a secondary control is cut from. It is a
+     translucent grey rather than an opaque hex so the same value works on a
+     plate, on a field, and on the sheet's own surface — each of which is a
+     different colour underneath it. */
+  --fill: rgba(120, 120, 128, 0.24);
+  --fill-hover: rgba(120, 120, 128, 0.34);
+  --fill-press: rgba(120, 120, 128, 0.42);
+  --hairline: #38383a;
+  --glass: rgba(28, 28, 30, 0.85);
+  --glass-2: rgba(28, 28, 30, 0.94);
+  --glass-3: #1c1c1e;
+  --accent-press: #0060c9;
   --accent-soft-ring: rgba(10, 132, 255, 0.35);
   --ambient: rgba(255, 255, 255, 0.05);
   --faint: rgba(255, 255, 255, 0.06);
-  --shadow-ambient: 0 2px 4px rgb(0 0 0 / 26%), 0 18px 44px -18px rgb(0 0 0 / 58%);
-  --shadow-card: 0 2px 4px rgb(0 0 0 / 26%), 0 18px 44px -18px rgb(0 0 0 / 58%);
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.32, 0, 0.67, 0);
   --chart-1: #0a84ff;
@@ -78,37 +102,37 @@
   --chart-5: #64aaff;
 }
 
-/* Light palette. Same token names, inverted ramp — off-white canvas, white
-   plates with a soft shadow, near-black ink, royal-blue actions, red danger. */
+/* Light palette. Same token names, same ladder: systemGroupedBackground
+   underneath, white plates above it, #C6C6C8 where two rows of a plate meet.
+   The ink and the border values are the ones the mail templates already ship
+   with, so the two are one language rather than two dialects. */
 :root[data-theme="light"] {
   color-scheme: light;
-  /* The page starts at a grey #e9eaee and the plates are what go white — content
-     reads as floating cards, exactly the mock's light scheme. */
-  --bg: #e9eaee;
+  --bg: #f2f2f7;
   --card: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f3f4f8;
-  --surface-3: #e9ebf1;
-  --fg: #121316;
-  --muted: #6e727c;
+  --surface-2: #f2f2f7;
+  --surface-3: #e8e8ee;
+  --fg: #171717;
+  --muted: #5d5d66;
   --link: #0068d6;
-  --text-2: #33353b;
-  --text-3: #6e727c;
-  --text-4: #8b8f99;
-  --placeholder: #a6aab3;
-  --border: #e2e4ea;
-  --border-strong: #c6cad3;
-  --divider: #dfe1e8;
-  --hover: #eef0f5;
-  --accent: #0066cc;
-  --accent-hover: #0058b3;
-  --ig: #0066cc;
-  --ig-hover: #0058b3;
-  --ig-press: #004892;
-  --accent-2: #0066cc;
-  --accent-2-hover: #0058b3;
-  --accent-2-press: #004892;
-  --accent-soft: rgba(10, 132, 255, 0.12);
+  --text-2: #3f3f46;
+  --text-3: #5d5d66;
+  --text-4: #8e8e93;
+  --placeholder: #a1a1aa;
+  --border: #eaeaea;
+  --border-strong: #d1d1d6;
+  --divider: #c6c6c8;
+  --hover: #ececf1;
+  --accent: #007aff;
+  --accent-hover: #0066d6;
+  --ig: #007aff;
+  --ig-hover: #0066d6;
+  --ig-press: #0055b8;
+  --accent-2: #007aff;
+  --accent-2-hover: #0066d6;
+  --accent-2-press: #0055b8;
+  --accent-soft: rgba(0, 122, 255, 0.12);
   --accent-text: #0068d6;
   --accent-fg: #ffffff;
   --danger: #e0342c;
@@ -120,28 +144,27 @@
   --warn-text: #9d6300;
   --rail: #ffffff;
   --scrim: rgb(18 19 22 / 45%);
-  --track: #cdd1da;
-  --focus-ring: #0066cc;
-  --autofill-fill: #e9ebf1;
-  --ink: #121316;
+  --track: #c6c6c8;
+  --focus-ring: #007aff;
+  --autofill-fill: #ececf1;
+  --ink: #171717;
   --ink-fg: #ffffff;
   --shadow-sheet: 0 -20px 56px -12px rgb(18 19 22 / 26%), 0 2px 8px rgb(18 19 22 / 12%);
   --shadow-pop: 0 14px 36px -10px rgb(18 19 22 / 22%), 0 2px 6px rgb(18 19 22 / 10%);
   --field: #ffffff;
-  --field-hover: #f3f4f8;
-  --field-focus: #eef0f6;
-  --hairline: #e2e4ea;
-  --btn-line: rgba(18, 19, 22, 0.18);
-  --btn-line-hover: rgba(18, 19, 22, 0.30);
+  --field-hover: #f2f2f7;
+  --field-focus: #ececf1;
+  --fill: rgba(120, 120, 128, 0.16);
+  --fill-hover: rgba(120, 120, 128, 0.24);
+  --fill-press: rgba(120, 120, 128, 0.32);
+  --hairline: #c6c6c8;
   --glass: rgba(255, 255, 255, 0.86);
   --glass-2: rgba(255, 255, 255, 0.95);
   --glass-3: #ffffff;
   --accent-press: #0062cc;
-  --accent-soft-ring: rgba(10, 132, 255, 0.32);
+  --accent-soft-ring: rgba(0, 122, 255, 0.32);
   --ambient: rgba(18, 19, 22, 0.04);
   --faint: rgba(18, 19, 22, 0.05);
-  --shadow-ambient: 0 1px 3px rgb(18 19 22 / 7%), 0 16px 36px -16px rgb(18 19 22 / 20%);
-  --shadow-card: 0 1px 3px rgb(18 19 22 / 7%), 0 16px 36px -16px rgb(18 19 22 / 20%);
   --chart-1: #0a84ff;
   --chart-2: #1ea64b;
   --chart-3: #c47b00;
@@ -190,8 +213,9 @@
   --color-placeholder: var(--placeholder);
   --color-field: var(--field);
   --color-field-hover: var(--field-hover);
-  --color-btn-line: var(--btn-line);
-  --color-btn-line-hover: var(--btn-line-hover);
+  --color-fill: var(--fill);
+  --color-fill-hover: var(--fill-hover);
+  --color-fill-press: var(--fill-press);
   --color-field-focus: var(--field-focus);
   --color-hairline: var(--hairline);
   --color-glass: var(--glass);
@@ -254,6 +278,14 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  /* Reserving the scrollbar slot once, permanently, is what lets an overlay
+     lock scrolling without the page sliding sideways when it does. */
+  scrollbar-gutter: stable;
+}
+
+html[data-scroll-lock] {
+  overflow: hidden;
+  scroll-behavior: auto;
 }
 
 body {
@@ -262,6 +294,10 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--stack-sans);
+  /* SF Pro's optical sizes and per-size tracking only switch automatically
+     when the font comes from the platform. An installed "SF Pro Text" file
+     would pin one cut; -apple-system is what earns this for free. */
+  font-optical-sizing: auto;
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -644,16 +680,42 @@ input[type="number"]::-webkit-outer-spin-button {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Apple's grouped list. The plate is the only surface: no frame drawn around
+   it and nothing floating under it, because a border plus a 24px radius is
+   what made every section here read as a box sunk into a box rather than as
+   the page's own content. `--list-inset` is the row's own gutter, so the
+   hairline between two rows starts where the row's text does.
+
+   `.grouped` keeps its name — 29 files reach it through `Group`, three write
+   the class directly, and inventing a second synonym for one shape is how the
+   two drift apart later. */
 .grouped {
-  border-radius: var(--radius-2xl);
-  border: 1px solid var(--border);
   background: var(--surface);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  box-shadow: var(--shadow-card);
+}
+
+/* One hairline between two rows, defined once, inset to the text. Painted as
+   a background rather than a border-top so it can stop short of the row's
+   leading gutter without a pseudo-element that would collide with a row
+   already carrying its own — and because `background-color` (every row's
+   hover) and `background-image` are separate layers, so the line survives
+   the hover instead of being swallowed by it. */
+.list-divide {
+  --list-inset: 1rem;
+}
+
+@media (min-width: 640px) {
+  .list-divide {
+    --list-inset: 1.25rem;
+  }
 }
 
 .list-divide > * + * {
-  border-top: 1px solid var(--divider);
+  background-image: linear-gradient(var(--divider), var(--divider));
+  background-repeat: no-repeat;
+  background-position: top left;
+  background-size: calc(100% - var(--list-inset)) 1px;
 }
 
 .no-divider > * + * {

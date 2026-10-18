@@ -38,10 +38,90 @@ export const API_BASE_URL =
   configuredApiUrl?.replace(/\/+$/, "") ||
   (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://api.tirbeo.com");
 
+/* ── Analytics consent ────────────────────────────────────────────
+   The "Analytics cookies" row on Data and permissions is the person's
+   answer about measurement. The brain already refuses ingestion of
+   analytics-category events without it (features/preferences/dataUsage
+   .ts); this stops the posts at the source, so the switch turning off
+   actually silences the device rather than just the database. Same three
+   rules as the server's gate:
+
+   • absent answer = allow — an account that has never been asked keeps
+     reporting exactly what it reports today;
+   • while the answer is still loading, events go out — loading consent
+     is not withholding it, and this file must never make a person's
+     telemetry wait;
+   • a failed read = allow — a hiccup must not become mass data loss.
+
+   Only measured behaviour is gated. `client_error` and the sign-in,
+   security and account-lifecycle signals the app runs on are not
+   "analytics", and unknown kinds are never treated as analytics — a
+   classifier must not be the thing that switches off a production signal
+   by not knowing it. */
+
+/** Kinds in this app that measure behaviour rather than run the product. */
+const ANALYTICS_KINDS = new Set([
+  "settings.theme_changed",
+  "settings.language_changed",
+  "settings.device_viewed",
+  "settings.avatar_cropped",
+  "settings.profile_updated",
+]);
+
+/** Measurement categories, mirroring the server's prefix list, so a kind
+    added later lands on the right side of the gate without an edit here. */
+const ANALYTICS_PREFIXES = [
+  "ui.", "page.", "docs.", "view", "click", "impression", "perf", "web-vital",
+  "funnel.", "marketing.", "ads.", "analytics.", "experiment.", "feature.",
+];
+
+function isAnalyticsEvent(kind: string): boolean {
+  const k = (kind || "").toLowerCase();
+  if (!k) return false;
+  if (ANALYTICS_KINDS.has(k)) return true;
+  // Everything the app depends on stays loud no matter what the switch says.
+  if (k.startsWith("client_error") || k.startsWith("auth.") || k.startsWith("settings.")) return false;
+  return ANALYTICS_PREFIXES.some((p) => k.startsWith(p));
+}
+
+/** The account's stored answer. `null` until read — and unread means allow.
+    Read through this app's own origin (the catch-all proxy forwards the
+    session cookie), not lib/api: this module never imports it, so a
+    consent read cannot drag a telemetry-reporting cycle in behind it. */
+let analyticsCookies: boolean | null = null;
+let consentProbe: Promise<void> | null = null;
+
+function probeConsent(): void {
+  if (consentProbe) return;
+  consentProbe = fetch("/api/preferences/data-usage", {
+    credentials: "same-origin",
+    headers: { accept: "application/json" },
+  })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((json: { analyticsCookies?: unknown } | null) => {
+      analyticsCookies = typeof json?.analyticsCookies === "boolean" ? json.analyticsCookies : true;
+    })
+    .catch(() => {
+      analyticsCookies = true;
+    });
+}
+
+/** Whether an analytics-category event may leave the device right now. */
+function analyticsAllowed(): boolean {
+  if (analyticsCookies === null) probeConsent(); // first gated event starts the read
+  return analyticsCookies !== false;
+}
+
+/** The Data and permissions screen calls this when the answer changes, so
+    the gate follows inside the session rather than only after a reload. */
+export function noteAnalyticsCookiesConsent(on: boolean): void {
+  analyticsCookies = on;
+  consentProbe = Promise.resolve(); // a known answer beats the stored one
+}
+
 /** One uuid per event so the backend (and a person quoting a "Ref:") can
     dedupe retries. crypto.randomUUID is everywhere modern, and the fallback
-    keeps old WebViews posting rather than silently losing the event. */
-function newEventId(): string {
+    keeps old WebViews posting rather than silently losing the event. */function newEventId(): string {
   try {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
       return crypto.randomUUID();
@@ -67,11 +147,14 @@ export type TrackOptions = {
  * Record one client event. Never throws, never awaits: `keepalive` lets the
  * request finish across a navigation (a logout redirect would otherwise kill
  * its own telemetry), and `credentials:'include'` lets the backend attribute
- * the event to the session when there is one.
+ * the event to the session when there is one. Analytics-category events
+ * first pass the consent gate below — an off switch means no request leaves
+ * this device at all, not just one the brain throws away.
  */
 export function trackEvent(kind: string, opts: TrackOptions = {}): void {
   try {
     if (typeof window === "undefined") return;
+    if (isAnalyticsEvent(kind) && !analyticsAllowed()) return;
     const metadata: Record<string, unknown> = {
       ...(opts.metadata || {}),
       page: window.location.pathname,

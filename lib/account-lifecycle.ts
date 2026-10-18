@@ -64,6 +64,13 @@ export function getAccountState(): AccountState | null {
   return cached;
 }
 
+/** Whether the brain has answered the account-state read at least once.
+    The gate needs the difference between "the account is open" and "nobody
+    has asked yet" — the first is a fact, the second is an empty cache. */
+export function accountStateLoaded(): boolean {
+  return loadedOnce;
+}
+
 /** Pull the real state and republish it. Never throws — a failed read leaves
     the last snapshot in place and the gate simply shows what it already knew. */
 export async function loadAccountState(): Promise<AccountState | null> {

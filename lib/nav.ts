@@ -209,15 +209,7 @@ const BY_HREF = new Map(NAV_ITEMS.map((i) => [i.href, i]));
  */
 const SUB_ROUTES = new Map([
   ["/settings/backup-codes", "Backup codes"],
-  ["/settings/recently-deleted", "Recently deleted"],
   ["/settings/deactivate", "Deactivate account"],
-  ["/settings/confirm-deletion", "Confirm permanent account deletion"],
-  /* The three screens a locked account is kept on. They aren't in the rail
-     and there's no way back into the app from them — the names are here so a
-     browser tab and the history page can call them what they are. */
-  ["/settings/deactivated", "Account paused"],
-  ["/settings/deletion-pending", "Account closing"],
-  ["/settings/restricted", "A decision about your account"],
   ["/settings/account-status/history", "Requests and history"],
   /* The account-status sections each get their own list, then each entry in
      one gets a page — so the back row can name where it leads. */
@@ -240,9 +232,7 @@ for (const article of ARTICLES) {
 /** Where a sub-route's parent lives, for the mobile back chevron. */
 const SUB_PARENTS = new Map([
   ["/settings/backup-codes", "/settings/two-factor"],
-  ["/settings/recently-deleted", "/settings/your-activity"],
   ["/settings/deactivate", "/settings/delete-account"],
-  ["/settings/confirm-deletion", "/settings/delete-account"],
 ]);
 
 export function navItem(href: string): NavItem | undefined {

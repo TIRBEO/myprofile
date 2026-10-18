@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Group, Helper, PageSkeleton, PillButton, PillStack, SettingsPage, StaticRow } from "@/components/settings-shell";
+import { OtpInput } from "@/components/otp-input";
+import { Button, Sheet, SheetActions } from "@/components/ig-ui";
+import { Group, Helper, PageSkeleton, PillButton, PillStack, SettingsPage, SheetGroup, StaticRow } from "@/components/settings-shell";
 import { GRACE_DAYS, countdownLabel } from "@/lib/delete-account";
-import { apiCancelDeletion, useAccountState } from "@/lib/account-lifecycle";
+import { apiCancelDeletion, apiRequestDeletionCode, apiVerifyDeletion, useAccountState } from "@/lib/account-lifecycle";
 import { formatDate } from "@/lib/dates";
-import { trackError, trackEvent } from "@/lib/telemetry";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 
@@ -15,15 +17,31 @@ import { haptic } from "@/lib/haptics";
    Delete account
 
    Four short sentences about what deleting means, the date it becomes
-   final, and one red button. The button doesn't delete anything — it walks
-   you to the last step, which is the emailed code. Once a deletion is
-   scheduled this page becomes the way back: one clean card with the date
-   and the cancel.
+   final, and one red button. The button doesn't delete anything — it opens
+   the last step, which is the emailed code, as a sheet on top of this page.
+
+   It used to be a page of its own, and that was wrong twice over. An address
+   whose meaning depends on a step you may not have taken can be typed cold,
+   and a cold type landed on "Email me the code" — a real deletion code in
+   someone's inbox, from a page two clicks' worth of warnings away. And once
+   a deletion was scheduled this page became the way back: one clean card
+   with the date and the cancel.
+
+   So the warning is here, in the sheet, under the button that asked for it.
+   The brain's rate limit and its one-shot code are what gate the deletion;
+   a URL never was, and isn't any more.
    ═══════════════════════════════════════════════════════════════════ */
+
+/** The gap the account enforces between two codes, and the wait this sheet
+    counts while it holds the one it already sent. */
+const CODE_SECONDS = 30;
+
+const BLANK_CODE = ["", "", "", "", "", ""];
 
 export default function DeleteAccountPage() {
   const { state, loading } = useAccountState();
   const [busy, setBusy] = useState(false);
+  const [deletionOpen, setDeletionOpen] = useState(false);
   const router = useRouter();
   const toast = useToast();
 
@@ -76,6 +94,8 @@ export default function DeleteAccountPage() {
     );
   }
 
+  /* Before there is a request, the account has no date to give, so this is the
+     window the page promised rather than the one the server set. */
   const closeDay = Date.now() + GRACE_DAYS * 86_400_000;
 
   return (
@@ -102,7 +122,7 @@ export default function DeleteAccountPage() {
           sub={`Starts the ${GRACE_DAYS}-day window. The last step is a code to your sign-in email.`}
           onClick={() => {
             haptic("heavy");
-            router.push("/settings/confirm-deletion");
+            setDeletionOpen(true);
           }}
         />
         <PillButton
@@ -115,6 +135,208 @@ export default function DeleteAccountPage() {
           }}
         />
       </PillStack>
+
+      {/* Rendered conditionally so closing it costs nothing: the stage, the
+          code and the countdown are all gone with the sheet, and starting
+          again starts at the warning. */}
+      {deletionOpen ? (
+        <DeletionSheet closeDay={closeDay} onClose={() => setDeletionOpen(false)} />
+      ) : null}
     </SettingsPage>
+  );
+}
+
+/* ── The last step ────────────────────────────────────────────────
+   Two stages in one sheet. The first is everything the button's one line
+   couldn't hold; the second is the code. Going back is a stage change, not
+   a navigation, and the code that was already sent stays sent — asking for a
+   second one inside the wait is the account's problem, not this sheet's.
+   ───────────────────────────────────────────────────────────────── */
+
+function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () => void }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [stage, setStage] = useState<"warn" | "proof">("warn");
+  const [code, setCode] = useState<string[]>(BLANK_CODE);
+  const [againIn, setAgainIn] = useState(0);
+  /** The masked address the account said it mailed, once it has mailed one.
+      Nothing here names an inbox before that. */
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  /** A code request or a verify in flight — the buttons that start one are
+      disabled until it answers, so nobody presses "delete" twice. */
+  const [busy, setBusy] = useState(false);
+  /** The account's own words for why nothing happened: no address to mail,
+      a code asked for too soon, a code that isn't right. */
+  const [error, setError] = useState<string | null>(null);
+  /** Kept so the timers a sheet unmounts mid-countdown can't fire into it. */
+  const live = useRef(true);
+  useEffect(() => () => { live.current = false; }, []);
+
+  useEffect(() => {
+    if (!againIn) return;
+    const id = window.setTimeout(() => setAgainIn((n) => n - 1), 1000);
+    return () => window.clearTimeout(id);
+  }, [againIn]);
+
+  const codeFull = code.every((d) => d);
+
+  /** Ask the account for a code. This is the only thing that puts mail on its
+      way, so it answers with the address that got it. */
+  async function request(): Promise<boolean> {
+    if (busy) return false;
+    setBusy(true);
+    setError(null);
+    setCode(BLANK_CODE);
+    try {
+      const reply = await apiRequestDeletionCode();
+      if (!live.current) return false;
+      setSentTo(reply.email || null);
+      setAgainIn(CODE_SECONDS);
+      trackEvent("settings.deletion_code_requested");
+      toast.info(reply.message);
+      return true;
+    } catch (err) {
+      if (!live.current) return false;
+      haptic("error");
+      trackError("delete-account.request-code", err);
+      setError(
+        withRef(
+          err instanceof Error && err.message
+            ? err.message
+            : "The account couldn’t send the code right now. Nothing was deleted.",
+          err,
+        ),
+      );
+      return false;
+    } finally {
+      if (live.current) setBusy(false);
+    }
+  }
+
+  /** Hand the code to the account. Only a code it recognises schedules
+      anything; anything else leaves the account exactly as it is, with the
+      reason on the sheet. */
+  async function verify() {
+    if (!codeFull || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiVerifyDeletion(code.join(""), null);
+      if (!live.current) return;
+      trackEvent("settings.account_deletion_requested");
+      haptic("heavy");
+      toast.info("Deletion scheduled");
+      /* The account closes to the countdown the moment this is asked for, and
+         the gate puts that screen up over whatever address this was on. */
+      router.replace("/settings");
+    } catch (err) {
+      if (!live.current) return;
+      haptic("error");
+      trackError("delete-account.verify", err);
+      setCode(BLANK_CODE);
+      setError(
+        withRef(
+          err instanceof Error && err.message ? err.message : "That code couldn’t be checked",
+          err,
+        ),
+      );
+    } finally {
+      if (live.current) setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet
+      title={stage === "warn" ? "Before you go" : "Confirm it’s really you"}
+      description={
+        stage === "warn"
+          ? "Nothing is deleted by opening this, and nothing is deleted by the button at the bottom of it. Read these three lines first."
+          : sentTo
+            ? "Enter the 6-digit code and the window starts. Until you do, the account is open and unchanged."
+            : "The code goes to your sign-in address."
+      }
+      onClose={onClose}
+      footer={
+        stage === "warn" ? (
+          <SheetActions
+            onCancel={onClose}
+            onConfirm={() => {
+              haptic("heavy");
+              void request().then((ok) => {
+                if (ok) setStage("proof");
+              });
+            }}
+            confirmLabel={busy ? "Sending the code…" : "Email me the code"}
+            confirmVariant="danger"
+            loading={busy}
+          />
+        ) : (
+          <SheetActions
+            cancelLabel="Back"
+            onCancel={() => {
+              setError(null);
+              setStage("warn");
+            }}
+            onConfirm={verify}
+            confirmLabel={busy ? "Checking the code…" : "Yes, delete my account"}
+            confirmVariant="danger"
+            disabled={!codeFull}
+            loading={busy}
+          />
+        )
+      }
+    >
+      {stage === "warn" ? (
+        <SheetGroup>
+          <StaticRow
+            title="What is removed"
+            sub="Your profile, your details and everything saved to the account. Every device is signed out, including this one."
+          />
+          <StaticRow
+            title="When it becomes final"
+            sub={`About ${formatDate(closeDay)} — ${GRACE_DAYS} days from the moment the code is spent. Cancel inside that window and the account comes back exactly as it was.`}
+          />
+          <StaticRow
+            title="After that"
+            sub="Nothing can be restored — not by you, not by support. If you want a copy of anything, close this and download your data first."
+          />
+        </SheetGroup>
+      ) : (
+        <>
+          <div className="mt-5 flex flex-col items-center">
+            {/* Six fixed boxes are wider than a phone sheet, so they share the
+                room evenly and stop at their full size once there is space. */}
+            <div className="w-full [&>div]:w-full [&_input]:min-w-0 [&_input]:max-w-12 [&_input]:flex-1">
+              <OtpInput value={code} onChange={setCode} />
+            </div>
+            <Button
+              variant="link"
+              className="mt-4"
+              onClick={() => void request()}
+              disabled={againIn > 0 || busy}
+            >
+              {busy
+                ? "Sending…"
+                : againIn > 0
+                  ? `Resend code in ${againIn}s`
+                  : "Didn't get it? Resend code"}
+            </Button>
+          </div>
+
+          <Helper className="mt-1">
+            {sentTo ? (
+              <>
+                We sent a code to <span className="font-semibold text-fg">{sentTo}</span>. It works
+                once.
+              </>
+            ) : (
+              "We sent a 6-digit code to the address you sign in with. It works once."
+            )}
+          </Helper>
+        </>
+      )}
+
+      {error ? <Helper tone="danger">{error}</Helper> : null}
+    </Sheet>
   );
 }

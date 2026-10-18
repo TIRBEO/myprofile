@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { Ban, Check, Copy, Hourglass, Trash2 } from "lucide-react";
 import { PillButton } from "@/components/settings-shell";
+import { Prose, StatementMark, StatementScreen, Value } from "@/components/statement";
 import { formatStamp } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 import { trackEvent } from "@/lib/telemetry";
@@ -12,22 +13,70 @@ import { trackEvent } from "@/lib/telemetry";
    sees after the accounts app hands them over. The event reference is the
    point of this page: quoting it lets support (and the admin event lookup)
    pull the exact row that carried the decision.
+
+   Same full-bleed column the lock screens use, for the same reason: a card
+   on a 440px column reads as a dialog that can be dismissed, and this is not
+   a dialog. The three questions a visitor arrives with — why, what it means,
+   what can be done — are the three sections, in that order.
    ═══════════════════════════════════════════════════════════════════ */
 
-const COPY: Record<string, { title: string; lead: string }> = {
+type Kind = "banned" | "suspended" | "deleted";
+
+const COPY: Record<Kind, { title: string; lead: string; why: string; means: string; next: string }> = {
   banned: {
     title: "Your account is banned",
     lead: "This decision was made by Tirbeo staff after reviewing the account. It is permanent.",
+    why: "A member of Tirbeo staff reviewed this account and decided to close it.",
+    means:
+      "Sign-in is closed and the profile is no longer reachable, along with everything saved to it. Nothing you do in the app will reopen it.",
+    next:
+      "This is only worth writing to support about if you believe the decision was made about the wrong account. The reference below is what lets them find the record it was made on.",
   },
   suspended: {
     title: "Your account is suspended",
     lead: "The account is on hold while a review is completed. Sign-in is disabled until then.",
+    why: "The account is on hold while a review of it is completed.",
+    means:
+      "Nothing has been deleted. The profile, its details and its history are as you left them, held until the review finishes. Signing in stays off until then.",
+    next:
+      "A suspension ends by itself — you don't need to ask again, and asking doesn't move it up. If the date below passes with the account still closed, that is worth contacting support about.",
   },
   deleted: {
     title: "Your account was deleted",
     lead: "The deletion you (or a recovery of it) set in motion has completed. The data is gone.",
+    why: "The deletion that was set in motion for this account has completed.",
+    means:
+      "The 30-day window ran out, so the profile, its details and everything saved to it have been removed. This is not recoverable — not by you, and not by support.",
+    next:
+      "Nothing here can be undone from this screen. If you believe the deletion went ahead without you confirming it — a code asked for and never entered, say — the reference below is how support checks the record.",
   },
 };
+
+/** What stands where your face would on the other account screens. These pages
+    are about the account too, but the account has no picture to show any more
+    — and a face on a page whose message is "this one is closed" is a stranger
+    telling you about yourself. */
+function Mark({ kind }: { kind: Kind }) {
+  if (kind === "banned") {
+    return (
+      <StatementMark danger>
+        <Ban />
+      </StatementMark>
+    );
+  }
+  if (kind === "deleted") {
+    return (
+      <StatementMark danger>
+        <Trash2 />
+      </StatementMark>
+    );
+  }
+  return (
+    <StatementMark>
+      <Hourglass />
+    </StatementMark>
+  );
+}
 
 export function BlockedView({
   kind,
@@ -35,7 +84,7 @@ export function BlockedView({
   reason,
   until,
 }: {
-  kind: "banned" | "suspended" | "deleted";
+  kind: Kind;
   eventId: string | null;
   reason: string | null;
   until: string | null;
@@ -64,55 +113,83 @@ export function BlockedView({
   }
 
   return (
-    <div className="grid min-h-dvh place-items-center px-4 py-10">
-      <div className="w-full max-w-[440px] rounded-2xl border border-border bg-surface p-6 sm:p-7">
-        <h1 className="text-[20px] font-bold tracking-[-0.02em]">{copy.title}</h1>
-        {untilAt && !Number.isNaN(untilAt) ? (
-          <p className="mt-1 text-[13px] text-muted">
-            {kind === "suspended" ? "Under review until" : "Until"}{" "}
-            {formatStamp(untilAt)}.
-          </p>
-        ) : null}
-        <p className="mt-4 text-[14.5px] leading-relaxed text-muted">{copy.lead}</p>
-        {reason ? (
-          <p className="mt-3 rounded-xl bg-field px-3.5 py-2.5 text-[14px] leading-relaxed text-text-2">
-            {reason}
-          </p>
-        ) : null}
-        {eventId ? (
-          <div className="mt-5">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-text-4">
-              Event reference
-            </p>
-            <button
-              type="button"
-              onClick={copyRef}
-              aria-label={`Copy event reference ${eventId}`}
-              className="mt-1.5 flex w-full items-center justify-between gap-3 rounded-xl border border-hairline bg-field px-3.5 py-2.5 text-left transition-colors hover:bg-field-hover"
-            >
-              <code className="font-mono text-[14.5px] text-fg">{eventId}</code>
-              {copied ? (
-                <Check size={16} className="shrink-0 text-success" aria-hidden="true" />
+    <StatementScreen
+      title={copy.title}
+      lead={copy.lead}
+      meta={
+        untilAt && !Number.isNaN(untilAt)
+          ? `${kind === "suspended" ? "Under review until" : "Until"} ${formatStamp(untilAt)}`
+          : undefined
+      }
+      mark={<Mark kind={kind} />}
+      avatar={false}
+      blocks={[
+        {
+          label: "Why this happened",
+          body: (
+            <>
+              <Prose>{copy.why}</Prose>
+              <Prose>
+                {reason ? (
+                  <>
+                    The reason recorded on it: <Value>“{reason}”</Value>.
+                  </>
+                ) : (
+                  "No reason was recorded on this decision, and none is being invented here."
+                )}
+              </Prose>
+            </>
+          ),
+        },
+        { label: "What this means", body: <Prose>{copy.means}</Prose> },
+        {
+          label: "What you can do",
+          body: (
+            <>
+              <Prose>{copy.next}</Prose>
+              {eventId ? (
+                <Prose>
+                  <span className="text-fg">Event reference</span>{" "}
+                  <code className="font-mono text-[14px] text-fg">{eventId}</code>{" "}
+                  <button
+                    type="button"
+                    onClick={copyRef}
+                    aria-label={`Copy event reference ${eventId}`}
+                    className="ml-0.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 align-baseline text-[13.5px] font-semibold text-accent-text transition-colors hover:bg-fill"
+                  >
+                    {copied ? (
+                      <Check className="size-[13px] shrink-0" strokeWidth={2.6} aria-hidden />
+                    ) : (
+                      <Copy className="size-[13px] shrink-0" aria-hidden />
+                    )}
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                  .
+                </Prose>
               ) : (
-                <Copy size={16} className="shrink-0 text-text-3" aria-hidden="true" />
+                <Prose>
+                  This hand-off carried no event reference, so support will have to find the account
+                  another way — the email address you sign in with is enough.
+                </Prose>
               )}
-            </button>
-            <p className="mt-2 text-[13px] leading-relaxed text-text-4">
-              Quote this reference when contacting support so the exact decision record can be
-              found.
-            </p>
-          </div>
-        ) : null}
-        <div className="mt-6 flex items-center gap-3">
+            </>
+          ),
+        },
+      ]}
+      actions={
+        <>
           <PillButton label="Back to sign in" onClick={() => (window.location.href = "/login")} />
+          {/* One loud thing, and the second choice as a word rather than a
+              second button — same as the screens the gate puts up. */}
           <a
             href="mailto:support@tirbeo.com"
-            className="text-[14px] font-semibold text-accent-text underline underline-offset-4"
+            className="flex min-h-11 items-center justify-center rounded-full text-[15px] font-semibold text-accent-text transition-colors hover:bg-fill"
           >
             Contact support
           </a>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      foot="This page is the account's answer, not a warning about it. Where a fact wasn't carried over — a reason, a date, a reference — the screen above says so instead of filling the gap."
+    />
   );
 }

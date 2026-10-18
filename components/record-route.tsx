@@ -5,7 +5,7 @@ import { PageSkeleton } from "@/components/settings-shell";
 import type { RecordTarget } from "@/lib/record-routes";
 
 /* Each screen is its own chunk, so opening a device does not download the
-   seven other record screens with it. The loading frame is the same skeleton
+   six other record screens with it. The loading frame is the same skeleton
    the screen draws for itself once it is mounted, so the swap from one to the
    other is invisible. */
 
@@ -16,10 +16,6 @@ const ActivityLogDetail = dynamic(
 const ConnectedAppDetail = dynamic(
   () => import("@/components/record-screens/connected-app-detail"),
   { loading: () => <PageSkeleton title="Connected app" sections={2} /> },
-);
-const DeletedItemDetail = dynamic(
-  () => import("@/components/record-screens/deleted-item-detail"),
-  { loading: () => <PageSkeleton title="Recently deleted" sections={2} /> },
 );
 const DeviceDetail = dynamic(() => import("@/components/record-screens/device-detail"), {
   loading: () => <PageSkeleton title="Device" sections={3} />,
@@ -56,8 +52,6 @@ export default function RecordRoute({ target }: { target: RecordTarget }) {
       return <DownloadDataDetail id={target.id} />;
     case "login-activity":
       return <LoginEventDetail id={target.id} />;
-    case "recently-deleted":
-      return <DeletedItemDetail id={target.id} />;
     case "status-section":
       return <StatusSectionDetail section={target.section} />;
     case "status-item":

@@ -32,6 +32,10 @@ const ALLOWED = new Set([
   "content",
   // The OAuth links on the account, and what the login ledger says about them.
   "integrations",
+  // When each privacy choice was changed — the history page reads it back.
+  "consent-history",
+  // "Was this helpful?" on a help article.
+  "feedback",
 ]);
 
 /** `auth/*` as a prefix would open the brain's whole signing-in surface —
@@ -39,7 +43,13 @@ const ALLOWED = new Set([
     It needs exactly one thing: the identity proof a sensitive action asks for
     before it runs. So the two re-authentication endpoints are named, not the
     prefix. */
-const ALLOWED_AUTH = new Set(["reauth/verify", "reauth/send-code"]);
+const ALLOWED_AUTH = new Set([
+  "reauth/verify",
+  "reauth/send-code",
+  // "This wasn't me" / "This was me" on a sign-in the account flagged.
+  "suspicious-login/confirm",
+  "suspicious-login/deny",
+]);
 
 function permitted(slug: string[]): boolean {
   if (slug[0] === "profile") {

@@ -150,3 +150,69 @@ export function Value({ children }: { children: React.ReactNode }) {
 export function StatementBody({ children }: { children: React.ReactNode }) {
   return <div className="flex flex-col gap-2.5">{children}</div>;
 }
+
+/** The whole screen: the statement, its answers, and the one action held to the
+    bottom edge.
+ *
+ * Full-bleed rather than centred in a box, because these pages are the app
+ * talking, not a dialog asking. A card on a 440px column says "a popup"; the
+ * account being shut is not a popup. Nothing here is scrollable independently
+ * of the page — the sticky bar is the only fixed thing, and it exists so there
+ * is never a moment where you have read this far and cannot act.
+ *
+ * Used by the gate's lock screens and by the public interruption page, which
+ * is why it lives here: the second of those is outside the settings layout, so
+ * it cannot reach anything that lives inside it. */
+export function StatementScreen({
+  title,
+  lead,
+  meta,
+  hero,
+  mark,
+  avatar = true,
+  blocks = [],
+  actions,
+  foot,
+}: {
+  title: string;
+  lead: React.ReactNode;
+  /** The dated line under the headline — when this began. */
+  meta?: React.ReactNode;
+  /** The one number that matters, larger than any text around it. */
+  hero?: React.ReactNode;
+  /** What sits at the top of the column: the face, or a mark of the caller's. */
+  mark?: React.ReactNode;
+  /** Off when the account has no face worth showing — a closed one, or a
+      visitor the app has no session for at all. `mark` wins either way; this
+      is here so a caller can say so without handing over a mark. */
+  avatar?: boolean;
+  blocks?: { label: string; body: React.ReactNode }[];
+  actions?: React.ReactNode;
+  foot?: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <div className="mx-auto w-full max-w-[560px] flex-1 px-5 pt-1 pb-10 sm:px-6 sm:pt-3">
+        <StatementHead title={title} sub={lead} meta={meta} hero={hero} mark={mark} avatar={avatar} />
+
+        {blocks.length ? (
+          <StatementBody>
+            {blocks.map((block) => (
+              <StatementSection key={block.label} label={block.label}>
+                {block.body}
+              </StatementSection>
+            ))}
+          </StatementBody>
+        ) : null}
+
+        {foot ? <Prose className="mt-8 text-[12.5px] leading-relaxed text-muted">{foot}</Prose> : null}
+      </div>
+
+      {actions ? (
+        <div className="sticky bottom-0 border-t border-divider bg-bg/92 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
+          <div className="mx-auto flex w-full max-w-[560px] flex-col gap-2">{actions}</div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

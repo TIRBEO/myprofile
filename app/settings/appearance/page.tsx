@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/components/ig-ui";
 import { SectionTitle, SettingsPage } from "@/components/settings-shell";
 import { trackEvent } from "@/lib/telemetry";
-import { THEMES, ThemeDef, ThemeId, applyTheme, readTheme } from "@/lib/theme";
+import { THEMES, ThemeDef, ThemeId, applyTheme, readTheme, syncThemeFromAccount } from "@/lib/theme";
 
 /* ═══════════════════════════════════════════════════════════════════
    Appearance — three choices, and picking one applies it immediately.
@@ -35,6 +35,10 @@ export default function AppearancePage() {
       refresh();
     };
     onScheme();
+    // The account's own theme column outranks this device's bag: seed from it
+    // so a choice made on another Tirbeo surface shows up here, then re-read
+    // the tick — it must follow even when the palette already matched.
+    void syncThemeFromAccount().then(refresh);
     mq.addEventListener("change", onScheme);
     const watch = new MutationObserver(refresh);
     watch.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
@@ -120,34 +124,75 @@ function ThemeTile({
   );
 }
 
+/** Every colour the miniature needs, as one named thing. `Preview` derives it
+    from the swatch and `Screen` consumes it; typing it means a renamed or
+    missing colour is a compile error rather than `undefined` — and a tile
+    painting one of its bars transparent is exactly the silent drift the
+    miniature is supposed to make visible. */
+type Paint = {
+  /** The page behind the rows. */
+  canvas: string;
+  /** A plate, one step above the canvas. */
+  plate: string;
+  ink: string;
+  /** The hairline between rows. */
+  line: string;
+  soft: string;
+  bar: string;
+};
+
 /** A miniature of the settings screen in this palette, drawn from the same
-    swatches the theme itself declares — so the tile cannot drift from the app. */
-function Screen({ p }: { p: Record<string, string> }) {
+    swatches the theme itself declares — so the tile cannot drift from the app.
+    The groups are frameless: after the palette flip the plate being lighter
+    than the canvas is what says where a section ends, and the only line in a
+    section is the hairline between two rows. */
+function Screen({ p }: { p: Paint }) {
   return (
     <>
       <span className="block h-[7px] w-[46%] rounded-full" style={{ backgroundColor: p.ink }} />
-      <span
-        className="mt-2 flex flex-col gap-[9px] rounded-[9px] px-[7px] py-[8px]"
-        style={{ backgroundColor: p.bg, border: `1px solid ${p.line}` }}
-      >
+      <Plate p={p} className="mt-2">
         <Row p={p} w={70} sub={45} on />
+        <Rule p={p} />
         <Row p={p} w={58} sub={38} />
-      </span>
-      <span
-        className="mt-[9px] flex flex-col gap-[9px] rounded-[9px] px-[7px] py-[8px]"
-        style={{ backgroundColor: p.bg, border: `1px solid ${p.line}` }}
-      >
+      </Plate>
+      <Plate p={p} className="mt-[10px]">
         <Row p={p} w={64} sub={41} />
+        <Rule p={p} />
         <Row p={p} w={52} sub={33} on />
-      </span>
+      </Plate>
       <span className="absolute inset-x-2 bottom-2 block h-[13px] rounded-full" style={{ backgroundColor: p.bar }} />
     </>
   );
 }
 
-function Row({ p, w, sub, on }: { p: Record<string, string>; w: number; sub: number; on?: boolean }) {
+function Plate({
+  p,
+  className,
+  children,
+}: {
+  p: Paint;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <span className="flex items-center gap-[6px]">
+    <span
+      className={cn("flex flex-col overflow-hidden rounded-[9px] px-[7px]", className)}
+      style={{ backgroundColor: p.plate }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** The line between two rows. It is inset because the plate's own padding is
+    what puts it in — which is how the real list does it too. */
+function Rule({ p }: { p: Paint }) {
+  return <span className="block h-px shrink-0" style={{ backgroundColor: p.line }} />;
+}
+
+function Row({ p, w, sub, on }: { p: Paint; w: number; sub: number; on?: boolean }) {
+  return (
+    <span className="flex items-center gap-[6px] py-[7px]">
       <span className="min-w-0 flex-1 space-y-[4px]">
         <span
           className="block h-[5px] rounded-full"
@@ -172,9 +217,9 @@ function Row({ p, w, sub, on }: { p: Record<string, string>; w: number; sub: num
 }
 
 function Preview({ swatch }: { swatch: ThemeDef["swatch"] }) {
-  const p = {
+  const p: Paint = {
     canvas: swatch.bg,
-    bg: swatch.card,
+    plate: swatch.card,
     ink: swatch.ink,
     line: swatch.line,
     soft: swatch.line,
@@ -183,7 +228,7 @@ function Preview({ swatch }: { swatch: ThemeDef["swatch"] }) {
   return (
     <span
       className="relative block aspect-[4/5] w-full overflow-hidden rounded-[12px] p-2"
-      style={{ backgroundColor: p.canvas, border: `1px solid ${p.line}` }}
+      style={{ backgroundColor: p.canvas }}
       aria-hidden
     >
       <Screen p={p} />

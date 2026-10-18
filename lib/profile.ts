@@ -25,6 +25,9 @@
 import { useEffect, useState } from "react";
 import { fetchProfile, saveProfile } from "@/lib/api-client";
 import { bindAccount } from "@/lib/account-cache";
+import { apiJson } from "@/lib/api";
+import { localFieldFor, PHONE_WRITE } from "@/bridge/contract";
+import { validatePhone } from "@/bridge/validation";
 
 const STORE = "tirbeo:edit-profile";
 
@@ -49,7 +52,8 @@ export type Profile = {
   skills: string[];
   /** Login identity — read from the server, never editable here. */
   email: string;
-  /** Recovery number — read from the server, never editable here. */
+  /** The account's contact number (`user_phone.number`). Edited here and
+      stored by the endpoint that owns that column — see `PHONE_WRITE`. */
   phone: string;
   following: number;
   followers: number;
@@ -265,7 +269,11 @@ export type SaveOutcome = {
     PROFILE_FIELDS) and converts to the account row's wire names itself.
     Sending the wire names here got them mapped a second time — nothing matched,
     so the endpoint found an empty change record and reported a successful save
-    that wrote nothing. */
+    that wrote nothing.
+
+    `phone` is deliberately not in this list: it has its own column and its own
+    endpoint (`phoneAgainst`, `PHONE_WRITE`), and putting it in the profile body
+    would be answered as an unknown field — refusing the whole patch with it. */
 export function patchAgainst(baseline: Profile, next: Profile): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   const EDITABLE: { field: keyof Profile; clearEmpty?: boolean }[] = [
@@ -315,7 +323,51 @@ function applyServerProfile(server: Record<string, unknown>): Profile {
   const merged = mergeWithServer(readCache() ?? DEFAULT_PROFILE, server);
   merged.username = slugOf(merged.username);
   writeCache(merged);
+  /* Remembered as the last thing the account actually said, so a save it
+     refused can be rolled back to a real value instead of leaving the rejected
+     edit on screen looking saved. */
+  lastServerAnswer = merged;
   return merged;
+}
+
+let lastServerAnswer: Profile | null = null;
+
+/** Puts the cache back on the account's answer after a refused write. */
+function rollbackCache(baseline: Profile): void {
+  const truth = lastServerAnswer ?? baseline;
+  writeCache(truth);
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(PROFILE_EVENT));
+}
+
+/**
+ * The phone number's change, worked out the way `patchAgainst` works out the
+ * rest: only when it actually moved. `null` when nothing changed, and an empty
+ * `to` when the person cleared the number — a change that has to reach the
+ * account as a delete, or the old digits keep their row.
+ */
+export function phoneAgainst(
+  baseline: Profile,
+  next: Profile,
+): { from: string; to: string } | null {
+  if (next.phone === baseline.phone) return null;
+  return { from: baseline.phone, to: next.phone };
+}
+
+/** Stores a typed number on its own column, or clears the row. Resolves with
+    the number as the account now holds it (`null` once cleared); throws an
+    `ApiError` carrying the account's own sentence when it refuses. */
+async function writePhone(change: { from: string; to: string }): Promise<string | null> {
+  const call = PHONE_WRITE.request(change.to, change.from);
+  const reply = await apiJson<{ ok?: boolean; number?: string } | null>(call.path, {
+    method: call.method,
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(call.body),
+  });
+  if (call.method === "DELETE") return null;
+  /* The account strips the spacing a person types before it stores anything,
+     and it answers with what it kept. Asking the answer rather than the input
+     is what makes the reload show the same digits the row holds. */
+  return typeof reply?.number === "string" && reply.number ? reply.number : change.to;
 }
 
 /** Pulls the account row and lays it over the cache. Returns the merged
@@ -334,28 +386,91 @@ export async function syncProfile(): Promise<Profile | null> {
 
 /** Saves through the endpoint. Optimistic local write first (so the UI
     moves at once), then the server answer is authoritative for server
-    fields; serverless fields stay as the caller sent them. */
+    fields; serverless fields stay as the caller sent them.
+
+    A number is its own write, because its column is its own row: the profile
+    PATCH's schema names no phone key, so `PHONE_WRITE` sends it to the endpoint
+    that owns `user_phone`. Both halves have to land for this to report success,
+    and a refused write puts the cache back where the account says it is rather
+    than leaving the rejected edit on screen. */
 export async function persistProfile(
   baseline: Profile,
   next: Profile,
 ): Promise<{ ok: true; outcome: SaveOutcome } | { ok: false; errors?: Record<string, string>; message?: string; loginUrl?: string }> {
   const patch = patchAgainst(baseline, next);
+  const phone = phoneAgainst(baseline, next);
+
+  /* Refused before anything leaves the device, with the note for the input that
+     caused it. Nothing is written optimistically, so the screen keeps showing
+     the number the account actually holds. */
+  const phoneError = phone ? validatePhone(phone.to) : null;
+  if (phoneError) return { ok: false, errors: { phone: phoneError } };
+
   writeCache(next); // optimistic
 
   const result = await saveProfile(patch);
   if (!result.ok) {
+    rollbackCache(baseline);
     if (result.kind === "unauthorized") {
       window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
       return { ok: false, message: "Sign in again to save.", loginUrl: result.loginUrl };
     }
-    if (result.kind === "invalid") return { ok: false, errors: result.errors };
+    if (result.kind === "invalid") return { ok: false, errors: toLocalErrors(result.errors) };
     return { ok: false, message: result.message };
   }
 
-  const unsupported = (result.data.unsupported ?? []).map((row) => row.field);
-  const merged = applyServerProfile(result.data.profile as Record<string, unknown>);
+  /* The profile row answered, so the number goes up next. Its failure is a
+     failed save — said so, with the account's own sentence — even though the
+     rest of the edit did land. */
+  let storedPhone: string | null = null;
+  let phoneFailure: string | null = null;
+  if (phone) {
+    try {
+      storedPhone = await writePhone(phone);
+    } catch (error) {
+      phoneFailure =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "The phone number could not be saved.";
+    }
+  }
+
+  const reply = { ...(result.data.profile as Record<string, unknown>) };
+  if (phone && !phoneFailure) reply.phoneNumber = storedPhone;
+
+  /* Only the fields this save actually sent. The endpoint lists every row it
+     can never hold (the social-graph counts) on a patch that touched nothing,
+     and repeating that here would tell a person who edited their phone number
+     that something of theirs had been kept off the account. */
+  const touched = new Set(Object.keys(patch));
+  const unsupported = (result.data.unsupported ?? [])
+    .map((row) => row.field)
+    .filter((field) => touched.has(field));
+  const merged = applyServerProfile(reply);
+
+  if (phoneFailure) {
+    /* The merged answer above carries the number as the account holds it, so
+       the screen shows the truth about the half that failed. */
+    rollbackCache(merged);
+    return { ok: false, message: phoneFailure };
+  }
 
   return { ok: true, outcome: { profile: merged, unsupported, localOnly: false } };
+}
+
+/**
+ * Re-keys field errors the account named by its own column.
+ *
+ * The account answers `{ fields: { companyRole: …, jobStarted: … } }` — the
+ * wire names — while every screen looks its notes up by the key the form uses.
+ * Relabelled through `bridge/contract.ts`, so an error the server reported
+ * lands under the input that caused it instead of being read as one anonymous
+ * line at the top of the sheet.
+ */
+function toLocalErrors(errors: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, message] of Object.entries(errors)) out[localFieldFor(key)] = message;
+  return out;
 }
 
 /** A saved photo is a data URL in a several-hundred-kilobyte string, so the

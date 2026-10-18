@@ -15,7 +15,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Lock } from "lucide-react";
 import { cn, PILL_BASE, PILL_DISABLED, PILL_FILL } from "@/components/ig-ui";
 import { navItem, parentHref, titleFor } from "@/lib/nav";
 import { guidesFor } from "@/lib/docs-links";
@@ -27,15 +27,17 @@ import { haptic } from "@/lib/haptics";
     Tall on purpose: a row is a title and its explanation, and the line has to
     have room for both without the control at the end crowding the words. */
 export const ROW =
- "flex w-full items-center gap-4 px-4 py-[15px] text-left outline-none transition-colors sm:px-5 sm:py-[17px]";
+ "flex min-h-[48px] w-full items-center gap-4 px-4 py-[15px] text-left outline-none transition-colors sm:px-5 sm:py-[17px]";
 export const LIVE = "hover:bg-hover active:bg-field-focus";
 /** A bare glyph, not a coin: the picture belongs to the row, not to itself. */
 export const CHIP = "flex size-7 shrink-0 items-center justify-center text-text-4 [&_svg]:size-[19px]";
-/** The row's own line. It wraps rather than clipping, because the label often
-    IS the setting — "Share anonymous usage data with partners" cut to two
-    lines and an ellipsis stops being a question you can answer. */
-export const TITLE = "block text-[16px] leading-[1.35] font-medium";
-export const SUB = "mt-[3px] block text-[14px] leading-[1.45] text-text-3";
+/** The row's own line: 17px, Apple's body and headline size, and the one size
+    every row shares — a title is a title whether it opens a page, holds a
+    switch or just reports a fact. It wraps rather than clipping, because the
+    label often IS the setting: "Share anonymous usage data with partners" cut
+    to two lines and an ellipsis stops being a question you can answer. */
+export const TITLE = "block text-[17px] leading-[1.35] font-medium";
+export const SUB = "mt-[3px] block text-[15px] leading-[1.45] text-text-3";
 
 /** The square beside a record's heading — the same tile on every detail page,
     so a change, a sign-in and a deleted item are all introduced the same way.
@@ -81,7 +83,7 @@ export function SettingsPage({
     <div
       className={cn(
         "mx-auto w-full px-4 pt-4 pb-16 sm:px-6 sm:pt-9",
-        wide ? "max-w-[980px]" : "max-w-[680px]",
+        wide ? "max-w-[1040px]" : "max-w-[720px]",
       )}
     >
       {crumb ? crumb : null}
@@ -120,7 +122,7 @@ export function SettingsPage({
       {title ? (
         <h1
           className={cn(
-            "mb-4 text-[24px] leading-tight font-bold tracking-[-0.025em] sm:mb-5 sm:text-[30px]",
+            "mb-4 text-[26px] leading-[1.15] font-bold tracking-[-0.022em] sm:mb-5 sm:text-[28px]",
             inBar && "hidden lg:block",
             !crumb && back && "mt-1.5",
           )}
@@ -233,7 +235,7 @@ export function PageSkeleton({ title, sections = 1 }: { title: string; sections?
       <div className="mb-3 h-[68px] animate-pulse rounded-2xl bg-fg/[0.045] sm:h-[76px]" />
       {Array.from({ length: sections }, (_, i) => (
         <div key={i}>
-          <div className="mt-10 mb-3 h-[17px] w-[140px] animate-pulse rounded-full bg-fg/[0.06]" />
+          <div className="mt-10 mb-3 h-[20px] w-[140px] animate-pulse rounded-full bg-fg/[0.06]" />
           <div className="list-divide">
             <div className="h-[52px] animate-pulse bg-fg/[0.04]" />
             <div className="h-[52px] animate-pulse bg-fg/[0.03]" />
@@ -261,7 +263,7 @@ export function SectionTitle({
   return (
     <div className="mt-9 mb-3 first:mt-0">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[19px] font-semibold tracking-[-0.01em] text-fg">{children}</h2>
+        <h2 className="text-[20px] font-semibold tracking-[-0.01em] text-fg">{children}</h2>
         {action}
       </div>
       {desc ? <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-text-3">{desc}</p> : null}
@@ -269,9 +271,10 @@ export function SectionTitle({
   );
 }
 
-/** A section of rows, boxed the accounts way: a rounded plate with a
-    hairline frame and full-width dividers between the lines. The heading
-    above says what the block is; the frame says where it ends. */
+/** A section of rows: the plate and its hairlines, and nothing else. No frame
+    and no radius worth noticing — the heading above says what the block is,
+    and the plate being one step lighter than the page is what says where it
+    ends. */
 export function Group({
   children,
   dimmed,
@@ -287,7 +290,7 @@ export function Group({
       aria-label={label}
       aria-disabled={dimmed || undefined}
       className={cn(
-        "overflow-hidden rounded-2xl border border-border bg-card divide-y divide-divider transition-opacity duration-200",
+        "grouped list-divide transition-opacity duration-200",
         dimmed && "pointer-events-none opacity-45",
       )}
     >
@@ -407,7 +410,10 @@ export function ToggleRow({
     >
       {icon ? <span className={CHIP}>{icon}</span> : null}
       <span className="min-w-0 flex-1">
-        <span className="flex items-start gap-1.5 text-[15px] font-medium">
+        {/* Same 17px line as TITLE. A switch row whose label sits two points
+            smaller than the link row above it is the kind of drift that only
+            shows when the two are on one screen. */}
+        <span className="flex items-start gap-1.5 text-[17px] leading-[1.35] font-medium">
           <span className="line-clamp-2">{title}</span>
           {locked ? <Lock className="mt-1 size-[13px] shrink-0 text-muted" strokeWidth={2} /> : null}
         </span>
@@ -418,9 +424,9 @@ export function ToggleRow({
   );
 }
 
-/** A name, its one-line description, and the boxed list of rows under it —
-    the accounts Group skin. The name sits above the box so the block reads
-    as one decision with its explanation, not a form. */
+/** A name, its one-line description, and the list of rows under it — the same
+    plate `Group` draws, with the heading welded on because this block's name
+    travels with it. */
 export function Panel({
   title,
   sub,
@@ -442,14 +448,14 @@ export function Panel({
   return (
     <section id={id} className={cn(id && "scroll-mt-20", className)}>
       <div className="mb-3 px-1">
-        <h2 className="text-[19px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
+        <h2 className="text-[20px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
         {sub ? (
           <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-text-3">{sub}</p>
         ) : null}
       </div>
       <div
         className={cn(
-          "overflow-hidden rounded-2xl border border-border bg-card divide-y divide-divider",
+          "grouped list-divide",
           compact && "[&_a]:py-[11px] [&_button]:py-[11px]",
         )}
       >
@@ -494,7 +500,11 @@ export function LinkRow({
         <span className={cn(CHIP, danger && "text-danger-text", accent && !danger && "text-accent-text")}>{icon}</span>
       ) : null}
       <span className="min-w-0 flex-1">
-        <span className={cn(TITLE, compact && "text-[16px] font-medium sm:text-[15px]", danger && "text-danger-text", accent && !danger && "text-accent-text")}>{title}</span>
+        {/* Compact means tighter padding, not smaller words: `cn` is plain
+            concatenation here, so a second `text-[…]` on the same element
+            would be settled by the stylesheet's order rather than by this
+            line. Apple's own compact tables keep the body size. */}
+        <span className={cn(TITLE, danger && "text-danger-text", accent && !danger && "text-accent-text")}>{title}</span>
         {sub ? <span className={cn(SUB, compact && "hidden sm:block")}>{sub}</span> : null}
       </span>
       <Trailing right={right} chevron={accent && !danger ? "text-accent-text" : undefined} />
@@ -701,6 +711,7 @@ export function PillButton({
   icon,
   sub,
   disabled,
+  loading,
 }: {
   label: string;
   /** Where it goes, when the button is a page rather than an action. */
@@ -712,15 +723,20 @@ export function PillButton({
   /** One line of consequence, printed under the button. */
   sub?: string;
   disabled?: boolean;
+  /** The action is in flight: the button holds still, says so, and can't be
+      tapped a second time while the first one is still working. */
+  loading?: boolean;
 }) {
+  const off = disabled || loading;
   const go = () => {
+    if (off) return;
     haptic(tone === "outline" ? "light" : "medium");
     onClick?.();
   };
   const shared = cn(
     PILL_BASE,
     PILL_TONE[tone],
-    disabled && PILL_DISABLED,
+    off && PILL_DISABLED,
   );
   return (
     <span className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -730,8 +746,8 @@ export function PillButton({
           <span className="min-w-0">{label}</span>
         </Link>
       ) : (
-        <button type="button" onClick={go} disabled={disabled} className={shared}>
-          {icon}
+        <button type="button" onClick={go} disabled={off} aria-busy={loading || undefined} className={shared}>
+          {loading ? <Loader2 className="size-[17px] shrink-0 animate-spin-slow" /> : icon}
           <span className="min-w-0">{label}</span>
         </button>
       )}

@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════
-   The eight screens that address one record
+   The seven screens that address one record
 
    Every /settings screen that reads a list reads it in the browser, so it
-   prerenders and costs no serverless function. These eight are the
+   prerenders and costs no serverless function. These seven are the
    exception: their path carries an id, and each one used to be its own
-   file-based route — eight functions on a plan that allows twelve, before
+   file-based route — seven functions on a plan that allows twelve, before
    the two bridge routes and the edge gate have taken their share.
 
    They are one route now. This file is what says which record a path
@@ -12,6 +12,21 @@
    server route reads it to decide whether a path is real (anything it does
    not recognise is a 404, not a blank screen), and the client dispatcher
    reads it again to choose the screen. One answer, asked in both places.
+
+   These ids stay in the address bar, on purpose, and this is the rule that
+   decides which addresses may carry meaning:
+
+     an address is allowed to name a thing, never a state.
+
+   /settings/devices/<id> is a read-only view of a record the account itself
+   lists; opening it cold asks the brain for that id and either shows it or
+   404s. A wrong id reaches nobody else's data — proxy.ts requires the session
+   cookie before any of this runs, and the brain only ever returns the calling
+   account's rows. What an address must not do is stand in for a step: the
+   three lock screens and the deletion-code step used to have URLs, which
+   meant a page whose whole meaning was "your account is closed" could be
+   opened when it wasn't, and the warnings before a code could be skipped by
+   typing. Those are gone; this table stays.
    ═══════════════════════════════════════════════════════════════════ */
 
 export type RecordTarget =
@@ -20,7 +35,6 @@ export type RecordTarget =
   | { screen: "devices"; id: string }
   | { screen: "download-data"; id: string }
   | { screen: "login-activity"; id: string }
-  | { screen: "recently-deleted"; id: string }
   | { screen: "status-section"; section: string }
   | { screen: "status-item"; section: string; item: string };
 
@@ -34,7 +48,6 @@ const ID_SCREENS = new Set([
   "devices",
   "download-data",
   "login-activity",
-  "recently-deleted",
 ] as const satisfies readonly IdScreen[]);
 
 /** Addresses under those same sections that are pages in their own right.

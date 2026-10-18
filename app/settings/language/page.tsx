@@ -23,12 +23,16 @@ import { useToast } from "@/lib/use-toast";
    app speaks. A plain list, each name written in its own script, one
    radio circle. Nothing else: no formats, no translation switches.
 
-   The choice is device-local. The words the app says constantly come from
-   lib/i18n, which answers in the language chosen here; everything else on
-   screen — the body copy, the guides — is translated by
-   lib/machine-translate, which caches its answers on the device so the
-   second visit to a page is ready on the first paint. Dates, times and
-   "how long ago" go through the browser's own formatting engine.
+   The choice follows the account: it lands in the settings bag and in
+   the account's own language column, so a switch made on another Tirbeo
+   surface is this page's answer too, and a seed on load applies it
+   before the first tile is drawn. What the switch reaches on this
+   device: the words the app says constantly come from lib/i18n, which
+   answers in the language chosen here; everything else on screen — the
+   body copy, the guides — is translated by lib/machine-translate, which
+   caches its answers on the device so the second visit to a page is
+   ready on the first paint. Dates, times and "how long ago" go through
+   the browser's own formatting engine.
    ═══════════════════════════════════════════════════════════════════ */
 
 const MIN_QUERY = 2;

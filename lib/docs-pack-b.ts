@@ -108,53 +108,54 @@ export const PACK_B: DocArticle[] = [
   },
   {
     slug: "restore-deleted",
-    title: "Getting something back from Recently deleted",
-    sub: "Restoring puts a thing back where it came from; deleting for good skips the countdown. Here's the difference.",
+    title: "Getting something back, and what can actually be deleted",
+    sub: "There is no Recently deleted tray, because Tirbeo holds no notes or files of yours. Here's what a delete does mean here.",
     category: "Your data",
-    keywords: "restore undelete recently deleted trash put back delete for good permanent undo thirty days window",
+    keywords:
+      "restore undelete recently deleted trash put back delete for good permanent undo thirty days window cancel account deletion",
     updated: REVIEWED,
     intro: [
-      "Nothing disappears the instant you delete it. It lands in Recently deleted and waits there for thirty days, still whole. Open an item and you get exactly two decisions: put it back, or end the wait and remove it now.",
-      "The right-hand number on each row is how many days that item has left. When it reaches zero the item is gone whether you act or not, and support cannot bring it back — that tray is the only undo this build has.",
+      "A tray of deleted things is a promise about the future: that a copy of what you removed is being kept somewhere and can be handed back. Tirbeo holds no notes, albums, files or bookmarks of yours, so there is no per-item delete to undo and nothing to put a tray on. Rather than show an empty screen and imply the shelf exists, this build says plainly that there isn't one.",
+      "What the account does hold is a record of you — the profile, the sign-ins, the changes, the requests — and none of it is removable item by item either. Taking a copy before you go is what Download your data is for.",
     ],
     steps: [
       {
-        title: "Find the item by the day it went",
-        body: "Recently deleted groups everything by the day it was deleted, newest first. The line at the top says how many items can still be restored and how soon the first of them leaves for good.",
-        href: "/settings/recently-deleted",
-        hrefLabel: "Recently deleted",
+        title: "Take a copy before anything goes",
+        body: "An archive of the whole record, requested from the app and built on the spot. It's the only version of your data you can hold on to, because nothing inside Tirbeo keeps a second copy of an individual thing.",
+        href: "/settings/download-data",
+        hrefLabel: "Download your data",
       },
       {
-        title: "Open one item to act on it",
-        body: "A row opens its own page: the type, when it was deleted, the date it becomes gone for good, and the days left. The two buttons are the only things on the screen, so there's nothing to press by accident.",
+        title: "Pause the account instead of deleting it",
+        body: "Deactivating takes the account out of sight and stops it appearing to anyone else, and signing back in ends the pause. Nothing is removed, so there is nothing to restore afterwards.",
+        href: "/settings/deactivate",
+        hrefLabel: "Deactivate account",
       },
       {
-        title: "Restore it",
-        body: "Press Restore it and the item goes back where it came from with its history intact, and leaves the tray. A short confirmation says what kind was restored.",
-      },
-      {
-        title: "Or delete it for good",
-        body: "Press Delete for good and the item is removed immediately, skipping the rest of the thirty days. This is the one you cannot undo — once it's off the tray there is no second tray behind it.",
+        title: "Closing an account does have a countdown",
+        body: "Filing a deletion starts a thirty-day window, and it is the one place in this app where something deleted can genuinely be taken back. Cancel from the same screen that filed it and the account is untouched; let the window run out and the record is gone — support cannot recover it either.",
+        href: "/settings/delete-account",
+        hrefLabel: "Delete account",
       },
     ],
     notes: [
       {
-        q: "What's the difference between restoring and deleting for good?",
-        a: "Restore reverses the delete and puts the thing back. Delete for good accepts the delete early and takes the item off the tray now, before its clock runs out. Leaving it in the tray does neither; it keeps counting down.",
+        q: "Why isn't there a Recently deleted screen?",
+        a: "There used to be one, and it listed six things that were never yours — they were examples the page wrote into this browser because it had nothing else to show. A screen whose only content is invented is worse than no screen, so the rows, the tray and its thirty-day clock went.",
       },
       {
-        q: "How long is the window?",
-        a: "Thirty days from the day you deleted it, per item. That number is the same for every kind of item in the tray.",
+        q: "Will there be one?",
+        a: "When there is content to delete. A real tray needs a table behind it and a way for a delete to reach it; until both exist, an honest empty page is the most this screen could be, and this article is that page.",
       },
       {
-        q: "If I delete my whole account, does this tray save my data?",
-        a: "No. This tray is for individual items on a live account. Closing the account is a separate, larger action with its own thirty-day window and its own countdown.",
+        q: "If I delete my whole account, does anything save my data?",
+        a: "No. The thirty-day window saves the account itself, not an export of it. Request the archive before filing the deletion if you want a copy — once the window closes there is nothing left to build one from.",
       },
     ],
     related: [
-      { label: "Recently deleted", href: "/settings/recently-deleted" },
+      { label: "Taking a copy of your data", href: "/settings/download-data" },
+      { label: "Closing and deleting your account", href: "/settings/delete-account" },
       { label: "Your activity", href: "/settings/your-activity" },
-      { label: "Download your data", href: "/settings/download-data" },
     ],
   },
   {
@@ -493,7 +494,7 @@ export const PACK_B: DocArticle[] = [
       },
       {
         title: "Go from the charts to the records",
-        body: "Under Your records, two links leave this page: Recently deleted for things still recoverable, and Account history for every change you've made. Time spent is a summary; those are the itemised versions.",
+        body: "Under Your records, one link leaves this page: Account history, every change you've made to the account. Time spent is a summary; that one is the itemised version.",
       },
     ],
     notes: [
@@ -512,7 +513,7 @@ export const PACK_B: DocArticle[] = [
     ],
     related: [
       { label: "Your activity", href: "/settings/your-activity" },
-      { label: "Recently deleted", href: "/settings/recently-deleted" },
+      { label: "Account history", href: "/settings/activity-log" },
       { label: "Download your data", href: "/settings/download-data" },
     ],
   },
@@ -540,9 +541,9 @@ export const PACK_B: DocArticle[] = [
       },
       {
         title: "Come back when you're ready",
-        body: "While the profile is hidden, this page shows the record with a Reactivate now button. That signs you back in here. Every other device was ended when the profile went away, so each one has to sign in again on its own.",
-        href: "/settings/deactivated",
-        hrefLabel: "Deactivated",
+        body: "While the profile is hidden, signing in opens one screen with a Reactivate now button — nothing else on the account is reachable until you press it. Every other device was ended when the profile went away, so each one has to sign in again on its own.",
+        href: "/settings",
+        hrefLabel: "Settings",
       },
     ],
     notes: [
@@ -590,8 +591,8 @@ export const PACK_B: DocArticle[] = [
       {
         title: "Understand what happens after the window",
         body: "If the date passes without a cancel, the account is set to close and there is nothing left on that page to undo it — the message then points to signing in again or talking to support. This build is local, so it's the point where the file, if you wanted one, should already be saved elsewhere.",
-        href: "/settings/deletion-pending",
-        hrefLabel: "Deletion pending",
+        href: "/settings/delete-account",
+        hrefLabel: "Delete account",
       },
     ],
     notes: [

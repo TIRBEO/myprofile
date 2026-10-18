@@ -52,13 +52,10 @@ const GUIDES: Record<string, GuideLink[]> = {
     { slug: "archive-request", label: "What the archive holds" },
     { slug: "archive-limit", label: "Why there's a daily limit" },
   ],
-  "/settings/recently-deleted": [
-    { slug: "restore-deleted", label: "Getting something back" },
-    { slug: "data-copy", label: "Taking a copy of your data" },
-  ],
   "/settings/your-activity": [
     { slug: "time-spent", label: "What the activity log keeps" },
     { slug: "change-not-mine", label: "A change I didn't make" },
+    { slug: "restore-deleted", label: "Getting something back" },
   ],
   "/settings/activity-log": [
     { slug: "change-not-mine", label: "A change I didn't make" },

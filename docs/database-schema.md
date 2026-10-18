@@ -14,8 +14,8 @@ Swap the type names for another engine later; the shapes and constraints carry.
 ## 0. Ground rules
 
 **We never store a password.** Not hashed, not encrypted, not "temporarily".
-The password screens in this app (`security`, `confirm-deletion`) are *verifying*
-a secret the account provider already holds. So there is no `password` column
+The password screens in this app (`security`) are *verifying* a secret the
+account provider already holds. So there is no `password` column
 anywhere in this document, and the check is a call out to the auth provider.
 If we ever self-host auth, the hash lives in the auth layer, never in a table
 this app can read.
@@ -57,7 +57,7 @@ credentials, this owns *what the app displays and can be held to*.
 | `updated_at` | timestamptz | |
 
 One row per account, and the row the lock screens (`restricted`, `deactivated`,
-`deletion-pending`) decide the route on. `state` is derived-and-cached; the
+`deletion-pending` — states now, not routes) decide the route on. `state` is derived-and-cached; the
 authoritative versions live in §11 and §12.
 
 ### `account_emails`
@@ -593,13 +593,13 @@ plan is "here is the date we will do it, and the countdown you see".
 | --- | --- | --- |
 | `account_id` | uuid PK/FK | |
 | `scheduled_at` | timestamptz not null | the user asked |
-| `final_at` | timestamptz not null | hard-delete date, the countdown target on `/settings/deletion-pending` |
+| `final_at` | timestamptz not null | hard-delete date, the countdown target on the deletion lock screen |
 | `cancelled_at` | timestamptz | null = pending |
 | `cancelled_reason` | text | |
 | `completed_at` | timestamptz | set by the purge job |
 
-`confirm-deletion` is the re-auth gate before this row is written; it creates no
-table of its own.
+The emailed code in the Delete-account sheet is the re-auth gate before this row
+is written; it creates no table of its own.
 
 ---
 
@@ -634,8 +634,8 @@ the manifest (see §19).
 
 ## 10. Content activity
 
-`/settings/your-activity` and `/settings/recently-deleted`. Both are about things
-the user posts, which this app does not create — it reports and retracts.
+`/settings/your-activity`. It is about things the user posts, which this app
+does not create — it reports and retracts.
 
 ### `activity_daily_totals`
 
@@ -658,8 +658,15 @@ then get trusted.
 
 ### `deleted_items`
 
-The trash the "Recently deleted" page restores from. Soft delete with a real
-expiry, because the page's promise is "gone in 30 days".
+**No writer yet.** The client had a "Recently deleted" page, but nothing in the
+product could put a row in it — Tirbeo creates no posts, comments or files, so
+there was no per-item delete to undo, and the page filled itself with six
+example rows. The page and its store are retired (lib/retired-tray.ts clears
+the leftovers); this table is what a real tray needs, and it comes with the
+content model that makes one possible.
+
+Soft delete with a real expiry, so the page's promise can be "gone in 30 days"
+and kept: the clock is a column, not a countdown the browser computes.
 
 | column | type | notes |
 | --- | --- | --- |
@@ -875,7 +882,7 @@ The migration story in one table, so nobody has to re-derive it later.
 | `account-deletion` | `deletion_plans` |
 | `download-requests` | `export_archives` |
 | `your-activity` | `activity_daily_totals` |
-| `your-activity:deleted` | `deleted_items` |
+| `your-activity:deleted` | `deleted_items` — **client store retired (§10)** |
 | `support-requests` | `support_requests` |
 | `docs-helpful` | `content_votes` |
 | `docs` | `docs_articles` |
@@ -884,7 +891,7 @@ The migration story in one table, so nobody has to re-derive it later.
 | `security`, `last-active` | `pref_security`, `sessions` |
 | `theme`, `language`, `narration` | `pref_theme`, `pref_language`, `pref_narration` |
 | `recovery-email` | `recovery_emails` |
-| `recently-deleted` | `deleted_items` |
+| `recently-deleted` | `deleted_items` — **page retired (§10)** |
 | `visibility`, `mentions` | *(dropped — §19)* |
 
 ---

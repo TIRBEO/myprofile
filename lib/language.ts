@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { read, write } from "@/lib/prefs";
 import { reloadSettings } from "@/lib/remote-store";
+import { SEMANTIC_DEFAULTS, readSemanticPrefs, saveSemanticPrefs } from "@/lib/semantic-prefs";
 import { usePageRefresh } from "@/lib/page-refresh";
 
 export const LANGUAGE_KEY = "tirbeo:language";
@@ -103,9 +104,30 @@ export function readLanguageId(): string {
 export function applyLanguage(id: string) {
   if (typeof document === "undefined") return;
   write(LANGUAGE_KEY, { interface: id } satisfies LanguagePrefs);
+  // The choice belongs to the account, not this browser: the bag carries it
+  // for this app's first paint, the typed column for every other Tirbeo
+  // surface — so a switch made here is the switch made everywhere.
+  saveSemanticPrefs({ language: id });
   setAppLocale(id);
   document.documentElement.setAttribute("lang", localeFor(id));
   notify();
+}
+
+/** Seed from the account's own language column — what the other Tirbeo
+    surfaces write and read. A column still holding the server default means
+    nobody has chosen there, so the bag stands; a real choice wins over the
+    bag and lands in it, so the next first paint and the boot script agree.
+    Runs once per session: a later local pick is newer than this answer and
+    must not be overruled by it. */
+let accountSeeded = false;
+export async function syncLanguageFromAccount(): Promise<void> {
+  if (typeof window === "undefined" || accountSeeded) return;
+  accountSeeded = true;
+  const prefs = await readSemanticPrefs();
+  const fromAccount = prefs?.language;
+  if (!fromAccount || fromAccount === SEMANTIC_DEFAULTS.language) return;
+  if (fromAccount === readLanguageId()) return;
+  applyLanguage(fromAccount);
 }
 
 /* The one place the choice is broadcast, so the whole app can follow a switch
@@ -130,7 +152,16 @@ export function useLanguage() {
   const [id, setId] = useState<string | null>(null);
 
   useEffect(() => {
+    let alive = true;
     setId(readLanguageId());
+    // The column may hold a choice made on another surface; re-read the
+    // resolved id once it lands so every page following this hook switches.
+    void syncLanguageFromAccount().then(() => {
+      if (alive) setId(readLanguageId());
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const choose = useCallback((next: string) => {

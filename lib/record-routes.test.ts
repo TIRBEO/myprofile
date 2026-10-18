@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { recordTarget } from "@/lib/record-routes";
 
-/* Eight screens that used to be eight routes now answer to one file, and the
+/* Seven screens that used to be seven routes now answer to one file, and the
    only thing standing between a link and a blank page is this table. A typo in
    a path segment here does not throw — it quietly 404s a link the app has
    shipped all along. So each address the app has ever linked to is pinned to
@@ -16,10 +16,6 @@ describe("recordTarget", () => {
     expect(recordTarget(["login-activity", "evt_1"])).toEqual({
       screen: "login-activity",
       id: "evt_1",
-    });
-    expect(recordTarget(["recently-deleted", "del_1"])).toEqual({
-      screen: "recently-deleted",
-      id: "del_1",
     });
     expect(recordTarget(["download-data", "exp_1"])).toEqual({
       screen: "download-data",
@@ -56,5 +52,10 @@ describe("recordTarget", () => {
     expect(recordTarget(["devices", "a", "b"])).toBeNull();
     expect(recordTarget(["account-status", "restrictions", "res_1", "extra"])).toBeNull();
     expect(recordTarget(["", "restrictions"])).toBeNull();
+    /* The recently-deleted tray was seeded with six example rows, because
+       nothing in Tirbeo could write a real one — there is no content model, so
+       no per-item delete to undo. The screen is gone with the invention, and an
+       old bookmark of one of its addresses 404s rather than opening a blank. */
+    expect(recordTarget(["recently-deleted", "del_1"])).toBeNull();
   });
 });

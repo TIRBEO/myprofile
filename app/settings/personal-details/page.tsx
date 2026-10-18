@@ -44,10 +44,12 @@ import { usePageRefresh } from "@/lib/page-refresh";
    one for work. Skills are plain pills; tapping one asks before it goes.
 
    The store is the server: email arrives read-only off the account row,
-   website and the job fields save through the profile endpoint, and the
-   local copy is only the cache that paints first. Phone is a recovery
-   number owned by the security flow — shown, never edited here. Skills
-   have no column yet, so they stay local-only and say so on save.
+   website and the four job answers save through the profile endpoint, the
+   number through the endpoint that owns its own column, and the local copy
+   is only the cache that paints first. Every field on this page has a real
+   column, so "Saved" is only said when the account took the write — and a
+   field the account refused keeps its sheet open, with the reason under the
+   input that caused it.
    ═══════════════════════════════════════════════════════════════════ */
 
 const MAX_SKILLS = 8;
@@ -86,6 +88,26 @@ const JOB_FIELDS: Record<JobKey, { label: string; placeholder: string }> = {
 
 const JOB_KEYS = Object.keys(JOB_FIELDS) as JobKey[];
 
+/** Which saved-field name each sheet input's refusal comes back under. The
+    account names a field for its column (`jobRole`, `jobStartedOn`), the sheet
+    lays it out for the question it asks, and the note has to land on the row
+    that caused it. */
+const JOB_ERROR_KEY: Record<JobKey, string> = {
+  role: "jobRole",
+  company: "jobCompany",
+  place: "jobPlace",
+  start: "jobStartedOn",
+};
+
+/** Words for a field the account says it has nowhere to put. */
+const FIELD_WORDS: Record<string, string> = {
+  jobPlace: "work location",
+  jobStartedOn: "started-in year",
+  skills: "skills",
+  followers: "followers",
+  following: "following",
+};
+
 type SheetId = "job" | "contact";
 
 const CONTACT_FIELDS = [
@@ -93,15 +115,17 @@ const CONTACT_FIELDS = [
     key: "phone" as const,
     label: "Phone",
     placeholder: "+977 98XXXXXXXX",
-    hint: "Used for login alerts and account recovery.",
+    hint: "The contact number stored with your account. Clearing the box removes it.",
     type: "tel",
+    errorKey: "phone",
   },
   {
     key: "website" as const,
     label: "Website",
-    placeholder: "yoursite.com",
+    placeholder: "https://yoursite.com",
     hint: "Shown as a link on your public profile.",
     type: "url",
+    errorKey: "website",
   },
 ];
 
@@ -130,6 +154,9 @@ export default function PersonalDetailsPage() {
   const [draftSkill, setDraftSkill] = useState("");
   const [removingSkill, setRemovingSkill] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Why the account refused the last save, keyed by saved-field name — the
+      note is printed under the input that caused it, not as one toast. */
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const toast = useToast();
   /** False while neither the cache nor the account has produced a profile. */
   const [loaded, setLoaded] = useState(false);
@@ -172,24 +199,22 @@ export default function PersonalDetailsPage() {
     });
   });
 
-  /** Saves the whole Details shape through the profile endpoint. The fields
-      the row cannot hold are merged into the local copy before the write so
-      they survive the server answer overwriting it — today that is only the
-      follower counts, so every work answer goes up. */
-  async function commit(next: Details) {
-    const localOnly = {
-      jobPlace: next.job.place,
-      jobStartedOn: next.job.start,
-      skills: next.skills,
-    };
+  /** Saves the whole Details shape: the job answers, the website and the skills
+      through the profile endpoint, the number through the endpoint that owns
+      its column. Resolves true only when every part the person changed was
+      taken — a sheet that closed on a refusal would hide the reason. */
+  async function commit(next: Details): Promise<boolean> {
     const merged: Profile = {
       ...baselineRef.current,
-      email: next.email || baselineRef.current.email,
-      phone: next.phone || baselineRef.current.phone,
+      // The login address is not editable here, so it is carried, not sent.
+      email: baselineRef.current.email,
+      phone: next.phone,
       website: next.website,
       jobRole: next.job.role,
       jobCompany: next.job.company,
-      ...localOnly,
+      jobPlace: next.job.place,
+      jobStartedOn: next.job.start,
+      skills: next.skills,
     };
     setForm(next);
     setSaving(true);
@@ -197,36 +222,47 @@ export default function PersonalDetailsPage() {
     setSaving(false);
     if (!result.ok) {
       haptic("error");
+      setErrors(result.errors ?? {});
       if (result.errors) {
         toast.error(Object.values(result.errors)[0] ?? "Some fields need attention");
       } else {
+        /* The account's own sentence — "Invalid phone number format", "that
+           username is taken" — is the thing that tells a person what to do
+           next, so it is shown rather than a generic failure. */
         toast.error(result.message ?? "The change could not be saved.");
       }
-      return;
+      /* The cache has gone back to the account's answer, so the page shows it:
+         a skill the account refused must not sit in the cloud as though it
+         saved. A sheet keeps its own draft — the text being typed is not the
+         cache, and throwing it away would lose the edit. */
+      setForm(detailsOf(readProfile()));
+      return false;
     }
-    const unsupported = new Set(result.outcome.unsupported);
-    const keptLocal = [
-      ...(next.job.place && unsupported.has("jobPlace") ? ["work location"] : []),
-      ...(next.job.start && unsupported.has("jobStartedOn") ? ["started-in year"] : []),
-      ...(next.skills.length > 0 && unsupported.has("skills") ? ["skills"] : []),
-    ];
-    if (keptLocal.length > 0) {
-      toast.error(`Saved — kept on this device only: ${keptLocal.join(", ")}`);
+    setErrors({});
+    /* The account's answer becomes the baseline for the next diff, so a second
+       save compares against what is stored, not against what this device
+       hoped. */
+    baselineRef.current = result.outcome.profile;
+    const held = result.outcome.unsupported.map((field) => FIELD_WORDS[field] ?? field);
+    if (held.length > 0) {
+      toast.error(`Saved — kept on this device only: ${held.join(", ")}`);
     } else {
       toast.success("Saved");
     }
+    return true;
   }
 
   /* ── Sheets ── */
 
   function openSheet(id: SheetId) {
+    setErrors({});
     if (id === "job") {
       const next: Record<string, string> = {};
       for (const k of JOB_KEYS) next[k] = form.job[k] ?? "";
       setDraft(next);
     } else {
-      // Phone is a recovery identity owned by /api/security — shown but
-      // never edited from here, so it doesn't go into the draft.
+      // Both contact answers are edited here: the number writes to
+      // `user_phone`, the address to the profile row.
       setDraft({ phone: form.phone, website: form.website });
     }
     setSheet(id);
@@ -234,23 +270,32 @@ export default function PersonalDetailsPage() {
 
   async function saveSheet() {
     if (!sheet) return;
-    if (sheet === "job") {
-      const clean: Record<JobKey, string> = { role: "", company: "", place: "", start: "" };
-      for (const k of JOB_KEYS) clean[k] = (draft[k] ?? "").trim();
-      await commit({ ...form, job: clean });
-    } else {
-      await commit({
-        ...form,
-        phone: (draft.phone ?? "").trim() || form.phone,
-        website: (draft.website ?? "").trim(),
-      });
-    }
-    setSheet(null);
+    const ok =
+      sheet === "job"
+        ? await commit({
+            ...form,
+            job: JOB_KEYS.reduce((acc, k) => {
+              acc[k] = (draft[k] ?? "").trim();
+              return acc;
+            }, {} as Record<JobKey, string>),
+          })
+        : await commit({
+            ...form,
+            /* An emptied box is a clear, not a no-op: `|| form.phone` used to
+               make the number impossible to remove. */
+            phone: (draft.phone ?? "").trim(),
+            website: (draft.website ?? "").trim(),
+          });
+    // Stay open on a refusal, with the draft and the reason still on screen.
+    if (ok) setSheet(null);
   }
 
   /* ── Skills ── */
 
-  function addSkill() {
+  /** A skill is only added once the account has taken the list. Closing the
+      sheet and clearing the box before that answer is what let a refused edit
+      vanish without a trace. */
+  async function addSkill() {
     const name = draftSkill.trim();
     if (!name) return;
     if (form.skills.length >= MAX_SKILLS) {
@@ -264,14 +309,18 @@ export default function PersonalDetailsPage() {
       toast.error("That skill is already listed");
       return;
     }
-    void commit({ ...form, skills: [...form.skills, name] });
-    setDraftSkill("");
-    setSkillSheet(false);
+    if (await commit({ ...form, skills: [...form.skills, name] })) {
+      setDraftSkill("");
+      setSkillSheet(false);
+    }
   }
 
   /** Only ever called from the confirm sheet, never straight off the pill. */
-  function removeSkill(skill: string) {
-    void commit({ ...form, skills: form.skills.filter((s) => s !== skill) });
+  async function removeSkill(skill: string): Promise<boolean> {
+    const ok = await commit({ ...form, skills: form.skills.filter((s) => s !== skill) });
+    // Said as removed only when the account agreed it was.
+    if (ok) toast.success(`${skill} removed`);
+    return ok;
   }
 
   const full = form.skills.length >= MAX_SKILLS;
@@ -359,7 +408,11 @@ export default function PersonalDetailsPage() {
           Add skill
         </Button>
       </div>
-      {full ? (
+      {errors.skills ? (
+        <Helper className="mt-3" tone="danger">
+          {errors.skills}
+        </Helper>
+      ) : full ? (
         <Helper className="mt-3">
           {"That's all"} {MAX_SKILLS} {"— remove one to make room for another."}
         </Helper>
@@ -400,10 +453,17 @@ export default function PersonalDetailsPage() {
                   }}
                   type={f.type}
                   placeholder={f.placeholder}
+                  invalid={!!errors[f.errorKey]}
                   autoFocus={i === 0}
                   className="h-11"
                 />
-                <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted">{f.hint}</p>
+                {errors[f.errorKey] ? (
+                  <p role="alert" className="mt-1.5 text-[12.5px] leading-relaxed text-danger-text">
+                    {errors[f.errorKey]}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted">{f.hint}</p>
+                )}
               </div>
             ))}
           </div>
@@ -444,9 +504,22 @@ export default function PersonalDetailsPage() {
                     }
                   }}
                   placeholder={JOB_FIELDS[k].placeholder}
+                  invalid={!!errors[JOB_ERROR_KEY[k]]}
                   autoFocus={i === 0}
                   className="h-11"
                 />
+                {errors[JOB_ERROR_KEY[k]] ? (
+                  <p role="alert" className="mt-1.5 text-[12.5px] leading-relaxed text-danger-text">
+                    {errors[JOB_ERROR_KEY[k]]}
+                  </p>
+                ) : k === "start" ? (
+                  /* The column holds ten characters and the account asks for
+                     `2024-01`; said here because a refusal that arrives as a
+                     toast is not something to act on. */
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted">
+                    {"A year, or a year and a month — 2022, or 2024-01."}
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>
@@ -470,8 +543,8 @@ export default function PersonalDetailsPage() {
                 setDraftSkill("");
               }}
               confirmLabel="Add skill"
-              onConfirm={addSkill}
-              disabled={!draftSkill.trim()}
+              onConfirm={() => void addSkill()}
+              disabled={!draftSkill.trim() || saving}
             />
           }
         >
@@ -508,9 +581,10 @@ export default function PersonalDetailsPage() {
               confirmLabel="Remove"
               confirmVariant="danger"
               onConfirm={() => {
-                removeSkill(removingSkill);
-                setRemovingSkill(null);
-                toast.error("Skill removed");
+                const skill = removingSkill;
+                void removeSkill(skill).then((ok) => {
+                  if (ok) setRemovingSkill(null);
+                });
               }}
             />
           }
