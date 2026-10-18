@@ -23,343 +23,53 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
-import { ChevronDown, ChevronRight, Eye, EyeOff, Loader2, Search, X } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, Loader2, Search, X } from "lucide-react";
 import { haptic } from "@/lib/haptics";
-import { RandomAvatar } from "@/components/random-avatar";
 
 /* ═══════════════════════════════════════════════════════════════════
    Tirbeo — account primitives
 
-   Mobile-first app shell. Three surfaces carry the whole UI:
-     Page / PageHeader   large-title screen that scrolls under the glass bar
-     Section / List      inset grouped lists, iOS-style
-     Sheet               bottom sheet on phones, centred dialog from sm up
-   Everything else is a control that plugs into a List row.
+   The controls the settings screens build with. Two families:
+
+     Overlays   Sheet / SheetOption / SheetActions — the bottom sheet on
+                phones, the centred dialog from `sm` up
+     Controls   Button / IconButton / Segmented / Chip / Input / Textarea /
+                Select / Field / PasswordField / SearchField
+
+   The surfaces these sit on are NOT here: the page column, the grouped
+   plate, the row and the section header all live in
+   components/settings-shell, which is the one vocabulary the 38 settings
+   routes are written against. Keeping the list anatomy in one file is
+   what stops a row meaning two different heights on two screens.
    ═══════════════════════════════════════════════════════════════════ */
 
 export function cn(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
 }
 
-export type Tone = "neutral" | "accent" | "success" | "danger" | "warn" | "muted";
-
-const CHIP: Record<Tone, string> = {
-  neutral: "bg-surface-2 text-fg",
-  accent: "bg-accent/12 text-accent-text",
-  success: "bg-success/12 text-success-text",
-  danger: "bg-danger/12 text-danger-text",
-  warn: "bg-warn/12 text-warn-text",
-  muted: "bg-surface-2 text-muted",
-};
-
-const BANNER: Record<Tone, { shell: string; icon: string }> = {
-  neutral: { shell: "border-border bg-surface-2", icon: "bg-surface-3 text-fg" },
-  accent: { shell: "border-accent/20 bg-accent/[0.06]", icon: "bg-accent/15 text-accent-text" },
-  success: { shell: "border-success/20 bg-success/[0.06]", icon: "bg-success/15 text-success-text" },
-  danger: { shell: "border-danger/20 bg-danger/[0.06]", icon: "bg-danger/15 text-danger-text" },
-  warn: { shell: "border-warn/20 bg-warn/[0.06]", icon: "bg-warn/15 text-warn-text" },
-  muted: { shell: "border-border bg-surface-2", icon: "bg-surface-3 text-muted" },
-};
-
-/* ── Layout ─────────────────────────────────────────────────────── */
-
-/** Content column. Bottom padding clears the mobile tab bar. */
-export function Page({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("shell-page", className)}>{children}</div>;
-}
-
-/**
- * Large screen title. The glass app bar fades in its own copy of this
- * title once the header has scrolled out from under it.
- */
-export function PageHeader({
-  title,
-  description,
-  action,
-  eyebrow,
-}: {
-  title: string;
-  description?: string;
-  icon?: ReactNode;
-  action?: ReactNode;
-  /** Small caption under the title. */
-  eyebrow?: string;
-}) {
-  return (
-    <header className="flex items-start justify-between gap-4 pt-6 pb-6">
-      <div className="min-w-0">
-        <h1 className="truncate text-[21px] leading-tight font-bold tracking-[-0.02em]">
-          {title}
-        </h1>
-        {eyebrow || description ? (
-          <div className="mt-1">
-            {eyebrow ? <p className="text-[13px] font-medium text-muted">{eyebrow}</p> : null}
-            {description ? (
-              <p className="max-w-[52ch] text-[13.5px] leading-relaxed text-muted">
-                {description}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-      {action ? <div className="shrink-0 pt-0.5">{action}</div> : null}
-    </header>
-  );
-}
-
-export function Section({
-  title,
-  description,
-  action,
-  children,
-  className,
-}: {
-  title?: string;
-  description?: string;
-  action?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={cn("mb-10", className)}>
-      {title ? (
-        <div className="mb-3.5 flex items-end justify-between gap-4">
-          <div className="rule-label min-w-0 flex-1">
-            <span className="label shrink-0">{title}</span>
-          </div>
-          {action ? <div className="shrink-0">{action}</div> : null}
-        </div>
-      ) : null}
-      {description ? (
-        <p className="-mt-1 mb-3.5 max-w-[62ch] text-[13px] leading-relaxed text-muted">
-          {description}
-        </p>
-      ) : null}
-      {children}
-    </section>
-  );
-}
-
-/** Plain raised surface with no implied row semantics. */
-export function Card({
-  children,
-  className,
-  padded = true,
-}: {
-  children: ReactNode;
-  className?: string;
-  padded?: boolean;
-}) {
-  return (
-    <div className={cn("rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgb(0_0_0/45%),0_10px_26px_-18px_rgb(0_0_0/60%)]", padded && "p-5", className)}>
-      {children}
-    </div>
-  );
-}
-
-/**
- * Rows separated by hairlines and bounded by a single rule above and
- * below — not a boxed card. `plain` drops the bounds entirely, for
- * lists that already sit inside a Sheet.
- */
-export function List({
-  children,
-  className,
-  plain = false,
-}: {
-  children: ReactNode;
-  className?: string;
-  plain?: boolean;
-}) {
-  return (
-    <div className={cn(plain ? "list-divide" : "grouped", className)}>
-      {children}
-    </div>
-  );
-}
-
-/* ── The workhorse row ──────────────────────────────────────────── */
-
-type ListRowProps = {
-  label: ReactNode;
-  description?: ReactNode;
-  /** Small rounded bubble to the left. */
-  icon?: ReactNode;
-  iconTone?: Tone;
-  /** Replaces the icon bubble entirely (avatar, brand logo, …). */
-  leading?: ReactNode;
-  /** Secondary line at the right, before the trailing cluster. */
-  value?: ReactNode;
-  /** Replaces the whole trailing cluster. */
-  trailing?: ReactNode;
-  /** Trailing switch — the row itself becomes the tap target. */
-  on?: boolean;
-  onChange?: (next: boolean) => void;
-  disabled?: boolean;
-  href?: string;
-  external?: boolean;
-  onClick?: () => void;
-  tone?: "default" | "danger";
-  /** Defaults to true when `href` is set. */
-  chevron?: boolean;
-  className?: string;
-};
-
-export function ListRow({
-  label,
-  description,
-  icon,
-  iconTone = "neutral",
-  leading,
-  value,
-  trailing,
-  on,
-  onChange,
-  disabled,
-  href,
-  external,
-  onClick,
-  tone = "default",
-  chevron,
-  className,
-}: ListRowProps) {
-  const showChevron = chevron ?? Boolean(href);
-  const interactive = Boolean(href || onClick || on);
-  const activate = () => {
-    haptic("light");
-    onClick?.();
-  };
-
-  const body = (
-    <>
-      {leading ? (
-        <span className="shrink-0">{leading}</span>
-      ) : icon ? (
-        <span className="flex shrink-0 items-center justify-center text-text-4">
-          {icon}
-        </span>
-      ) : null}
-
-      <span className="min-w-0 flex-1">
-        <span
-          className={cn(
-            "block text-[16px] leading-snug",
-            tone === "danger" ? "text-danger-text" : "text-fg",
-          )}
-        >
-          {label}
-        </span>
-        {description ? (
-          <span className="mt-0.5 block max-w-[56ch] text-[14px] leading-snug text-text-3">{description}</span>
-        ) : null}
-      </span>
-
-      {value ? <span className="mono shrink-0 text-[13px] text-text-3">{value}</span> : null}
-      {trailing}
-      {on ? (
-        <Switch
-          on={Boolean(on)}
-          onChange={(next) => {
-            haptic("light");
-            onChange?.(next);
-          }}
-          label={typeof label === "string" ? label : undefined}
-        />
-      ) : null}
-      {showChevron ? <ChevronRight className="size-[22px] shrink-0 text-text-4" /> : null}
-    </>
-  );
-
-  const cls = cn(
-    "group flex w-full min-h-[3.5rem] items-center gap-4 px-4 py-3.5 text-left",
-    "transition-colors duration-100",
-    interactive && !disabled && "hover:bg-hover active:bg-field-focus",
-    disabled && "opacity-45",
-    className,
-  );
-
-  if (href) {
-    if (external) {
-      return (
-        <a href={href} target="_blank" rel="noreferrer" className={cls} onClick={activate}>
-          {body}
-        </a>
-      );
-    }
-    return (
-      <Link href={href} className={cls} onClick={activate}>
-        {body}
-      </Link>
-    );
-  }
-
-  if (onClick) {
-    return (
-      <button type="button" onClick={activate} disabled={disabled} className={cls}>
-        {body}
-      </button>
-    );
-  }
-
-  return <div className={cls}>{body}</div>;
-}
-
-/* ── Controls ───────────────────────────────────────────────────── */
-
-export function Switch({
-  on,
-  onChange,
-  label,
-  disabled,
-}: {
-  on: boolean;
-  onChange: (next: boolean) => void;
-  label?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!on)}
-      className={cn(
-        "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full",
-        "transition-colors duration-200",
-        on ? "bg-ig" : "bg-track",
-        disabled && "opacity-45",
-      )}
-    >
-      <span
-        className={cn(
-          "block size-6 rounded-full bg-accent-fg shadow-[0_1px_3px_rgb(0_0_0/0.35)]",
-          "transition-transform duration-200 ease-out motion-reduce:transition-none",
-          on ? "translate-x-[22px]" : "translate-x-[2px]",
-        )}
-      />
-      <span className="sr-only">{label}</span>
-    </button>
-  );
-}
+/* ── Buttons ────────────────────────────────────────────────────── */
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
 type ButtonSize = "sm" | "md" | "lg";
 
-/* The button skins: one accent fill, one `systemFill` grey, one quiet text,
-   one red — full pills, semibold, tight tracking. */
-const BUTTON_VARIANT: Record<ButtonVariant, string> = {
+/* The three fills, written once. `Button` names them by variant and the
+   page-ending action pills name them by tone, but they are the same skins —
+   spelling them out twice is how one gets tuned and the other left behind. */
+const FILL = {
   primary: "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
   /* Apple's secondary is a filled grey, not an outlined one. The label has to
      be the accent colour for that to read as a control: a grey pill with grey
      words beside a blue one is indistinguishable from a disabled pair, and
      the fill alone carries no "you can press this" at all. */
-  secondary:
-    "bg-fill text-accent-text hover:bg-fill-hover active:bg-fill-press",
-  ghost: "text-text-3 hover:bg-hover hover:text-fg",
+  secondary: "bg-fill text-accent-text hover:bg-fill-hover active:bg-fill-press",
   danger: "bg-danger text-accent-fg hover:bg-danger-hover active:brightness-95",
+} as const;
+
+const BUTTON_VARIANT: Record<ButtonVariant, string> = {
+  primary: FILL.primary,
+  secondary: FILL.secondary,
+  ghost: "text-text-3 hover:bg-hover hover:text-fg",
+  danger: FILL.danger,
   link: "min-h-10 rounded-full px-1 text-[15px] font-semibold text-text-3 hover:text-fg",
 };
 
@@ -371,18 +81,25 @@ export const PILL_BASE =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export const PILL_FILL = {
-  primary: "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
-  danger: "bg-danger text-accent-fg hover:bg-danger-hover active:brightness-95",
+  primary: FILL.primary,
+  danger: FILL.danger,
   /** The quiet action beside a loud one. `outline` is the name 60 call sites
       use for "the not-primary button"; it is no longer an outline, because
       Apple draws that one filled with `systemFill` and labelled in the accent
       colour — the blue words are what stop it reading as a disabled control. */
-  outline: "bg-fill text-accent-text hover:bg-fill-hover active:bg-fill-press",
+  outline: FILL.secondary,
 } as const;
 
 /** A filled button that can't be used yet still has to read as accent-coloured, or as
     red, rather than turning into a grey slab nobody can parse. */
 export const PILL_DISABLED = "pointer-events-none opacity-55";
+
+/** The sheet's two footer buttons: one skin, two fills. A confirm that is a
+    pixel taller than the Cancel beside it is only ever noticed side by side. */
+const SHEET_ACTION =
+  "flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 " +
+  "text-[15px] font-semibold tracking-[-0.01em] outline-none transition " +
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
   sm: "h-10 rounded-full px-4 text-[14px] gap-1.5",
@@ -479,7 +196,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className={cn("flex gap-1 rounded-2xl border border-border bg-field p-1.5", block && "w-full")}
+      className={cn("flex gap-1 rounded-[17px] border border-border bg-field p-1.5", block && "w-full")}
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -513,9 +230,13 @@ export function Segmented<T extends string>({
 /* ── Form controls ──────────────────────────────────────────────── */
 
 /* The accounts field: a grey plate, borderless until focus, then an
-   accent border plus a soft accent ring. The whole box is the target. */
+   accent border plus a soft accent ring. The whole box is the target.
+
+   17px is the canonical field radius — the same corner the grouped plate is
+   cut from, so a control sitting inside a group is one family with it rather
+   than a slightly rounder rectangle dropped on top. */
 const CONTROL =
-  "w-full rounded-2xl border border-border bg-field px-4 text-[16px] text-fg outline-none " +
+  "w-full rounded-[17px] border border-border bg-field px-4 text-[16px] text-fg outline-none " +
   "placeholder:text-placeholder " +
   "transition-[border-color,box-shadow,background-color] duration-150 " +
   "hover:bg-field-hover " +
@@ -682,31 +403,7 @@ export function PasswordField({
   );
 }
 
-/* ── Display ────────────────────────────────────────────────────── */
-
-/** Status chip. Instagram's chips are sentence case, semi-bold and
-    rounded-full on a hairline — never tracked capitals in mono. */
-export function Pill({
-  children,
-  tone = "neutral",
-  dot,
-}: {
-  children: ReactNode;
-  tone?: Tone;
-  dot?: boolean;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-current/30 px-2.5 py-[3px] text-[12px] font-semibold whitespace-nowrap",
-        CHIP[tone],
-      )}
-    >
-      {dot ? <span className="size-1.5 rounded-full bg-current" /> : null}
-      {children}
-    </span>
-  );
-}
+/* ── Chips ──────────────────────────────────────────────────────── */
 
 /**
  * Toggle chip — the filter and jump pills. One primitive, so a row of
@@ -747,174 +444,6 @@ export function Chip({
       {dot}
       {children}
     </button>
-  );
-}
-
-export function Avatar({
-  src,
-  name,
-  size = 48,
-  className,
-  ring = false,
-}: {
-  src?: string | null;
-  name?: string;
-  size?: number;
-  className?: string;
-  ring?: boolean;
-}) {
-  const initials = (name ?? "")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-  /* A provider photo (lh3.googleusercontent.com and friends) can be blocked
-     by the browser before it ever paints — a dead <img> reads as a black
-     circle. On error the generated face takes over, seeded by the name. */
-  const [photoBroken, setPhotoBroken] = useState(false);
-
-  return (
-    <span
-      className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden rounded-full",
-        "bg-surface-3 font-semibold text-muted select-none",
-        ring && "ring-2 ring-bg",
-        className,
-      )}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
-    >
-      {src && !photoBroken ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={src}
-          alt={name ?? "Profile photo"}
-          referrerPolicy="no-referrer"
-          className="size-full object-cover"
-          onError={() => setPhotoBroken(true)}
-        />
-      ) : src && photoBroken && name ? (
-        <RandomAvatar seed={name} className="size-full" />
-      ) : initials ? (
-        initials
-      ) : src && photoBroken ? (
-        <RandomAvatar seed="tirbeo" className="size-full" />
-      ) : (
-        <PersonGlyph size={size} />
-      )}
-    </span>
-  );
-}
-
-function PersonGlyph({ size }: { size: number }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ width: size * 0.5, height: size * 0.5 }}
-      aria-hidden
-    >
-      <circle cx="12" cy="8.5" r="3.5" />
-      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-    </svg>
-  );
-}
-
-/** Compact metric tile — device counts, channel counts, totals. */
-export function Stat({
-  icon,
-  label,
-  value,
-  tone = "neutral",
-}: {
-  icon?: ReactNode;
-  label: string;
-  value: ReactNode;
-  tone?: Tone;
-}) {
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-      {icon ? (
-        <span className={cn("flex size-7 items-center justify-center rounded-[9px]", CHIP[tone])}>
-          {icon}
-        </span>
-      ) : null}
-      <span className="tabular text-[20px] leading-none font-bold tracking-[-0.02em]">{value}</span>
-      <span className="label truncate">{label}</span>
-    </div>
-  );
-}
-
-/** Definition grid for session and profile details. */
-export function KeyValue({
-  rows,
-  columns = 2,
-}: {
-  rows: { key: string; value: ReactNode; mono?: boolean; icon?: ReactNode }[];
-  columns?: 1 | 2;
-}) {
-  return (
-    <dl
-      className={cn(
-        "grid gap-x-6 gap-y-3.5",
-        columns === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1",
-      )}
-    >
-      {rows.map((r) => (
-        <div key={r.key} className="min-w-0">
-          <dt className="label flex items-center gap-1.5">
-            {r.icon}
-            {r.key}
-          </dt>
-          <dd className={cn("mt-1 text-[14px] font-medium break-words", r.mono && "font-mono text-[13px]")}>
-            {r.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-export function Banner({
-  tone = "neutral",
-  icon,
-  title,
-  action,
-  children,
-  className,
-}: {
-  tone?: Tone;
-  icon?: ReactNode;
-  title?: ReactNode;
-  action?: ReactNode;
-  children?: ReactNode;
-  className?: string;
-}) {
-  const skin = BANNER[tone];
-  return (
-    <div className={cn("rounded-2xl border px-4 py-4", skin.shell, className)}>
-      <div className="flex items-start gap-3">
-        {icon ? (
-          <span
-            className={cn(
-              "mt-px grid size-8 shrink-0 place-items-center rounded-full",
-              skin.icon,
-            )}
-          >
-            {icon}
-          </span>
-        ) : null}
-        <div className="min-w-0 flex-1">
-          {title ? <p className="text-[14px] leading-snug font-semibold">{title}</p> : null}
-          {children ? <div className="mt-1 text-[13px] leading-relaxed text-muted">{children}</div> : null}
-          {action ? <div className="mt-3.5 flex flex-wrap gap-2">{action}</div> : null}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -965,53 +494,6 @@ export function Disclosure({
     >
       <div className="overflow-hidden">{children}</div>
     </div>
-  );
-}
-
-/* ── Timeline ───────────────────────────────────────────────────── */
-
-export function Timeline({ children }: { children: ReactNode }) {
-  return (
-    <ol className="relative space-y-3 before:absolute before:top-6 before:bottom-6 before:left-5 before:w-px before:bg-border">
-      {children}
-    </ol>
-  );
-}
-
-export function TimelineItem({
-  icon,
-  tone = "neutral",
-  title,
-  meta,
-  badge,
-  children,
-}: {
-  icon?: ReactNode;
-  tone?: Tone;
-  title: ReactNode;
-  meta?: ReactNode;
-  badge?: ReactNode;
-  children?: ReactNode;
-}) {
-  return (
-    <li className="relative flex gap-3.5">
-      <span
-        className={cn(
-          "z-10 flex size-10 shrink-0 items-center justify-center rounded-full border border-border",
-          CHIP[tone],
-        )}
-      >
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1 rounded-xl border border-border bg-surface p-4">
-        <p className="flex flex-wrap items-center gap-2 text-[14.5px] leading-snug font-semibold">
-          {title}
-          {badge}
-        </p>
-        {meta ? <p className="mt-0.5 text-[13px] text-muted">{meta}</p> : null}
-        {children ? <div className="mt-3">{children}</div> : null}
-      </div>
-    </li>
   );
 }
 
@@ -1066,37 +548,8 @@ export function SearchField({
   );
 }
 
-export function Spinner({ className }: { className?: string }) {
-  return <Loader2 className={cn("size-4 animate-spin-slow", className)} />;
-}
-
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("skeleton", className)} />;
-}
-
-export function Divider({ className }: { className?: string }) {
-  return <div className={cn("hairline", className)} role="separator" />;
-}
-
-/** "or" rule between an OAuth row and the form (accounts recipe). */
-export function OrDivider({ label = "or" }: { label?: string }) {
-  return (
-    <div className="flex items-center gap-4" aria-hidden>
-      <span className="h-px flex-1 bg-divider" />
-      <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-4">{label}</span>
-      <span className="h-px flex-1 bg-divider" />
-    </div>
-  );
-}
-
-/** Inline error/success line under a form — the accounts FormNotice. */
-export function FormNotice({ notice }: { notice?: { msg: string; tone: "error" | "success" } | null }) {
-  if (!notice) return null;
-  return (
-    <p role={notice.tone === "error" ? "alert" : "status"} className={"form-notice form-notice-" + notice.tone}>
-      {notice.msg}
-    </p>
-  );
 }
 
 /* ── Sheet ──────────────────────────────────────────────────────── */
@@ -1401,7 +854,7 @@ export function Sheet({
                   data-sheet-close
                   onClick={startClose}
                   aria-label="Close"
- className="relative -mt-1 -mr-1 grid size-9 shrink-0 place-items-center rounded-full text-muted outline-none transition-colors hover:bg-surface-2 hover:text-fg after:absolute after:-inset-1 after:content-['']"
+                  className="relative -mt-1 -mr-1 grid size-9 shrink-0 place-items-center rounded-full text-muted outline-none transition-colors hover:bg-surface-2 hover:text-fg after:absolute after:-inset-1 after:content-['']"
                 >
                   <X className="size-[19px]" strokeWidth={2} />
                 </button>
@@ -1439,7 +892,9 @@ export function Sheet({
   );
 }
 
-/** Radio row for sheets and settings pages. */
+/** A choice made inside a sheet — the same 17px line, 15px explanation and
+    accent radio the settings rows use, so a decision taken in a sheet is not
+    drawn in a second type scale. */
 export function SheetOption({
   children,
   selected,
@@ -1460,19 +915,19 @@ export function SheetOption({
         haptic("selection");
         onClick();
       }}
- className="group flex w-full items-center gap-4 px-4 py-4 text-left outline-none transition-colors hover:bg-hover active:bg-field-focus sm:px-5"
+      className="group flex min-h-[48px] w-full items-center gap-4 px-4 py-4 text-left outline-none transition-colors hover:bg-hover active:bg-field-focus sm:px-5"
     >
       <span className="min-w-0 flex-1">
         <span
           className={cn(
-            "block text-[16px] font-medium",
+            "block text-[17px] leading-[1.35] font-medium",
             selected ? "text-fg" : "text-text-2",
           )}
         >
           {children}
         </span>
         {description ? (
-          <span className="mt-0.5 block max-w-[56ch] text-[14px] leading-snug text-text-3">{description}</span>
+          <span className="mt-[3px] block max-w-[56ch] text-[15px] leading-[1.45] text-text-3">{description}</span>
         ) : null}
       </span>
       <span
@@ -1513,22 +968,19 @@ export function SheetActions({
   loading?: boolean;
 }) {
   const deferredClose = useContext(SheetDeferredClose);
-  /* Instagram's dialog actions: an outlined way out beside a filled
-     decision, both 8px corners, stacked on a phone with the action under
-     the thumb. Blue when it builds, red when it takes something away. */
+  /* Instagram's dialog actions: a `systemFill` way out beside a filled
+     decision, both full pills, stacked on a phone with the action under the
+     thumb. Blue when it builds, red when it takes something away. */
   return (
-      <div className="flex flex-col gap-2.5 sm:flex-row-reverse">
+    <div className="flex flex-col gap-2.5 sm:flex-row-reverse">
       <button
         type="button"
         onClick={onConfirm}
         disabled={disabled || loading}
         className={cn(
-          "flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] outline-none transition",
-          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-          confirmVariant === "danger"
-            ? "bg-danger text-accent-fg hover:bg-danger-hover active:brightness-95"
-            : "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
-          (disabled || loading) && "pointer-events-none opacity-55",
+          SHEET_ACTION,
+          confirmVariant === "danger" ? PILL_FILL.danger : PILL_FILL.primary,
+          (disabled || loading) && PILL_DISABLED,
         )}
       >
         {loading ? <Loader2 className="size-4 animate-spin-slow" /> : null}
@@ -1537,11 +989,7 @@ export function SheetActions({
       <button
         type="button"
         onClick={() => (deferredClose ? deferredClose() : onCancel())}
-        className={cn(
-          "flex min-h-[48px] flex-1 items-center justify-center rounded-full px-4 py-2.5 text-[15px] font-semibold tracking-[-0.01em] outline-none transition",
-          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-          PILL_FILL.outline,
-        )}
+        className={cn(SHEET_ACTION, PILL_FILL.outline)}
       >
         {cancelLabel}
       </button>
@@ -1616,340 +1064,3 @@ export function useAction() {
   return { pending, run };
 }
 
-/* ── Legacy settings-page API ─────────────────────────────────────
-   The settings screens were written against this vocabulary
-   (Panel / CardGroup / ToggleRow / Modal …). Kept as thin wrappers
-   over the primitives above so old and new pages share one system.
-   ═══════════════════════════════════════════════════════════════ */
-
-/** Settings screen: page column + big title + trailing content. */
-export function Panel({
-  title,
-  children,
-  className,
-}: {
-  title: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <Page className={className}>
-      <PageHeader title={title} />
-      {children}
-    </Page>
-  );
-}
-
-/** Small uppercase label between groups. */
-export function SectionHeading({ children }: { children: ReactNode }) {
-  return (
-    <h2 className="mt-8 mb-2 px-1 text-[13px] font-semibold text-muted first:mt-0">
-      {children}
-    </h2>
-  );
-}
-
-/** Grouped list. `clip` drops the outer border. */
-export function CardGroup({
-  children,
-  className,
-  clip = true,
-}: {
-  children: ReactNode;
-  className?: string;
-  clip?: boolean;
-}) {
-  return <List className={className} plain={!clip}>{children}</List>;
-}
-
-/*
- * Label + control row that sits inside a CardGroup. The control is
- * rendered below the label, like IG's stacked field rows.
- */
-export function FieldRow({
-  label,
-  hint,
-  children,
-  className,
-}: {
-  label: string;
-  hint?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("px-4 py-3.5 sm:px-5", className)}>
-      <div className="mb-2">
-        <FieldLabel>{label}</FieldLabel>
-        {hint ? <FieldHint>{hint}</FieldHint> : null}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/** Select styled like the legacy SelectField — forwardRef for form reads. */
-export const SelectField = forwardRef<
-  HTMLSelectElement,
-  SelectHTMLAttributes<HTMLSelectElement> & { options: string[] }
->(function SelectField({ className, options, ...rest }, ref) {
-  return <Select ref={ref} className={className} options={options} {...rest} />;
-});
-
-/** Lightweight inline toast for legacy pages. */
-export function Toast({
-  kind,
-  message,
-}: {
-  kind: "success" | "error";
-  message: string;
-}) {
-  return (
-    <Banner tone={kind === "success" ? "success" : "danger"} className="mt-4">
-      {message}
-    </Banner>
-  );
-}
-
-/** Toggle row built on ListRow's trailing-switch mode. */
-export function ToggleRow({
-  label,
-  sub,
-  defaultOn = false,
-  on,
-  onChange,
-}: {
-  label: string;
-  sub?: string;
-  /** Uncontrolled initial state for static rows. */
-  defaultOn?: boolean;
-  /** Controlled mode overrides defaultOn. */
-  on?: boolean;
-  onChange?: (next: boolean) => void;
-}) {
-  const [internal, setInternal] = useState(defaultOn);
-  const isOn = on ?? internal;
-  return (
-    <ListRow
-      label={label}
-      description={sub}
-      on={isOn}
-      onChange={(next) => {
-        if (on === undefined) setInternal(next);
-        onChange?.(next);
-      }}
-    />
-  );
-}
-
-export function SwitchRow(props: {
-  label: string;
-  on: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return <ToggleRow {...props} />;
-}
-
-/** Small status chip. */
-export function StatusPill({
-  children,
-  tone = "success",
-}: {
-  children: ReactNode;
-  tone?: "success" | "muted" | "danger";
-}) {
-  return <Pill tone={tone}>{children}</Pill>;
-}
-
-/** Label + hint text pair used above and below groups. */
-export function FieldLabel({ children }: { children: ReactNode }) {
-  return <span className="block text-[13px] font-medium text-fg">{children}</span>;
-}
-
-export function FieldHint({ children }: { children: ReactNode }) {
-  return <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted">{children}</p>;
-}
-
-/** Accent-tinted summary card with icon, pill and trailing control. */
-export function HighlightCard({
-  icon,
-  title,
-  pill,
-  sub,
-  active = false,
-  right,
-}: {
-  icon: ReactNode;
-  title: string;
-  pill?: ReactNode;
-  sub?: string;
-  active?: boolean;
-  right?: ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-3.5 rounded-2xl border p-4 transition-colors",
-        active ? "border-accent/40 bg-accent/8" : "border-border bg-surface-2",
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-[10px]",
-          active ? CHIP.accent : CHIP.neutral,
-        )}
-      >
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="text-[15px] font-semibold">{title}</span>
-          {pill}
-        </span>
-        {sub ? (
-          <span className="mt-0.5 block text-[13px] leading-snug text-muted">{sub}</span>
-        ) : null}
-      </span>
-      {right}
-    </div>
-  );
-}
-
-/**
- * Title + body modal. Portalled, scroll-locked, Escape-dismissible.
- * Children fill the body; buttons are laid out by the caller.
- */
-export function Modal({
-  title,
-  sub,
-  onClose,
-  children,
-}: {
-  title: string;
-  sub?: string;
-  onClose: () => void;
-  children?: ReactNode;
-}) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  const [closing, setClosing] = useState(false);
-  const closeTimer = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    },
-    [],
-  );
-  function startClose() {
-    if (closing) return;
-    setClosing(true);
-    closeTimer.current = window.setTimeout(() => closeRef.current(), 300);
-  }
-
-  // Same refused-close heal as Sheet: a parent that ignores onClose must not
-  // be left holding an invisible overlay that eats every click.
-  const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!closing) return;
-    const t = window.setTimeout(() => {
-      const root = rootRef.current;
-      if (!root) return;
-      const faded = Number(getComputedStyle(root).opacity) < 0.05;
-      const slidOut = (panelRef.current?.getBoundingClientRect().top ?? 0) >= window.innerHeight - 4;
-      if (faded || slidOut) setClosing(false);
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [closing]);
-
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (!panel) return;
-    const firstField = panel.querySelector<HTMLElement>(
-      "input, select, textarea",
-    );
-    (firstField ?? panel.querySelector<HTMLElement>("button"))?.focus();
-  }, []);
-
-  useOverlay(startClose);
-
-  return createPortal(
-    <div
-      ref={rootRef}
-      className={cn(
-        "fixed inset-0 z-[90] flex items-end justify-center bg-scrim backdrop-blur-[6px] sm:items-center sm:p-6",
-        closing ? "animate-fade-out" : "animate-fade-in",
-      )}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) startClose();
-      }}
-      data-overlay
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className={cn(
-          "w-full max-w-md overflow-hidden rounded-t-[22px] bg-surface",
-          closing
-            ? "animate-sheet-down sm:animate-scale-out"
-            : "animate-sheet-up sm:animate-scale-in",
-          "shadow-[0_-30px_90px_-20px_rgb(0_0_0/0.7)]",
-          "sm:rounded-[22px] sm:border sm:border-hairline sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
-        )}
-      >
-        <div className="px-6 pt-4 pb-1 sm:pt-6">
-          <div className="min-w-0">
-            <h2 className="text-[19px] leading-snug font-bold tracking-[-0.02em] text-balance">{title}</h2>
-            {sub ? (
-              <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">{sub}</p>
-            ) : null}
-          </div>
-        </div>
-        {children}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-/** Radio-style option row inside a Modal body. */
-export function ModalOption({
-  children,
-  selected,
-  onClick,
-}: {
-  children: ReactNode;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return <SheetOption selected={selected} onClick={onClick}>{children}</SheetOption>;
-}
-
-/** Dialog action button. */
-export function DialogButton({
-  variant = "secondary",
-  className,
-  ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "secondary" | "accent" }) {
-  return (
-    <Button
-      {...rest}
-      variant={variant === "accent" ? "primary" : "secondary"}
-      className={cn("flex-1", className)}
-    />
-  );
-}
-
-/** Plain grouped container (legacy alias of CardGroup). */
-export function Group({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return <CardGroup className={className}>{children}</CardGroup>;
-}

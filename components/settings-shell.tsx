@@ -99,7 +99,7 @@ export function SettingsPage({
       ) : null}
 
       {inBar ? (
-        <div className="sticky top-0 z-30 -mx-4 -mt-4 mb-3 flex items-center gap-1 border-b border-hairline bg-glass px-1.5 py-1.5 backdrop-blur-xl sm:-mx-6 sm:-mt-9 lg:hidden">
+        <div className="glass-bar sticky top-0 z-30 -mx-4 -mt-4 mb-3 flex items-center gap-1 border-b border-hairline px-1.5 py-1.5 sm:-mx-6 sm:-mt-9 lg:hidden">
           {back ? (
             <Link
               href={back}
@@ -149,9 +149,7 @@ function Guides({ pathname }: { pathname: string }) {
   if (!guides.length) return null;
   return (
     <nav aria-label="Guides about this page" className="mt-12">
-      <p className="mb-3 px-1 text-[13px] font-semibold text-muted">
-        {t("Read about this page")}
-      </p>
+      <p className="label mb-3 px-1">{t("Read about this page")}</p>
       {/* Rows, not chips: a guide is a page you go to, and the app already has
           one look for that. Chips made three real links read as three tags. */}
       <Group>
@@ -257,16 +255,17 @@ export function SectionTitle({
       details — put beside the heading instead of faking a row inside it. */
   action?: ReactNode;
 }) {
-  /* A heading, its explanation, then the plain list it belongs to — with enough
-     air above that a page reads as a few separate decisions rather than one
-     long list, and enough below that the first line isn't crowding the words. */
+  /* iOS names a group in the caption grey at 13px, inset to the rows it
+     introduces, and lets the plate itself do the shouting. A heading, its
+     explanation, then the plain list it belongs to — with enough air above
+     that a page reads as a few separate decisions rather than one long list. */
   return (
-    <div className="mt-9 mb-3 first:mt-0">
+    <div className="mt-9 mb-2.5 px-1 first:mt-0">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[20px] font-semibold tracking-[-0.01em] text-fg">{children}</h2>
+        <h2 className="label">{children}</h2>
         {action}
       </div>
-      {desc ? <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-text-3">{desc}</p> : null}
+      {desc ? <p className="mt-1 max-w-[62ch] text-[13px] leading-[1.5] text-text-3">{desc}</p> : null}
     </div>
   );
 }
@@ -309,7 +308,7 @@ export function SectionAction({ label, onClick }: { label: string; onClick: () =
         haptic("light");
         onClick();
       }}
- className="relative shrink-0 rounded-full px-2.5 py-1 text-[13.5px] font-semibold text-accent-text outline-none transition-colors hover:bg-accent/10 after:absolute after:-inset-y-2 after:inset-x-0 after:content-['']"
+ className="relative shrink-0 rounded-full px-2.5 py-1 text-[13px] font-semibold text-accent-text outline-none transition-colors hover:bg-accent/10 after:absolute after:-inset-y-2 after:inset-x-0 after:content-['']"
     >
       {label}
     </button>
@@ -348,19 +347,23 @@ export function Helper({
   );
 }
 
+/** The iOS switch, to the letter: a 51×31 track with a 22px knob that leaves a
+    3px inset at both ends of its travel. The off colour is `systemFill`, not
+    the scrollbar track — the two only happen to look alike on one of the two
+    palettes, and a switch that matches its own row's separator disappears. */
 export function SwitchVisual({ on }: { on: boolean }) {
   return (
     <span
       aria-hidden
       className={cn(
-        "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200",
-        on ? "bg-ig" : "bg-track",
+        "relative inline-flex h-[31px] w-[51px] shrink-0 items-center rounded-full transition-colors duration-200",
+        on ? "bg-accent" : "bg-fill",
       )}
     >
       <span
         className={cn(
-          "block size-6 rounded-full bg-accent-fg shadow-[0_1px_3px_rgb(0_0_0/0.35)] transition-transform duration-200 ease-out motion-reduce:transition-none",
-          on ? "translate-x-[22px]" : "translate-x-[2px]",
+          "block size-[22px] rounded-full bg-accent-fg shadow-[0_1px_3px_rgb(0_0_0/0.35)] transition-transform duration-200 ease-out motion-reduce:transition-none",
+          on ? "translate-x-[26px]" : "translate-x-[3px]",
         )}
       />
     </span>
@@ -447,10 +450,10 @@ export function Panel({
 }) {
   return (
     <section id={id} className={cn(id && "scroll-mt-20", className)}>
-      <div className="mb-3 px-1">
-        <h2 className="text-[20px] font-semibold tracking-[-0.01em] text-fg">{title}</h2>
+      <div className="mb-2.5 px-1">
+        <h2 className="label">{title}</h2>
         {sub ? (
-          <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.5] text-text-3">{sub}</p>
+          <p className="mt-1 max-w-[62ch] text-[13px] leading-[1.5] text-text-3">{sub}</p>
         ) : null}
       </div>
       <div
@@ -700,9 +703,6 @@ export function PillStack({ children }: { children: ReactNode }) {
   return <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">{children}</div>;
 }
 
-const PILL_TONE = PILL_FILL;
-
-
 export function PillButton({
   label,
   onClick,
@@ -718,7 +718,7 @@ export function PillButton({
   href?: string;
   onClick?: () => void;
   /** What the button gives up — the loudest fill is the most final. */
-  tone?: keyof typeof PILL_TONE;
+  tone?: keyof typeof PILL_FILL;
   icon?: ReactNode;
   /** One line of consequence, printed under the button. */
   sub?: string;
@@ -735,7 +735,7 @@ export function PillButton({
   };
   const shared = cn(
     PILL_BASE,
-    PILL_TONE[tone],
+    PILL_FILL[tone],
     off && PILL_DISABLED,
   );
   return (

@@ -98,10 +98,12 @@ export function weekdayNames(): string[] {
 export function dayLabel(ts: number): string {
   const day = new Date(ts).toDateString();
   const yesterday = new Date(Date.now() - 86_400_000).toDateString();
+  // Anything older is just a date — the same medium-format label `formatDate`
+  // already gives a row, so there is one place that decides what that looks like.
   const text =
     day === new Date().toDateString() ? since(0, "day")
     : day === yesterday ? since(1, "day")
-    : new Intl.DateTimeFormat(appLocale(), { dateStyle: "medium" }).format(new Date(ts));
+    : formatDate(ts);
   return cap(text);
 }
 

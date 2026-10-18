@@ -347,7 +347,7 @@ function SideRail({
 }) {
   const t = useT();
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[22rem] flex-col border-r border-border bg-rail backdrop-blur-2xl backdrop-saturate-150 lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[22rem] flex-col border-r border-border bg-rail backdrop-blur-[20px] backdrop-saturate-[1.8] lg:flex">
       <div className="px-5 pt-7 pb-4">
         <Wordmark />
         <AccountChip />

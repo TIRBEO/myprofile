@@ -8,10 +8,13 @@ describe("PROFILE_FIELDS", () => {
     expect(new Set(locals).size).toBe(locals.length);
   });
 
-  it("keeps the fields the row owns out of the writable set", () => {
-    for (const local of ["email", "phone"]) {
-      expect(PROFILE_FIELDS.find((f) => f.local === local)?.writable).toBe(false);
-    }
+  it("keeps the fields the row owns out of the profile PATCH body", () => {
+    // `email` is the login identity: not writable here at all.
+    expect(PROFILE_FIELDS.find((f) => f.local === "email")?.writable).toBe(false);
+    // `phone` is stored, but by the endpoint that owns its column — the strict
+    // profile schema names no phone key, and one unknown key refuses the body.
+    expect(PROFILE_FIELDS.find((f) => f.local === "phone")?.writeVia).toBe("phonesEndpoint");
+    expect(toWire({ phone: "+977 980 000 000" })).toEqual({});
   });
 });
 

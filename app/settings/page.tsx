@@ -174,7 +174,7 @@ export default function SettingsIndex() {
   return (
     <SettingsPage>
       <div className="-mx-4 sm:-mx-6">
-        <div className="sticky top-0 z-30 -mt-4 border-b border-hairline bg-glass py-2.5 backdrop-blur-xl sm:-mt-9">
+        <div className="glass-bar sticky top-0 z-30 -mt-4 border-b border-hairline py-2.5 sm:-mt-9">
           <h1 className="text-center text-[16px] font-semibold tracking-[-0.01em]">{t("Settings")}</h1>
         </div>
 

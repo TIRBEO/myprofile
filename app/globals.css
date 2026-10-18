@@ -449,19 +449,6 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 }
 
-@keyframes halo-breathe {
-  0%,
-  100% {
-    opacity: .55;
-    transform: scale(.92);
-  }
-
-  50% {
-    opacity: .18;
-    transform: scale(1.08);
-  }
-}
-
 @keyframes ig-shake {
   10%,
   90% {
@@ -513,17 +500,6 @@ input[type="number"]::-webkit-outer-spin-button {
   animation: spin 700ms linear infinite;
 }
 
-.ig-gradient {
-  background: linear-gradient(45deg, var(--ig-press) 0%, var(--ig) 55%, var(--ig-hover) 100%);
-}
-
-.ig-gradient-text {
-  background: linear-gradient(45deg, var(--ig-press), var(--ig), var(--ig-hover));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
 .tb-heading {
   font-size: 30px;
   font-weight: 800;
@@ -561,20 +537,6 @@ input[type="number"]::-webkit-outer-spin-button {
   color: var(--danger-text);
 }
 
-.tb-wordmark {
-  font-size: 1em;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent-text);
-}
-
-.tb-shimmer {
-  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
-  background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
-}
-
 /* Inline error/success line on auth screens (accounts recipe). */
 .form-notice {
   margin-top: -8px;
@@ -586,10 +548,6 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .form-notice-error {
   color: var(--danger-text);
-}
-
-.form-notice-success {
-  color: var(--success-text);
 }
 
 /* Toast — frosted pill (accounts recipe). The viewport in lib/use-toast
@@ -632,52 +590,14 @@ input[type="number"]::-webkit-outer-spin-button {
   color: var(--accent);
 }
 
-.glass {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: none;
-  backdrop-filter: none;
-}
-
-.glass-soft {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  backdrop-filter: none;
-}
-
-.story-ring {
-  border-radius: 9999px;
-  padding: 2.5px;
-  background: var(--accent);
-}
-
-.story-ring > * {
-  border-radius: 9999px;
-}
-
-.shell-page {
-  width: 100%;
-  max-width: 46rem;
-  margin-inline: auto;
-  padding-inline: 1rem;
-  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
-}
-
-@media (min-width: 640px) {
-  .shell-page {
-    padding-inline: 1.5rem;
-  }
-}
-
-@media (min-width: 1024px) {
-  .shell-page {
-    padding-inline: 2rem;
-    padding-bottom: 4rem;
-  }
-}
-
-.safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+/* Translucent chrome — Apple's bar: the palette's own glass, saturated so the
+   colour behind it survives the blur, and blurred enough that a row of text
+   scrolling under a sticky header never reads through it. Only the headers
+   that actually float get this; a plate is still an opaque plate. */
+.glass-bar {
+  background: var(--glass);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
 
 /* Apple's grouped list. The plate is the only surface: no frame drawn around
@@ -686,12 +606,15 @@ input[type="number"]::-webkit-outer-spin-button {
    the page's own content. `--list-inset` is the row's own gutter, so the
    hairline between two rows starts where the row's text does.
 
+   17px is the canonical card radius — the same plate a field is cut from, so
+   a group and the control inside it are one family rather than two.
+
    `.grouped` keeps its name — 29 files reach it through `Group`, three write
    the class directly, and inventing a second synonym for one shape is how the
    two drift apart later. */
 .grouped {
   background: var(--surface);
-  border-radius: var(--radius-md);
+  border-radius: 17px;
   overflow: hidden;
 }
 
@@ -718,46 +641,18 @@ input[type="number"]::-webkit-outer-spin-button {
   background-size: calc(100% - var(--list-inset)) 1px;
 }
 
-.no-divider > * + * {
-  border-top: 0;
-}
-
-.hairline {
-  height: 1px;
-  background: var(--divider);
-}
-
+/* The section header. iOS writes these in sentence case at the caption size,
+   in the third rung of the ink ladder — loud enough to name the block below
+   it, quiet enough that the rows stay the content. `SectionTitle` and `Panel`
+   both reach it through this one rule so a heading cannot mean two sizes on
+   two screens. */
 .label {
   font-family: var(--stack-sans);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.35;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.rule-label {
-  display: flex;
-  align-items: center;
-  gap: .875rem;
-}
-
-.rule-label::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--divider);
-}
-
-.mono {
-  font-family: var(--stack-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.index-no {
-  font-family: var(--stack-mono);
-  font-size: 11px;
-  letter-spacing: .1em;
-  color: var(--accent-text);
+  font-weight: 600;
+  letter-spacing: -0.004em;
+  color: var(--text-3);
 }
 
 .skeleton {
@@ -828,10 +723,6 @@ input[type="number"]::-webkit-outer-spin-button {
   text-decoration: underline;
 }
 
-.tabular {
-  font-variant-numeric: tabular-nums;
-}
-
 html,
 body {
   overflow-x: clip;
@@ -867,11 +758,6 @@ body {
 
 .map-tiles {
   filter: invert(.92) hue-rotate(180deg) saturate(.72) brightness(.95) contrast(.92);
-}
-
-/* The article figures ship in one scheme; the light set is never shown. */
-.doc-light {
-  display: none;
 }
 
 input[type="range"] {
@@ -921,11 +807,6 @@ input[type="range"]:hover::-webkit-slider-thumb {
 input[type="range"]:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-.tb-range::-webkit-slider-runnable-track,
-.tb-range::-moz-range-track {
-  background: transparent;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1156,32 +1037,6 @@ body:has(.auth-dark) {
   box-shadow: none;
   transform: none;
   cursor: not-allowed;
-}
-
-/* Footer: full-width solid action pill (accounts "Create new account"). */
-.login-page .create-pill {
-  display: flex;
-  width: 100%;
-  height: 56px;
-  margin-top: 12px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: none;
-  background: var(--accent);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--accent-fg);
-  transition: background-color 150ms ease;
-}
-
-.login-page .create-pill:hover {
-  background: var(--accent-hover);
-}
-
-.login-page .create-pill:active {
-  background: var(--accent-press);
 }
 
 .login-page .login-terms {
