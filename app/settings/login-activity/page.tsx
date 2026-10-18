@@ -150,9 +150,16 @@ function EventRow({ event }: { event: ActivityEvent }) {
           {town(event.location)} · {event.device}
         </span>
       </span>
-      <span className="flex shrink-0 items-center gap-2 pt-1">
-        <span className="text-[12.5px] tabular-nums text-muted">{formatTime(event.at)}</span>
-        {event.review ? <Answered event={event} red={red} /> : null}
+      <span className="flex shrink-0 flex-col items-end gap-0.5 pt-1">
+        <span className="flex items-center gap-2">
+          <span className="text-[12.5px] tabular-nums text-muted">{formatTime(event.at)}</span>
+          {event.review ? <Answered event={event} red={red} /> : null}
+        </span>
+        {/* Every row carries its event reference — the code quoted to support
+            and pasted into admin, and the whole point of keeping a ledger. */}
+        {event.ref ? (
+          <span className="font-mono text-[10.5px] text-muted/70">{event.ref}</span>
+        ) : null}
       </span>
     </Link>
   );

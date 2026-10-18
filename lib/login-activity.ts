@@ -34,6 +34,10 @@ export type EventKind = "signin" | "signout" | "failed" | "password" | "two-fact
 
 export type ActivityEvent = {
   id: string;
+  /** The short event reference (xxxx-xxxx-xxxx) — the code quoted to support
+      and pasted into admin. The server stamps one on every row; absent only
+      on rows read from an endpoint that predates it, where the id is used. */
+  ref?: string | null;
   at: number;
   kind: EventKind;
   device: string;
@@ -76,6 +80,7 @@ export const EVENT_TITLE: Record<EventKind, string> = {
 
 type LoginRow = {
   id: string;
+  ref?: string | null;
   ipAddress: string | null;
   userAgent: string | null;
   location: string | null;
@@ -87,6 +92,7 @@ type LoginRow = {
 
 type SecurityEventRow = {
   id: string;
+  ref?: string | null;
   type: string;
   description: string;
   date: string;
@@ -239,6 +245,7 @@ export async function readEvents(): Promise<ActivityEvent[]> {
 
   const signinEvents: ActivityEvent[] = history.logs.map((row) => ({
     id: row.id,
+    ref: row.ref ?? null,
     at: ts(row.createdAt),
     kind: row.success ? "signin" : "failed",
     device: machine(row.userAgent),
@@ -264,6 +271,7 @@ export async function readEvents(): Promise<ActivityEvent[]> {
     .filter((e) => SECURITY_KIND[e.type])
     .map((e) => ({
       id: e.id,
+      ref: e.ref ?? null,
       at: ts(e.date),
       kind: SECURITY_KIND[e.type],
       device: machine(e.userAgent),

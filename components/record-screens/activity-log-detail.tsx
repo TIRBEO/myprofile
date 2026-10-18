@@ -197,12 +197,13 @@ export default function ChangeDetailPage({ id }: { id: string }) {
 
       <div className="mt-6 flex flex-col items-center gap-1">
         <p className="text-[12px] text-muted">
-          Event reference <code className="font-mono">{record.id}</code>
+          Event reference <code className="font-mono">{record.ref}</code>
         </p>
         <SupportPill
-          subject={`Question about an account change — event ${record.id}`}
+          subject={`Question about an account change — event ${record.ref}`}
           lines={[
-            `Event reference: ${record.id}`,
+            `Event reference: ${record.ref}`,
+            `Record id: ${record.id}`,
             `What: ${record.title}`,
             record.fields?.length ? `Fields moved: ${record.fields.join(", ")}` : null,
             `Device: ${record.device}`,

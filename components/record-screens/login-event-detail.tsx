@@ -210,12 +210,13 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
 
       <div className="mt-6 flex flex-col items-center gap-1">
         <p className="text-[12px] text-muted">
-          Event reference <code className="font-mono">{record.id}</code>
+          Event reference <code className="font-mono">{record.ref ?? record.id}</code>
         </p>
         <SupportPill
-          subject={`Question about a sign-in — event ${record.id}`}
+          subject={`Question about a sign-in — event ${record.ref ?? record.id}`}
           lines={[
-            `Event reference: ${record.id}`,
+            `Event reference: ${record.ref ?? record.id}`,
+            `Record id: ${record.id}`,
             `What: ${whatHappened}`,
             `Device: ${record.device}`,
             `Method: ${record.method}`,

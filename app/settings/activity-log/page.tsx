@@ -101,6 +101,9 @@ export default function ActivityLogPage() {
                           <span>{formatTime(entry.at)}</span>
                           {entry.youSaid ? <Answered entry={entry} /> : null}
                         </span>
+                        {/* The row's event reference — quoted to support,
+                            pasted into admin, unique to this change. */}
+                        <span className="font-mono text-[10.5px] text-muted/70">{entry.ref}</span>
                         {/* The place sits under the time, the way a post's location
                             sits under its photo — and only when the record has one. */}
                         {entry.location ? <Place name={entry.location} /> : null}

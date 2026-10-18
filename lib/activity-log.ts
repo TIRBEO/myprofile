@@ -32,6 +32,10 @@ export type YouSaid = "recognised" | "not-me";
 
 export type ChangeEntry = {
   id: string;
+  /** The short event reference (xxxx-xxxx-xxxx) — the code quoted to support
+      and pasted into admin. Falls back to the row id on records served by an
+      API that predates it. */
+  ref: string;
   at: number;
   /** The machine name the server wrote for this change — free-form, so the
       page reads `title` rather than switching on it. */
@@ -53,6 +57,7 @@ export type ChangeEntry = {
 
 type ChangeRow = {
   id: string;
+  ref?: string | null;
   kind: string;
   title: string;
   fields: string[];
@@ -68,6 +73,7 @@ type ChangeRow = {
 function toEntry(row: ChangeRow): ChangeEntry {
   return {
     id: row.id,
+    ref: row.ref ?? row.id,
     at: Date.parse(row.at),
     kind: row.kind,
     title: row.title,
