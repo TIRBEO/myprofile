@@ -424,7 +424,7 @@ export default function EditProfilePage() {
             haptic("light");
             openEdit();
           }}
-          className={cn(PILL_BASE, PILL_FILL.primary, "py-3.5 text-[15.5px]")}
+          className={cn(PILL_BASE, PILL_FILL.primary)}
         >
           <span className="min-w-0">Edit profile</span>
         </button>

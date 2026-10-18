@@ -73,11 +73,13 @@ const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   link: "min-h-10 rounded-full px-1 text-[15px] font-semibold text-text-3 hover:text-fg",
 };
 
-/** Every full-width action button in settings is built from these two, so a
-    "Save" and a "Delete" can't drift apart in size, only in fill. */
+/** Every action button in settings is built from these two, so a "Save" and a
+    "Delete" can't drift apart in size, only in fill. Compact by design: the
+    pill hugs its label on wide screens and only stretches to the column on a
+    phone, the way iOS draws a confirmation action. */
 export const PILL_BASE =
-  "flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 " +
-  "text-center text-[15px] leading-snug font-semibold tracking-[-0.01em] outline-none transition " +
+  "inline-flex min-h-[42px] w-full max-w-full sm:w-auto items-center justify-center gap-2 rounded-full px-5 py-2 " +
+  "text-center text-[14.5px] leading-snug font-semibold tracking-[-0.01em] outline-none transition " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 export const PILL_FILL = {
@@ -97,14 +99,14 @@ export const PILL_DISABLED = "pointer-events-none opacity-55";
 /** The sheet's two footer buttons: one skin, two fills. A confirm that is a
     pixel taller than the Cancel beside it is only ever noticed side by side. */
 const SHEET_ACTION =
-  "flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 " +
-  "text-[15px] font-semibold tracking-[-0.01em] outline-none transition " +
+  "flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-full px-4 py-2 " +
+  "text-[14.5px] font-semibold tracking-[-0.01em] outline-none transition " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "h-10 rounded-full px-4 text-[14px] gap-1.5",
-  md: "h-12 rounded-full px-5 text-[15px] gap-2",
-  lg: "h-[56px] rounded-full px-6 text-[15px] gap-2",
+  sm: "h-9 rounded-full px-4 text-[14px] gap-1.5",
+  md: "h-10 rounded-full px-5 text-[14.5px] gap-2",
+  lg: "h-[44px] rounded-full px-6 text-[14.5px] gap-2",
 };
 
 export function Button({

@@ -6,8 +6,9 @@ import { Field, Input, Textarea } from "@/components/ig-ui";
 import { OtpInput } from "@/components/otp-input";
 import { Group, PillButton } from "@/components/settings-shell";
 import { Prose, StatementMark, StatementScreen, Value } from "@/components/statement";
-import { formatDate, formatStamp } from "@/lib/dates";
+import { formatStamp } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
+import { SupportPill } from "@/lib/support";
 import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import {
   apiRequestReactivationCode,
@@ -213,20 +214,13 @@ export function BlockedView({
         restored
           ? undefined
           : kind === "deletion_pending" && hasUntil
-            ? `Final deletion on ${formatStamp(untilAt!)}`
+            ? `Final deletion on ${formatStamp(untilAt!)}${daysLeft != null ? ` · ${daysLeft} ${daysLeft === 1 ? "day" : "days"} left to cancel` : ""}`
             : hasUntil
               ? `${kind === "suspended" ? "Under review until" : "Until"} ${formatStamp(untilAt!)}`
               : undefined
       }
       mark={restored ? <RestoredMark /> : <Mark kind={kind} />}
       avatar={false}
-      /* The deletion clock is the one number on this page a reader has to
-         have, so it is shown as a countdown rather than as a date twice. */
-      hero={
-        kind === "deletion_pending" && hasUntil && !restored ? (
-          <DeletionClock until={untilAt!} daysLeft={daysLeft ?? 0} />
-        ) : null
-      }
       blocks={[
         {
           label: "Why this happened",
@@ -363,16 +357,21 @@ export function BlockedView({
             </>
           )}
           {/* One loud thing, and the second choice as a word rather than a
-              second button — same as the screens the gate puts up. */}
-          <a
-            href="mailto:support@tirbeo.com"
-            className="flex min-h-11 items-center justify-center rounded-full text-[15px] font-semibold text-accent-text transition-colors hover:bg-fill"
-          >
-            Contact support
-          </a>
+              second button — same as the screens the gate puts up. The email
+              carries the event reference so support lands on the exact record. */}
+          <SupportPill
+            subject={`Blocked account (${kind})${eventId ? ` — ref ${eventId}` : ""}`}
+            label="Email support"
+            lines={[
+              `Event reference: ${eventId ?? "none"}`,
+              `Account state: ${copy.title}`,
+              reason ? `Reason recorded: ${reason}` : null,
+              hasUntil ? `Until: ${formatStamp(untilAt!)}` : null,
+            ]}
+          />
         </>
       }
-      foot="This page is the account's answer, not a warning about it. Where a fact wasn't carried over — a reason, a date, a reference — the screen above says so instead of filling the gap."
+      foot="Where a fact wasn’t carried over — a reason, a date, a reference — this page says so rather than guessing."
     />
   );
 }
@@ -384,26 +383,6 @@ function RestoredMark() {
     <StatementMark>
       <Check />
     </StatementMark>
-  );
-}
-
-/** Days left on the window, said without the red a deletion screen usually
-    wears — this one exists so the reader has time to read it. */
-function DeletionClock({ until, daysLeft }: { until: number; daysLeft: number }) {
-  return (
-    <div className="rounded-2xl border border-divider px-4 py-3.5">
-      <p className="flex items-baseline justify-center gap-2">
-        <span className="text-[34px] leading-none font-bold tabular-nums tracking-[-0.035em]">
-          {daysLeft}
-        </span>
-        <span className="text-[14.5px] font-medium text-muted">
-          {daysLeft === 1 ? "day left to cancel it" : "days left to cancel it"}
-        </span>
-      </p>
-      <p className="mt-2 text-center text-[13px] leading-relaxed text-muted tabular-nums">
-        Deletion would run on {formatDate(until)}. Nothing has been deleted so far.
-      </p>
-    </div>
   );
 }
 
@@ -625,7 +604,10 @@ function AppealFlow({
     setBusy(true);
     setError(null);
     try {
-      await appealWithCredentials({ email: email.trim(), password, note: trimmed });
+      /* The event reference rides inside the note, so the appeal carries its
+         own pointer to the record the decision was made on. */
+      const fullNote = `${eventId ? `[ref ${eventId}] ` : ""}${trimmed}`.slice(0, NOTE_MAX);
+      await appealWithCredentials({ email: email.trim(), password, note: fullNote });
       if (!live.current) return;
       trackEvent("auth.appeal_filed", {
         detail: eventId ?? undefined,

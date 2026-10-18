@@ -134,7 +134,43 @@ export function SettingsPage({
       {children}
 
       <Guides pathname={pathname} />
+
+      <SettingsFooter />
     </div>
+  );
+}
+
+/** The bottom of every settings page: who we are, where the help is, and the
+    one address that reaches a person. Small and muted — a sign, not a section. */
+function SettingsFooter() {
+  const t = useT();
+  return (
+    <footer className="mt-14 border-t border-divider pt-5 pb-2">
+      <nav
+        aria-label="Tirbeo links"
+        className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-[12.5px] font-medium text-muted"
+      >
+        <Link href="/settings/help" onClick={() => haptic("light")} className="transition-colors hover:text-fg">
+          {t("Help")}
+        </Link>
+        <a href="mailto:support@tirbeo.com" className="transition-colors hover:text-fg">
+          {t("Contact support")}
+        </a>
+        <Link href="/settings/help/policy/privacy" onClick={() => haptic("light")} className="transition-colors hover:text-fg">
+          {t("Privacy")}
+        </Link>
+        <Link href="/settings/help/policy/terms" onClick={() => haptic("light")} className="transition-colors hover:text-fg">
+          {t("Terms")}
+        </Link>
+        <Link href="/settings/help/policy/community" onClick={() => haptic("light")} className="transition-colors hover:text-fg">
+          {t("Community guidelines")}
+        </Link>
+        <a href="https://tirbeo.com" target="_blank" rel="noreferrer" className="transition-colors hover:text-fg">
+          tirbeo.com
+        </a>
+      </nav>
+      <p className="mt-2 text-center text-[11.5px] text-text-3">© {new Date().getFullYear()} Tirbeo</p>
+    </footer>
   );
 }
 
@@ -697,10 +733,15 @@ function Trailing({ right, chevron }: { right?: ReactNode; chevron?: string }) {
    the buttons sit full-width at the bottom of the page, loudest first. */
 
 /** Actions stack down the column on a phone — the way a phone dialog lays them
-    out, one full-width decision per row — and sit beside each other once there
-    is room. Nothing about a label is allowed to push past the button. */
+    out, one full-width decision per row — and sit beside each other, hugging
+    their labels, once there is room. Nothing about a label is allowed to push
+    past the button. */
 export function PillStack({ children }: { children: ReactNode }) {
-  return <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">{children}</div>;
+  return (
+    <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-center sm:gap-3">
+      {children}
+    </div>
+  );
 }
 
 export function PillButton({
@@ -739,7 +780,7 @@ export function PillButton({
     off && PILL_DISABLED,
   );
   return (
-    <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+    <span className="flex min-w-0 flex-col gap-1.5">
       {href ? (
         <Link href={href} onClick={go} className={shared}>
           {icon}

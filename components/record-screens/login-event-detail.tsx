@@ -34,6 +34,7 @@ import { useReauthGuard } from "@/components/reauth-sheet";
 import { wasDeclined } from "@/lib/reauth";
 import { placeFor } from "@/lib/places";
 import { ago, formatDate, formatTime } from "@/lib/dates";
+import { SupportPill } from "@/lib/support";
 import { haptic } from "@/lib/haptics";
 import { useToast } from "@/lib/use-toast";
 import { usePageRefresh } from "@/lib/page-refresh";
@@ -206,6 +207,23 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
           <MapCard coords={place.coords} label={record.location} />
         </div>
       ) : null}
+
+      <div className="mt-6 flex flex-col items-center gap-1">
+        <p className="text-[12px] text-muted">
+          Event reference <code className="font-mono">{record.id}</code>
+        </p>
+        <SupportPill
+          subject={`Question about a sign-in — event ${record.id}`}
+          lines={[
+            `Event reference: ${record.id}`,
+            `What: ${whatHappened}`,
+            `Device: ${record.device}`,
+            `Method: ${record.method}`,
+            `IP: ${record.ip} · Location: ${record.location}`,
+            `When: ${formatDate(record.at)} at ${formatTime(record.at)}`,
+          ]}
+        />
+      </div>
 
       {answer === null ? (
         <PillStack>

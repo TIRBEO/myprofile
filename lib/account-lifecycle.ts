@@ -48,6 +48,9 @@ export type AccountState = {
   deletionPending: boolean;
   deletionFinalAt: string | null;
   deletionDaysRemaining: number | null;
+  /** Persisted event reference for the current enforcement state — what
+      support and the admin lookup search by. Null when nothing was decided. */
+  refCode: string | null;
   signInMethods: SignInMethods;
   connections: Connection[];
 };

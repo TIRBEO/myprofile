@@ -383,9 +383,9 @@ function SideRail({
         <button
           type="button"
           onClick={onSignOut}
-          className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-full bg-danger px-3.5 text-[15px] font-semibold tracking-[-0.01em] text-accent-fg outline-none transition-colors hover:bg-danger-hover active:brightness-95"
+          className="flex min-h-10 w-full items-center justify-center gap-2 rounded-full px-3.5 text-[14px] font-semibold tracking-[-0.01em] text-danger-text outline-none transition-colors hover:bg-fill active:bg-fill-press"
         >
-          <LogOut className="size-[18px] shrink-0" strokeWidth={2.2} />
+          <LogOut className="size-[16px] shrink-0" strokeWidth={2.2} />
           {t("Log out")}
         </button>
       </div>
@@ -412,11 +412,11 @@ function AccountChip() {
   const t = useT();
   if (!profile) {
     return (
-      <div className="mt-5 flex items-center gap-3.5 rounded-2xl border border-border bg-card px-3 py-2.5" aria-busy="true">
-        <span className="size-12 shrink-0 animate-pulse rounded-full bg-field" />
+      <div className="mt-5 flex items-center gap-3 px-1" aria-busy="true">
+        <span className="size-10 shrink-0 animate-pulse rounded-full bg-field" />
         <span className="min-w-0 flex-1 space-y-2">
-          <span className="block h-[14px] w-[55%] animate-pulse rounded-full bg-field" />
-          <span className="block h-[12px] w-[78%] animate-pulse rounded-full bg-field/70" />
+          <span className="block h-[13px] w-[55%] animate-pulse rounded-full bg-field" />
+          <span className="block h-[11px] w-[70%] animate-pulse rounded-full bg-field/70" />
         </span>
       </div>
     );
@@ -428,17 +428,17 @@ function AccountChip() {
       href="/settings/edit-profile"
       aria-label={`${role}: ${name}`}
       onClick={() => haptic("light")}
-      className="mt-5 flex w-full items-center gap-3.5 rounded-2xl border border-border bg-card px-3.5 py-3 outline-none transition-colors hover:bg-hover/60 active:bg-hover"
+      className="mt-5 flex w-full items-center gap-3 rounded-xl px-1 py-1.5 outline-none transition-colors hover:bg-hover/60 active:bg-hover"
     >
       <ProfilePicture
         photo={profile.photo}
         seed={profile.username || profile.email}
         name={name}
-        size={48}
+        size={40}
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[16px] leading-tight font-semibold">{name}</span>
-        <span className="mt-1 block truncate text-[13px] leading-tight text-text-3">{profile.email}</span>
+        <span className="block truncate text-[15px] leading-tight font-semibold">{name}</span>
+        <span className="mt-0.5 block truncate text-[12.5px] leading-tight text-text-3">{profile.email}</span>
       </span>
     </Link>
   );

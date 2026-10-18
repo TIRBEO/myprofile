@@ -25,6 +25,7 @@ import {
 import { answerChange, type ChangeEntry, type YouSaid, findChange } from "@/lib/activity-log";
 import { placeFor } from "@/lib/places";
 import { ago, formatDate, formatTime } from "@/lib/dates";
+import { SupportPill } from "@/lib/support";
 import { haptic } from "@/lib/haptics";
 import { useToast } from "@/lib/use-toast";
 import { usePageRefresh } from "@/lib/page-refresh";
@@ -193,6 +194,23 @@ export default function ChangeDetailPage({ id }: { id: string }) {
           <MapCard coords={place.coords} label={record.location ?? ""} />
         </div>
       ) : null}
+
+      <div className="mt-6 flex flex-col items-center gap-1">
+        <p className="text-[12px] text-muted">
+          Event reference <code className="font-mono">{record.id}</code>
+        </p>
+        <SupportPill
+          subject={`Question about an account change — event ${record.id}`}
+          lines={[
+            `Event reference: ${record.id}`,
+            `What: ${record.title}`,
+            record.fields?.length ? `Fields moved: ${record.fields.join(", ")}` : null,
+            `Device: ${record.device}`,
+            `IP: ${record.ip || "not recorded"}${record.location ? ` · Location: ${record.location}` : ""}`,
+            `When: ${formatDate(record.at)} at ${formatTime(record.at)}`,
+          ]}
+        />
+      </div>
 
       {answer === "not-me" ? (
         <>

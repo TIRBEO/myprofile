@@ -87,7 +87,7 @@ export function StatementHead({
           />
         ) : null)}
 
-      <h1 className="mt-5 max-w-[18ch] text-[27px] leading-[1.15] font-bold tracking-[-0.03em] text-balance sm:mt-6 sm:text-[31px]">
+      <h1 className="mt-5 max-w-full text-[23px] leading-[1.2] font-bold tracking-[-0.03em] text-balance sm:mt-6 sm:text-[26px]">
         {t(title)}
       </h1>
 
@@ -210,7 +210,9 @@ export function StatementScreen({
 
       {actions ? (
         <div className="sticky bottom-0 border-t border-divider bg-bg/92 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
-          <div className="mx-auto flex w-full max-w-[560px] flex-col gap-2">{actions}</div>
+          <div className="mx-auto flex w-full max-w-[560px] flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-center">
+            {actions}
+          </div>
         </div>
       ) : null}
     </div>

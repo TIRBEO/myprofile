@@ -21,12 +21,13 @@
    in a toast at the bottom of the settings.
    ═══════════════════════════════════════════════════════════════════ */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
-import { Button, Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Skeleton, Textarea, cn } from "@/components/ig-ui";
+import { Check, Loader2 } from "lucide-react";
+import { Button, Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Textarea, cn } from "@/components/ig-ui";
 import { ProfilePicture } from "@/components/profile-picture";
-import { Prose, StatementHead, StatementScreen } from "@/components/statement";
+import { Prose, StatementScreen } from "@/components/statement";
+import { SupportPill } from "@/lib/support";
 import {
   clearWelcome,
   skipRestriction,
@@ -74,29 +75,12 @@ export function AccountLockScreen() {
   );
 }
 
-/** The shape of the screen the answer is going to be, in bars. Same column,
-    same headline, same hairlines — so the page doesn't move when it fills in. */
+/** The first read hasn't answered yet. It's a moment, not a page — a plain
+    spinner, no headline, no skeleton theatre. */
 function Checking() {
   return (
-    <div className="flex min-h-dvh flex-col">
-      <div className="mx-auto w-full max-w-[560px] flex-1 px-5 pt-1 pb-10 sm:px-6 sm:pt-3">
-        <StatementHead
-          title="Checking your account"
-          sub="One moment while we read whether it's open."
-          mark={<Skeleton className="size-[92px] rounded-full" />}
-        />
-        <div className="mt-2 flex flex-col gap-6">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="border-t border-divider pt-4">
-              <Skeleton className="h-[17px] w-[140px] rounded-full" />
-              <div className="mt-3 space-y-2.5">
-                <Skeleton className="h-[13px] w-[92%] rounded-full" />
-                <Skeleton className="h-[13px] w-[78%] rounded-full" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="flex min-h-dvh items-center justify-center" role="status" aria-label="Loading">
+      <Loader2 className="size-6 animate-spin-slow text-muted" aria-hidden />
     </div>
   );
 }
@@ -119,7 +103,7 @@ function Full({
         haptic(tone === "outline" ? "light" : "medium");
         onClick();
       }}
-      className={cn(PILL_BASE, PILL_FILL[tone], "min-h-[50px] py-3.5 text-[15.5px]")}
+      className={cn(PILL_BASE, PILL_FILL[tone])}
     >
       <span className="min-w-0">{label}</span>
     </button>
@@ -237,8 +221,19 @@ function Deactivated({ lock }: { lock: Lock }) {
           ),
         },
       ]}
-      actions={<Full label={busy ? "Reactivating…" : "Reactivate now"} onClick={comeBack} />}
-      foot="Pausing is reversible for as long as you leave it paused — there's no window here and nothing expires."
+      actions={
+        <>
+          <Full label={busy ? "Reactivating…" : "Reactivate now"} onClick={comeBack} />
+          <SupportPill
+            subject={`Paused account — ref ${getAccountState()?.refCode ?? "none"}`}
+            lines={[
+              `Event reference: ${getAccountState()?.refCode ?? "none"}`,
+              "Account state: paused (self-deactivated)",
+              record ? `Paused on: ${formatStamp(record.at)}` : null,
+            ]}
+          />
+        </>
+      }
     />
   );
 }
@@ -249,17 +244,9 @@ function Deletion({ lock }: { lock: Lock }) {
   const account = getAccountState();
   const finalAtMs = account?.deletionFinalAt ? Date.parse(account.deletionFinalAt) : null;
   /* The window is a fixed 30 days from the request, so the request moment is
-     the final date minus that — enough to draw how far the clock has run. */
+     the final date minus that. */
   const asked = finalAtMs != null ? finalAtMs - GRACE_DAYS * 86_400_000 : Date.now();
-  const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
-
-  /* The countdown is the only thing on this screen that keeps moving, and
-     it's allowed to: it is the reason the page exists. */
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
 
   async function keepIt() {
     setBusy(true);
@@ -273,124 +260,79 @@ function Deletion({ lock }: { lock: Lock }) {
     }
   }
 
+  const left = finalAtMs != null ? remaining(finalAtMs, Date.now()) : null;
+  const refCode = account?.refCode ?? null;
+  const supportLines = [
+    `Event reference: ${refCode ?? "none"}`,
+    "Account state: scheduled for deletion",
+    `Asked for on: ${formatStamp(asked)}`,
+    finalAtMs != null ? `Final on: ${formatDate(finalAtMs)}` : "Final date: missing from the account record",
+  ];
+
   if (finalAtMs == null) {
-    /* The clock is the page, and the date is the account's to give. Printing
-       one worked out here would be a promise the account didn't make, and a
-       blank screen is what this used to be — so it says what's missing, and
-       keeps the one action that is safe either way. */
     return (
       <StatementScreen
         title={lock.title}
-        lead={lock.sub}
+        lead="Nothing has been deleted yet, but the account hasn’t given the date the deletion would run."
         blocks={[
           {
             label: "Why this happened",
-            body: (
-              <Prose>
-                You asked for this account to be closed. Nothing else asked for it and nothing has
-                run yet.
-              </Prose>
-            ),
-          },
-          {
-            label: "What this means",
-            body: (
-              <Prose>
-                The account reports a deletion in progress but hasn&apos;t given the date it becomes
-                final, so there&apos;s no clock to count here. Nothing has been deleted because of
-                that — it&apos;s only this page that can&apos;t show a number it doesn&apos;t have.
-              </Prose>
-            ),
+            body: <Prose>You asked for this account to be closed. Nothing else asked for it and nothing has run.</Prose>,
           },
           {
             label: "What you can do",
-            body: (
-              <Prose>
-                Reload to ask the account again, or keep it open below. Cancelling works whether or
-                not the date has arrived.
-              </Prose>
-            ),
+            body: <Prose>Reload to ask the account again, or keep it open below — cancelling works either way.</Prose>,
           },
         ]}
-        actions={<Full label={busy ? "Cancelling…" : "Keep my account"} onClick={keepIt} />}
-        foot="Nothing on this screen is a guess. Where the account was silent, this says so rather than filling the gap."
+        actions={
+          <>
+            <Full label={busy ? "Cancelling…" : "Keep my account"} onClick={keepIt} />
+            <SupportPill subject="Scheduled deletion — no final date" lines={supportLines} />
+          </>
+        }
       />
     );
   }
-  const left = remaining(finalAtMs, now);
-  const gone = Math.min(1, Math.max(0, (now - asked) / (finalAtMs - asked)));
+
+  const when = left?.done
+    ? `The window ran out on ${formatDate(finalAtMs)}`
+    : `Final on ${formatDate(finalAtMs)} · ${left!.days} ${left!.days === 1 ? "day" : "days"} left`;
 
   return (
     <StatementScreen
       title={lock.title}
-      lead={lock.sub}
-      meta={`Asked for on ${formatStamp(asked)}`}
-      hero={
-        <div>
-          {left.done ? (
-            <p className="text-[22px] font-bold tracking-[-0.02em] text-danger-text">
-              This close is now final
-            </p>
-          ) : (
-            <p className="flex items-baseline justify-center gap-2">
-              <span className="text-[52px] leading-none font-bold tabular-nums tracking-[-0.04em] text-danger-text">
-                {left.days}
-              </span>
-              <span className="text-[15px] font-medium text-muted">
-                {left.days === 1 ? "day left to change it" : "days left to change it"}
-              </span>
-            </p>
-          )}
-          <div className="mt-4 h-[3px] w-full overflow-hidden rounded-full bg-track">
-            <div
-              className="h-full rounded-full bg-danger transition-[width] duration-1000 ease-linear"
-              style={{ width: `${Math.round(gone * 100)}%` }}
-            />
-          </div>
-          <p className="mt-2.5 text-[13px] leading-relaxed text-muted tabular-nums">
-            {left.done
-              ? `The window ran out on ${formatDate(finalAtMs)}.`
-              : `${left.hours}h ${left.minutes}m ${left.seconds}s · final on ${formatDate(finalAtMs)}`}
-          </p>
-        </div>
-      }
+      lead="Nothing has been deleted yet. You can stop it below."
+      meta={`Asked for on ${formatStamp(asked)} · ${when}`}
       blocks={[
         {
           label: "Why this happened",
-          body: (
-            <Prose>
-              You asked for this account to be closed on {formatStamp(asked)}. Nothing
-              else asked for it and nothing has run yet.
-            </Prose>
-          ),
+          body: <Prose>You asked for this account to be closed on {formatStamp(asked)}.</Prose>,
         },
         {
           label: "What this means",
           body: (
-            <>
-              <Prose>
-                The {GRACE_DAYS}-day window is the only thing standing between that request and a
-                permanent delete. Deleted so far: nothing.
-              </Prose>
-              <Prose>
-                Until it&apos;s called off or the window runs out, this is the only page you can
-                reach — no rail, no settings, no records.
-              </Prose>
-            </>
+            <Prose>
+              Unless you stop it, the account and everything saved to it are permanently deleted on{" "}
+              {formatDate(finalAtMs)}. Until then, nothing has been removed.
+            </Prose>
           ),
         },
         {
           label: "What you can do",
           body: (
             <Prose>
-              Keep the account open below. That puts it back exactly as it was and the window is
-              forgotten; asking again later starts a fresh one.
+              Keep the account open below. The request is forgotten; asking again later starts a
+              fresh {GRACE_DAYS}-day window.
             </Prose>
           ),
         },
       ]}
-      actions={<Full label={busy ? "Cancelling…" : "Keep my account"} onClick={keepIt} />}
-      foot="Once the window runs out the account is deleted on the server, and there's no copy left to bring it back from."
+      actions={
+        <>
+          <Full label={busy ? "Cancelling…" : "Keep my account"} onClick={keepIt} />
+          <SupportPill subject={`Scheduled deletion — ref ${refCode ?? "none"}`} lines={supportLines} />
+        </>
+      }
     />
   );
 }
@@ -420,7 +362,11 @@ function Restricted({ lock }: { lock: Lock }) {
 
   async function send(note: string) {
     try {
-      const filed = await appeal(item.id, note);
+      /* The event reference rides along inside the note, so the reviewer (and
+         the admin ref lookup) can pull the exact record behind the decision. */
+      const ref = getAccountState()?.refCode;
+      const fullNote = `${ref ? `[ref ${ref} · decision ${item.id}] ` : `[decision ${item.id}] `}${note}`.slice(0, MAX_CHARS);
+      const filed = await appeal(item.id, fullNote);
       /* An appeal is an answer, so it clears the stop the same way reading the
          decision does. Both leave the decision itself on file — now on the
          account, where a review server can answer it. */
@@ -485,19 +431,31 @@ function Restricted({ lock }: { lock: Lock }) {
           },
         ]}
         actions={
-          appealRow ? (
-            <>
-              <Full label="I've read this — carry on" onClick={carryOn} />
-              <Plain label="Follow it up under Account status" onClick={carryOn} />
-            </>
-          ) : (
-            <>
-              <Full label="Appeal this decision" onClick={() => setSheetOpen(true)} />
-              <Plain label="I've read this — carry on" onClick={carryOn} />
-            </>
-          )
+          <>
+            {appealRow ? (
+              <>
+                <Full label="I've read this — carry on" onClick={carryOn} />
+                <Plain label="Follow it up under Account status" onClick={carryOn} />
+              </>
+            ) : (
+              <>
+                <Full label="Appeal this decision" onClick={() => setSheetOpen(true)} />
+                <Plain label="I've read this — carry on" onClick={carryOn} />
+              </>
+            )}
+            <SupportPill
+              subject={`Account decision — ref ${getAccountState()?.refCode ?? "none"}`}
+              lines={[
+                `Event reference: ${getAccountState()?.refCode ?? "none"}`,
+                `Decision: ${item.title}`,
+                `Decision id: ${item.id}`,
+                item.guideline ? `Rule applied: ${item.guideline}` : null,
+                item.at ? `Decided on: ${formatStamp(item.at)}` : null,
+              ]}
+            />
+          </>
         }
-        foot="Setting the decision aside doesn't lift it — it stops blocking the account, and the decision stays listed under Account status with anything you've filed against it."
+        foot="Setting the decision aside stops it blocking the account; it stays listed under Account status."
       />
 
       {sheetOpen ? (
