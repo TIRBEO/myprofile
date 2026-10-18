@@ -17,17 +17,17 @@
   --surface-2: #3a3a3c;
   --surface-3: #48484a;
   --fg: #ffffff;
-  --muted: #a1a1a8;
+  --muted: #b6b6bd;
   --link: #64a5ff;
   --text-2: #ebeaf0;
-  --text-3: #a1a1a8;
-  --text-4: #8e8e93;
+  --text-3: #b6b6bd;
+  --text-4: #a8a8af;
   /* Was #72727a. The field colour moved up to #3a3a3c in this pass, and a
      placeholder is the one text colour that has to be measured against the
      *field* rather than the plate: at the old value it sat at 2.38:1 on the
      new one, which is too faint to read as an instruction. Still the least
      emphatic grey in the palette — `--text-4` and `--muted` both sit above it. */
-  --placeholder: #7c7c85;
+  --placeholder: #a8a8af;
   --border: #48484a;
   --border-strong: #5a5a5e;
   --divider: #38383a;
@@ -90,6 +90,9 @@
   --glass-2: rgba(28, 28, 30, 0.94);
   --glass-3: #1c1c1e;
   --accent-press: #0060c9;
+  /* Filled-button blue: iOS #007aff/#0a84ff under white text is 4.02:1/3.65:1 — fails WCAG AA. */
+  --accent-solid: #0a63e5;
+  --accent-solid-hover: #0a52c9;
   --accent-soft-ring: rgba(10, 132, 255, 0.35);
   --ambient: rgba(255, 255, 255, 0.05);
   --faint: rgba(255, 255, 255, 0.06);
@@ -118,14 +121,16 @@
   --link: #0068d6;
   --text-2: #3f3f46;
   --text-3: #5d5d66;
-  --text-4: #8e8e93;
-  --placeholder: #a1a1aa;
+  --text-4: #6e6e76;
+  --placeholder: #6e6e76;
   --border: #eaeaea;
   --border-strong: #d1d1d6;
   --divider: #c6c6c8;
   --hover: #ececf1;
   --accent: #007aff;
   --accent-hover: #0066d6;
+  --accent-solid: #0062cc;
+  --accent-solid-hover: #004fb8;
   --ig: #007aff;
   --ig-hover: #0066d6;
   --ig-press: #0055b8;
@@ -185,6 +190,8 @@
   --color-divider: var(--divider);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-solid: var(--accent-solid);
+  --color-accent-solid-hover: var(--accent-solid-hover);
   --color-ig: var(--ig);
   --color-ig-hover: var(--ig-hover);
   --color-ig-press: var(--ig-press);
@@ -1242,7 +1249,7 @@ body:has(.auth-dark) {
 /* Premium polish on the card's primary action: gradient fill, lift, glow.
    OAuth-complete's comment notes it — the submit plate lives here. */
 .login-page .login-card button[type='submit']:not(:disabled) {
-  background-image: linear-gradient(180deg, var(--accent-hover), var(--accent));
+  background-image: linear-gradient(180deg, var(--accent-solid-hover), var(--accent-solid));
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   transition: filter 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
 }
@@ -1255,5 +1262,5 @@ body:has(.auth-dark) {
 
 .login-page .login-card button[type='submit']:active:not(:disabled) {
   transform: translateY(0);
-  background-image: linear-gradient(180deg, var(--accent), var(--accent-press));
+  background-image: linear-gradient(180deg, var(--accent-solid), var(--accent-press));
 }

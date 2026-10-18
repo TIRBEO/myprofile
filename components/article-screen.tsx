@@ -524,7 +524,7 @@ export default function ArticlePage() {
                   if (voice.playing) voice.pause();
                   else voice.play();
                 }}
-                className="size-11 bg-accent text-accent-fg hover:brightness-110 active:brightness-95"
+                className="size-11 bg-accent-solid text-accent-fg hover:brightness-110 active:brightness-95"
                 icon={
                   voice.playing ? (
                     <Pause className="size-[19px]" strokeWidth={2.4} />
@@ -653,7 +653,7 @@ function StepBlock({
         aria-hidden
         className={cn(
           "mt-0.5 grid size-8 shrink-0 place-items-center rounded-full text-[13.5px] font-bold tabular-nums transition-colors",
-          active ? "bg-accent text-accent-fg" : "bg-surface-3 text-fg",
+          active ? "bg-accent-solid text-accent-fg" : "bg-surface-3 text-fg",
         )}
       >
         {n}

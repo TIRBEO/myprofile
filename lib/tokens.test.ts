@@ -163,11 +163,14 @@ describe("surface ladder", () => {
 describe("text contrast", () => {
   /** [what it is, foreground token, background token, floor]
 
-      4.5:1 is the WCAG AA floor for body text. Two pairs sit at 3:1 on
-      purpose: a button label is 17px semibold, and a placeholder is
-      *meant* to be the least emphatic thing in its field — Apple's own is
-      under 3:1. They are floored rather than skipped so a future edit that
-      pushes one toward the field colour is caught. */
+      4.5:1 is the WCAG AA floor for body text, and every pair is held to it:
+      the accent fill that carries a button label and the placeholder in a
+      field both used to be floored at 3:1 and 2.5:1 on the reasoning that a
+      label is 17px semibold and a placeholder is *meant* to be the least
+      emphatic thing in its field — Apple's own is under 3:1. That is exactly
+      what an accessibility auditor scores as a contrast failure, so the
+      palette pays for it with `--accent-solid` (a darker blue for fills) and
+      a muted/placeholder step that stays legible on the field. */
   const PAIRS: Array<[string, string, string, number]> = [
     ["body on the ground", "fg", "bg", 4.5],
     ["body on a plate", "fg", "card", 4.5],
@@ -176,8 +179,8 @@ describe("text contrast", () => {
     ["link words on a plate", "accent-text", "card", 4.5],
     ["link words on a field", "accent-text", "field", 4.5],
     ["danger words on a plate", "danger-text", "card", 4.5],
-    ["a label on the accent fill", "accent-fg", "accent", 3.0],
-    ["a placeholder in a field", "placeholder", "field", 2.5],
+    ["a label on the accent fill", "accent-fg", "accent-solid", 4.5],
+    ["a placeholder in a field", "placeholder", "field", 4.5],
   ];
 
   for (const [scheme, palette] of THEMES) {

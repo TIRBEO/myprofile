@@ -39,7 +39,7 @@ const CHOICE_KEY = "tirbeo:theme:local";
     `lib/tokens.test.ts` pins them against globals.css, because a
     picture of the app that quietly stops being the app is the exact drift
     the miniature was built to avoid. */
-const DARK_SWATCH = { bg: "#1c1c1e", bar: "#0a84ff", card: "#2c2c2e", line: "#38383a", ink: "#a1a1a8" };
+const DARK_SWATCH = { bg: "#1c1c1e", bar: "#0a84ff", card: "#2c2c2e", line: "#38383a", ink: "#b6b6bd" };
 const LIGHT_SWATCH = { bg: "#f2f2f7", bar: "#007aff", card: "#ffffff", line: "#c6c6c8", ink: "#5d5d66" };
 
 export const THEMES: ThemeDef[] = [
