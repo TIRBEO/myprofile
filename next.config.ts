@@ -14,8 +14,9 @@ const nextConfig: NextConfig = {
   /* The account app is the site: /settings is what the root address is.
      Temporary rather than permanent so a page that comes back later isn't
      stuck behind a cached redirect in every browser that visited before.
-     /login is *not* redirected — the app's own sign-in landing lives there
-     (the proxy sends signed-out visitors straight to the accounts app). */
+     /login is *not* redirected here — the page itself is a server-side
+     redirect straight to the accounts app's sign-in (see app/login/page.tsx);
+     the old interstitial screen is gone. */
   async redirects() {
     return [
       { source: "/", destination: "/settings", permanent: false },

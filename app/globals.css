@@ -877,13 +877,14 @@ input[type="range"]:disabled {
 /* ═══════════════════════════════════════════════════════════════════════
    Tirbeo auth shell — ported from the accounts app.
 
-   The sign-in surface: an em-scaled centred column on the canvas the
-   visitor picked, with the story-fan and live-comments decorations from
-   1280px up. Every selector is scoped under .login-page so nothing here
-   can leak into the settings app. The auth screens used to re-pin a
-   dark-only palette here; that pin is gone — myprofile is themed by the
-   user's saved preference, and an account page that contradicts the rest
-   of the app is the worst place for it to do that.
+   The auth surface `/oauth-complete` renders: an em-scaled centred column
+   on the canvas the visitor picked. Every selector is scoped under
+   .login-page so nothing here can leak into the settings app. The auth
+   screens used to re-pin a dark-only palette here; that pin is gone —
+   myprofile is themed by the user's saved preference, and an account page
+   that contradicts the rest of the app is the worst place for it to do
+   that. The old /login interstitial and its story-fan / live-comments
+   decorations were removed with it; /login is a bare redirect now.
    ═══════════════════════════════════════════════════════════════════════ */
 
 
@@ -988,57 +989,6 @@ body:has(.auth-dark) {
   font-size: 0.98em;
 }
 
-.login-page .login-cta {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75em;
-  width: 100%;
-  height: 3em;
-  margin-top: 1.8em;
-  border: 0;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-family: inherit;
-  font-size: 1.02em;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  cursor: pointer;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  transition: background 0.16s ease, transform 0.16s ease;
-}
-
-.login-page .login-cta img {
-  height: 1.4em;
-  width: auto;
-  flex: none;
-}
-
-.login-page .login-cta:hover {
-  background: var(--accent-hover);
-}
-
-.login-page .login-cta:active {
-  background: var(--accent-press);
-  transform: scale(0.995);
-}
-
-.login-page .login-cta:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
-
-.login-page .login-cta:disabled {
-  background: var(--surface-3);
-  color: var(--placeholder);
-  opacity: 1;
-  box-shadow: none;
-  transform: none;
-  cursor: not-allowed;
-}
-
 .login-page .login-terms {
   margin-top: auto;
   padding-bottom: 0.6em;
@@ -1110,12 +1060,6 @@ body:has(.auth-dark) {
   align-items: center;
   gap: 8px;
   margin: 0;
-}
-
-/* The wide-screen decorations stay folded until the PC split arrives. */
-.login-page .story-fan,
-.login-page .pc-side {
-  display: none;
 }
 
 /* ── Below the PC split: ONE fluid rule set, same plate sizes as the pane. ── */
@@ -1293,269 +1237,23 @@ body:has(.auth-dark) {
     padding-top: 0;
     z-index: 7;
   }
-
-  /* ── Login mode: story fan on the left, live-comments post on the right ── */
-  .login-page:has(.mode-login) .story-fan {
-    display: block;
-    position: fixed;
-    left: clamp(-24px, 0.1vw, 4px);
-    top: 50%;
-    transform: translateY(-50%) scale(0.85);
-    transform-origin: left center;
-    width: 640px;
-    height: 580px;
-    z-index: 0;
-    pointer-events: none;
-    opacity: 0.95;
-  }
-
-  .login-page:has(.mode-login) .pc-side {
-    display: block;
-    position: fixed;
-    top: 50%;
-    transform: translateY(-50%);
-    right: clamp(16px, 3vw, 56px);
-    width: clamp(250px, 20vw, 370px);
-    z-index: 1;
-    pointer-events: none;
-    opacity: 0.95;
-  }
-
-  .login-page .fan-card {
-    position: absolute;
-    margin: 0;
-    width: 232px;
-    aspect-ratio: 9 / 16;
-    border-radius: 22px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    background: var(--surface-2);
-  }
-
-  .login-page .fan-card img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .login-page .fan-card--left {
-    left: 0;
-    top: 70px;
-    transform: rotate(-8deg) scale(0.86);
-  }
-
-  .login-page .fan-card--right {
-    right: 0;
-    top: 70px;
-    transform: rotate(8deg) scale(0.86);
-  }
-
-  .login-page .fan-card--center {
-    left: 50%;
-    top: 0;
-    transform: translateX(-50%);
-    width: 276px;
-    z-index: 2;
-  }
-
-  .login-page .fan-bars {
-    position: absolute;
-    top: 10px;
-    left: 12px;
-    right: 12px;
-    display: flex;
-    gap: 4px;
-  }
-
-  .login-page .fan-bars i {
-    flex: 1;
-    height: 3px;
-    border-radius: 2px;
-    background: rgba(255, 255, 255, 0.3);
-  }
-
-  .login-page .fan-bars i.on {
-    background: #fff;
-  }
-
-  .login-page .fan-foot {
-    position: absolute;
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    color: #fff;
-  }
-
-  .login-page .fan-reply {
-    flex: 1;
-    height: 30px;
-    border: 1.5px solid rgba(255, 255, 255, 0.85);
-    border-radius: 999px;
-  }
-
-  .login-page .fan-love {
-    position: absolute;
-    left: 22px;
-    top: 240px;
-    z-index: 3;
-    color: var(--danger);
-  }
-
-  .login-page .pc-comments {
-    height: 120px;
-    overflow: hidden;
-    padding-top: 8px;
-    -webkit-mask-image: linear-gradient(180deg, transparent, #000 22%, #000 80%, transparent);
-    mask-image: linear-gradient(180deg, transparent, #000 22%, #000 80%, transparent);
-  }
-
-  .login-page .pc-track {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-    animation: pc-up 16s linear infinite;
-  }
-
-  .login-page .pc-track p {
-    margin: 0;
-    font-size: 13px;
-    line-height: 1.45;
-    color: var(--text-3);
-  }
-
-  .login-page .pc-track p b {
-    margin-right: 5px;
-    color: var(--fg);
-  }
-
-  @keyframes pc-up {
-    from { transform: translateY(0); }
-    to { transform: translateY(-50%); }
-  }
-
-  /* The comments post is the same rail-card anatomy the fan shares. */
-  .login-page .rail-card {
-    position: relative;
-    margin: 0;
-    border-radius: 20px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    background: var(--surface-2);
-  }
-
-  .login-page .rail-post {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-    background: var(--surface-2);
-  }
-
-  .login-page .rail-photo {
-    display: block;
-    width: 100%;
-    aspect-ratio: 3 / 4;
-    object-fit: cover;
-  }
-
-  .login-page .rail-post .rail-photo {
-    aspect-ratio: 4 / 3;
-    border-radius: 12px;
-  }
-
-  .login-page .rail-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .login-page .rail-ring {
-    flex: none;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    padding: 2px;
-    background: linear-gradient(135deg, #339cff, #0a84ff 60%, #64aaff);
-  }
-
-  .login-page .rail-ring img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid var(--card);
-  }
-
-  .login-page .rail-head-txt {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .login-page .rail-user {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--fg);
-  }
-
-  .login-page .rail-tick {
-    width: 12px;
-    height: 12px;
-  }
-
-  .login-page .rail-sub {
-    font-size: 11px;
-    color: var(--muted);
-  }
-
-  .login-page .rail-time {
-    margin-left: auto;
-    font-size: 11px;
-    color: var(--text-4);
-  }
 }
 
-/* Keep the fan composition identical at every desktop width. */
-@media (min-width: 1280px) and (max-width: 1439px) {
-  .login-page:has(.mode-login) .story-fan { transform: translateY(-50%) scale(0.52); }
-  .login-page:has(.mode-login) .pc-side { width: clamp(220px, 18vw, 270px); }
-}
-
-@media (min-width: 1440px) and (max-width: 1599px) {
-  .login-page:has(.mode-login) .story-fan { transform: translateY(-50%) scale(0.62); }
-}
-
-/* Premium polish on the card's primary actions: gradient fill, lift, glow. */
-.login-page .login-cta:not(:disabled),
+/* Premium polish on the card's primary action: gradient fill, lift, glow.
+   OAuth-complete's comment notes it — the submit plate lives here. */
 .login-page .login-card button[type='submit']:not(:disabled) {
   background-image: linear-gradient(180deg, var(--accent-hover), var(--accent));
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   transition: filter 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
 }
 
-.login-page .login-cta:hover:not(:disabled),
 .login-page .login-card button[type='submit']:hover:not(:disabled) {
   filter: brightness(1.08);
   transform: translateY(-1px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(10, 132, 255, 0.35);
 }
 
-.login-page .login-cta:active:not(:disabled),
 .login-page .login-card button[type='submit']:active:not(:disabled) {
   transform: translateY(0);
   background-image: linear-gradient(180deg, var(--accent), var(--accent-press));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .login-page .pc-track {
-    animation: none;
-  }
 }

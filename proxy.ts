@@ -46,7 +46,9 @@ const SESSION_COOKIE = "__session";
  * `__session` cookie yet — the account row is only written when the form is
  * submitted. Guarding it bounced the visitor to the accounts login with
  * `redirect_to` pointing straight back here, and back again forever. `/login`
- * is the signed-out fallback, so it is public by definition. `/blocked` is the
+ * is a server-side redirect to the accounts app now (see `app/login/page.tsx`)
+ * — it renders no screen of its own and must stay reachable signed-out, so it
+ * is public by definition. `/blocked` is the
  * interruption screen a banned/suspended visitor is sent to *because* they have
  * no usable session — gating it would bounce them back to login forever.
  */
