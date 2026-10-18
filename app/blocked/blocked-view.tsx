@@ -196,12 +196,6 @@ export function BlockedView({
     ? Math.max(0, Math.ceil((untilAt! - Date.now()) / 86_400_000))
     : null;
 
-  /** Is something on this screen allowed to be the loud button? Once the appeal
-      is filed, or a flow is standing open in the body, it isn't — and then
-      "Back to sign in" takes the fill back rather than being the quiet second
-      choice beside nothing. */
-  const loudOpen = open === "none" && (!!recovery || (canAppeal && !appealFiled));
-
   return (
     <StatementScreen
       title={restored ? "Your account is back" : copy.title}
@@ -349,11 +343,8 @@ export function BlockedView({
                   }}
                 />
               ) : null}
-              <PillButton
-                tone={loudOpen ? "outline" : "primary"}
-                label="Back to sign in"
-                onClick={() => (window.location.href = "/login")}
-              />
+              {/* No way back to the sign-in page from here while the account is
+                  closed — this screen *is* the answer. The account stays put. */}
             </>
           )}
           {/* One loud thing, and the second choice as a word rather than a
