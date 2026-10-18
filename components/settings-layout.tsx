@@ -21,6 +21,8 @@ import { ProfilePicture } from "@/components/profile-picture";
 import { displayName, useProfile } from "@/lib/profile";
 import { trackEvent } from "@/lib/telemetry";
 import { useAccountLock, useWelcome } from "@/lib/account-state";
+import { useWelcomeBack } from "@/lib/welcome-back";
+import { WelcomeBackScreen } from "@/components/welcome-back";
 import { retireDeletedTray } from "@/lib/retired-tray";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -276,14 +278,25 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { lock, loading } = useAccountLock();
   const welcome = useWelcome();
 
+  /* And the account's own record of the way back — a ban lifted, a suspension
+     that ran out, a pause or a deletion that got called off. Read once per
+     browser session (see lib/welcome-back), so the dashboard doesn't stutter
+     behind it on every navigation, and only ever rendered when the account
+     actually has something to say. */
+  const welcomeBack = useWelcomeBack();
+
   useEffect(() => {
-    if ((lock || welcome) && pathname !== "/settings") router.replace("/settings");
-  }, [lock, welcome, pathname, router]);
+    if ((lock || welcome || welcomeBack) && pathname !== "/settings") router.replace("/settings");
+  }, [lock, welcome, welcomeBack, pathname, router]);
 
   /* Also while the first read is in flight: "the account hasn't been asked
      yet" must not render the dashboard, because the answer could be that the
      account is closed. */
   if (lock || welcome || loading) return <AccountLockScreen />;
+
+  /* The lock is off and the account has just been given back: one screen,
+     before any of the dashboard is painted, and pressed away once. */
+  if (welcomeBack) return <WelcomeBackScreen welcome={welcomeBack} />;
 
   return (
     <div className="min-h-dvh">

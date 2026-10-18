@@ -43,6 +43,7 @@ const ACCOUNT_TRACES = [
   "tirbeo:support-requests", // support tickets opened from here
   "tirbeo:your-activity:deleted", // the retired recently-deleted tray — see lib/retired-tray.ts
   "tirbeo:welcome-back", // the one-time welcome note
+  "tirbeo:welcome-back:shown", // the restoration THIS browser has already announced — see lib/welcome-back
   "tirbeo:token-user", // the cached token's copy of who is signed in
 ];
 

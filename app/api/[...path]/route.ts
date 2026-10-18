@@ -51,6 +51,15 @@ const ALLOWED_AUTH = new Set([
   "suspicious-login/deny",
 ]);
 
+/** The same reasoning for `users/*`: on the brain that prefix is the
+    read-an-account surface, and this shell needs precisely one row out of it
+    — the account's own record of the way back from a closed state, which is
+    what the one-time welcome screen reads. Named, not opened. */
+const ALLOWED_USERS = new Set([
+  "welcome-back",
+  "welcome-back/ack",
+]);
+
 function permitted(slug: string[]): boolean {
   if (slug[0] === "profile") {
     // /api/profile is served locally; /api/profile/check-username is the
@@ -59,6 +68,7 @@ function permitted(slug: string[]): boolean {
     return slug.length === 1 || (slug.length === 2 && slug[1] === "check-username");
   }
   if (slug[0] === "auth") return ALLOWED_AUTH.has(slug.slice(1).join("/"));
+  if (slug[0] === "users") return ALLOWED_USERS.has(slug.slice(1).join("/"));
   return ALLOWED.has(slug[0]);
 }
 

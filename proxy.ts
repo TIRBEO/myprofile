@@ -52,6 +52,44 @@ const SESSION_COOKIE = "__session";
  */
 const PUBLIC_PATHS = ["/login", "/oauth-complete", "/blocked"];
 
+/**
+ * The interruption the accounts app hands over.
+ *
+ * A banned, suspended, deleted, paused or soon-deleted account is sent here
+ * with the decision in the query string (`?blocked=<kind>&eventId=&reason=&until=&sig=`),
+ * signed by `apps/accounts/src/lib/blockSignature.ts` and checked by
+ * `app/blocked/page.tsx` — this file only decides which screen the visitor
+ * gets, never whether the payload is real.
+ *
+ * Pinning happens at the edge because the visitor standing in front of it has
+ * no usable session — that is the whole reason they were handed over. Falling
+ * through to the gate below would bounce them back to the accounts login, the
+ * page they had just been redirected away from, and the loop would be the
+ * last thing they saw of Tirbeo. So a recognised kind is rewritten onto
+ * `/blocked` with its query intact, ahead of every other decision here.
+ *
+ * The kinds are listed rather than matched loosely so a `?blocked=` left over
+ * in someone's bookmarks, a link a third party wrote, or a value that names
+ * nothing cannot pin an interruption screen over the dashboard.
+ */
+const BLOCKED_KINDS = new Set([
+  "banned",
+  "suspended",
+  "deleted",
+  "deletion_pending",
+  "deactivated",
+]);
+
+/** Where a block hand-off belongs: the interruption page, query and all. */
+function blockedTarget(request: NextRequest): URL | null {
+  const kind = request.nextUrl.searchParams.get("blocked");
+  if (!kind || !BLOCKED_KINDS.has(kind)) return null;
+  if (request.nextUrl.pathname === "/blocked") return null;
+  const target = request.nextUrl.clone();
+  target.pathname = "/blocked";
+  return target;
+}
+
 function secretKey(): Uint8Array | null {
   const secret = process.env.JWT_SECRET;
   return secret ? new TextEncoder().encode(secret) : null;
@@ -135,6 +173,17 @@ function accountsOrigin(request: NextRequest): string | null {
 }
 
 export async function proxy(request: NextRequest) {
+  /* A block hand-off is pinned onto its screen before anything else here runs
+     — see BLOCKED_KINDS. It comes first because the visitor standing in front
+     of it has no session to gate, and the place the gate would send them is
+     the login page they have just been handed off from. */
+  const blocked = blockedTarget(request);
+  if (blocked) {
+    const move = NextResponse.redirect(blocked);
+    move.headers.set("Cache-Control", "no-store");
+    return move;
+  }
+
   // Pre-auth pages are never gated — see PUBLIC_PATHS.
   const { pathname } = request.nextUrl;
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {

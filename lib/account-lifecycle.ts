@@ -108,6 +108,45 @@ export async function apiReactivate(): Promise<AccountState | null> {
   return afterWrite();
 }
 
+/* ── Coming back with no session to spend ─────────────────────────
+   The same endpoint, reached from the public interruption page — where
+   there is no cookie at all, because the account that owns it is the thing
+   that is closed. So ownership is proved the way the API asks for it: a
+   6-digit code mailed to the sign-in address.
+
+     • POST /api/user/reactivate { step: 'request', email }
+     • POST /api/user/reactivate { step: 'verify', email, code }
+
+   One endpoint covers both a pause (`deactivated`) and a deletion that has
+   not run yet (`deletion_pending`) — cancelling the schedule and reopening
+   the account are the same write. The brain's own reply is handed back
+   rather than rewritten here, because it names the address it mailed and
+   the reason it refused, and a page that guesses at either is a page that
+   mails a code to the wrong inbox.                                         */
+
+export type ReactivationReply = { message: string };
+
+export async function apiRequestReactivationCode(email: string): Promise<ReactivationReply> {
+  const reply = await apiJson<{ message?: string }>("/api/user/reactivate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ step: "request", email: email.trim() }),
+  });
+  return { message: reply.message || "A code is on its way to that address." };
+}
+
+export async function apiVerifyReactivationCode(
+  email: string,
+  code: string,
+): Promise<ReactivationReply> {
+  const reply = await apiJson<{ message?: string }>("/api/user/reactivate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ step: "verify", email: email.trim(), code }),
+  });
+  return { message: reply.message || "Your account is back. You can sign in." };
+}
+
 /** Step one of closing the account: the brain mails a 6-digit code to the
     sign-in address and says so. Its reply is handed back, because the page
     should name the inbox from the server's answer rather than guess, and a
