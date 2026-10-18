@@ -975,7 +975,7 @@ function Complete() {
             <button type="button" onClick={() => setLegal("terms")}>Terms of Service</button>
             <button type="button" onClick={() => setLegal("privacy")}>Privacy Policy</button>
             <a href="https://tirbeo.com" target="_blank" rel="noreferrer">About</a>
-            <a href="https://tirbeo.com/help" target="_blank" rel="noreferrer">Help</a>
+            <a href="https://tirbeo.com/contact" target="_blank" rel="noreferrer">Help</a>
           </nav>
           <p className="legal-meta">
             <span>English</span>
