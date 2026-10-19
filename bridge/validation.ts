@@ -13,8 +13,24 @@
  */
 
 const USERNAME = /^[a-z0-9._]{2,30}$/;
-const BIO_MAX = 200;
 const NAME_MAX = 60;
+/**
+ * The column widths the account row itself enforces, restated here.
+ *
+ * A write is one patch carrying every field the sheet holds, and the account
+ * service answers a single over-long value by refusing the *whole* body — so
+ * without these, a 201-character bio silently takes the pronouns and location
+ * typed next to it down with it, and the person is left reading a failed save
+ * as an outage. Catching it here puts the note under the input that caused it
+ * and lets the rest of the edit through. The numbers are the same ones in
+ * `apps/api/features/users/internalProfileHandlers.ts`; a rule that drifts from
+ * that file is a rule that reports a false refusal.
+ */
+const BIO_MAX = 2000;
+const SHORT_TEXT_MAX = 40; // pronouns, gender
+const LOCATION_MAX = 120;
+const JOB_TEXT_MAX = 120; // job title, company, work location
+const WEBSITE_MAX = 300;
 /** Same cap the account row enforces per skill, so the check happens here
     instead of costing a round trip and coming back as a mysterious failure. */
 const SKILL_MAX = 60;
@@ -31,7 +47,15 @@ const PHONE_STORED = /^(\+?\d{7,15}|\d{10})$/;
 const JOB_START_MAX = 10;
 const JOB_START_EXAMPLE = "2024-01";
 
-/** Mirrors `REQ_LABELS` on the edit-profile screen. */
+/**
+ * The fields the row will not hold empty.
+ *
+ * Deliberately narrower than the edit-profile sheet's own `REQUIRED`, which
+ * also insists on pronouns, gender and a date of birth: that is a form rule for
+ * one screen, not a property of the account. A caller that clears pronouns is
+ * answered by the row, which stores the clearing happily — the sheet is the
+ * place to refuse it, and it does, before Save is even enabled.
+ */
 export const REQUIRED_FIELDS = ["name", "username", "location"] as const;
 
 /** Every field the row holds as text. `null` clears one; anything that is not
@@ -114,6 +138,24 @@ export function validateProfilePatch(
 
   if (typeof input.bio === "string" && input.bio.length > BIO_MAX) {
     errors.bio = `Bio is limited to ${BIO_MAX} characters`;
+  }
+
+  /* The rest of the column widths, in one pass. Each sentence matches the
+     account's own wording so a value stopped here and one stopped upstream read
+     identically — and so an over-long answer never arrives as the mysterious
+     failure that loses the other fields riding in the same patch. */
+  for (const [key, max] of [
+    ["pronouns", SHORT_TEXT_MAX],
+    ["gender", SHORT_TEXT_MAX],
+    ["location", LOCATION_MAX],
+    ["jobRole", JOB_TEXT_MAX],
+    ["jobCompany", JOB_TEXT_MAX],
+    ["jobPlace", JOB_TEXT_MAX],
+    ["website", WEBSITE_MAX],
+  ] as const) {
+    if (typeof input[key] === "string" && input[key].length > max) {
+      errors[key] = `Keep it under ${max} characters`;
+    }
   }
 
   /* Checked on the way in as well as on the way out: the number is stored by

@@ -72,6 +72,10 @@ const PRONOUNS = ["Prefer not to say", "He/him", "She/her", "They/them"];
 /* A bio is a few sentences about a person, not a tweet: it runs to several
    paragraphs, so the field has room for them and the preview can be opened. */
 const BIO_MAX = 2000;
+/** The location column is `varchar(120)` on the row. Cutting the box off at the
+    same width is what keeps an over-long answer from being a note the person
+    has to go looking for — the keyboard simply stops. */
+const LOCATION_MAX = 120;
 /** Where the preview stops until it's asked for — five lines of a bio is
     already more than a row in the list above it could carry. */
 const BIO_LINES = 5;
@@ -573,6 +577,7 @@ export default function EditProfilePage() {
                     }
                   }}
                   placeholder="Kathmandu, Nepal"
+                  maxLength={LOCATION_MAX}
                   spellCheck={false}
                   invalid={attempted && missing.includes("location")}
                   aria-describedby={attempted && missing.includes("location") ? "req-location" : undefined}
