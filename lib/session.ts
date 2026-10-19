@@ -108,20 +108,31 @@ function apiBaseUrl(): string {
  * Ends the session everywhere:
  * 1. Asks the accounts API to revoke the session row and expire the
  *    `__session` / `__refresh` / `__csrf` cookies on the shared parent
- *    domain (keepalive:true so the request survives the redirect).
+ *    domain (keepalive:true so the request survives the redirect) — unless the
+ *    caller says the credential was only *inferred* to be dead, see below.
  * 2. Clears every browser-side trace (tokens, cached probes, prefs).
  * 3. Notifies other open tabs so they drop their signed-in state too.
+ *
+ * `revoke: false` is for the second kind of "no". When a request comes back
+ * refusing the session, this device cannot tell an expired credential from a
+ * server that could not read the record — and asking /api/auth/logout turns the
+ * guess into a fact: the row is revoked, the refresh token is spent, and a
+ * session that had three days left is over because one query was slow. Leaving
+ * the credential alone costs nothing (a dead one is refused again on the next
+ * visit) and is the only way a blip can heal itself.
  */
-export function endSession() {
+export function endSession(options?: { revoke?: boolean }) {
   if (typeof window === "undefined") return;
-  try {
-    void fetch(`${apiBaseUrl()}/api/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-      keepalive: true,
-    }).catch(() => {});
-  } catch {
-    /* offline — the cookie still dies server-side with the session TTL */
+  if (options?.revoke !== false) {
+    try {
+      void fetch(`${apiBaseUrl()}/api/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      /* offline — the cookie still dies server-side with the session TTL */
+    }
   }
   try {
     for (const key of [
@@ -253,12 +264,19 @@ export function endSessionAndLeave() {
   window.location.href = loginUrl();
 }
 
-/** Called by the shell when the server says the credential is dead. */
+/**
+ * Called by the shell when the server says the credential is dead.
+ *
+ * Deliberately does NOT revoke: this path runs on the server's answer, which is
+ * a statement about what it could read as much as about the session. The
+ * person who is genuinely signed out is sent to the same place either way; the
+ * one whose lookup merely failed is back inside on the next request.
+ */
 export function redirectToLogin() {
   if (typeof window === "undefined") return;
   // Standing on the landing already: navigating to it again is a loop.
   if (window.location.pathname === "/login") return;
-  endSession();
+  endSession({ revoke: false });
   window.location.href = loginUrl();
 }
 
