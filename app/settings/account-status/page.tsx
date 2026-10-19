@@ -12,10 +12,9 @@ import {
 } from "@/components/settings-shell";
 import { LoadFailed } from "@/components/page-loading";
 import { ApiError } from "@/lib/api";
-import { AccountLevel } from "@/lib/account-level";
 import { type StatusSection, loadAccountChecks } from "@/lib/account-status";
 import { usePageRefresh } from "@/lib/page-refresh";
-import { ACCOUNT_EVENT, countRequests } from "@/lib/account-history";
+import { useAccountState } from "@/lib/account-lifecycle";
 
 /* ═══════════════════════════════════════════════════════════════════
    Account status
@@ -43,16 +42,16 @@ import { ACCOUNT_EVENT, countRequests } from "@/lib/account-history";
 
 export default function AccountStatusPage() {
   const [data, setData] = useState<StatusSection[] | null>(null);
-  const [status, setStatus] = useState<AccountLevel | null>(null);
+  const [level, setLevel] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    setStatus(null);
+    setLevel(null);
     setData(null);
     setLoadError(null);
     loadAccountChecks()
       .then(({ level, sections }) => {
-        setStatus({ level, updatedAt: null, updatedBy: null });
+        setLevel(level);
         setData(sections);
       })
       .catch((err) => {
@@ -73,17 +72,17 @@ export default function AccountStatusPage() {
   if (loadError)
     return <LoadFailed title="Account status" message={loadError} onRetry={load} />;
 
-  if (!data || !status) return <PageSkeleton title="Account status" sections={5} />;
+  if (!data || level === null) return <PageSkeleton title="Account status" sections={5} />;
 
   const open = data.reduce((n, s) => n + s.items.length, 0);
-  const flagged = status.level > 0;
+  const flagged = level > 0;
 
   return (
     <SettingsPage title="Account status">
       {/* The number, and what it means, before anything else. */}
       <Helper lead tone={flagged ? "warn" : "ok"}>
         {flagged
-          ? `Status level ${status.level} — a Tirbeo admin has flagged something on your account. The checks below say what.`
+          ? `Status level ${level} — a Tirbeo admin has flagged something on your account. The checks below say what.`
           : "Status 0 — nothing is flagged on your account. That's the normal state, not a hold: no decision about this account is waiting on anyone."}
       </Helper>
 
@@ -91,7 +90,7 @@ export default function AccountStatusPage() {
         <StaticRow
           title="Account status"
           sub="A number Tirbeo's admins set — it starts at 0 and only moves when they decide something about this account."
-          right={<StatusLevel level={status.level} />}
+          right={<StatusLevel level={level} />}
         />
       </Group>
 
@@ -119,7 +118,7 @@ export default function AccountStatusPage() {
         <LinkRow
           href="/settings/account-status/history"
           title="Requests and history"
-          sub="Every pause, deletion and review you've filed, and what became of each."
+          sub="What the account holds in force, the reviews you've filed, and the decisions still needing you."
           right={<OpenRequests />}
         />
       </Group>
@@ -135,16 +134,12 @@ function StatusLevel({ level }: { level: number }) {
   return <span className="text-warn-text">{level} · flagged by an admin</span>;
 }
 
-/** The count that matters on that row: how much of what you asked for is
-    still in force, because that's what the app is still held at. */
+/** The count that matters on that row: what the account is held at right
+    now. Read from the lifecycle row, because a browser's own log of a pause
+    says nothing about the account — it can only go stale. */
 function OpenRequests() {
-  const [open, setOpen] = useState<number | null>(null);
-  useEffect(() => {
-    const look = () => setOpen(countRequests().open);
-    look();
-    window.addEventListener(ACCOUNT_EVENT, look);
-    return () => window.removeEventListener(ACCOUNT_EVENT, look);
-  }, []);
+  const { state } = useAccountState();
+  const open = (state?.deactivated ? 1 : 0) + (state?.deletionPending ? 1 : 0);
   if (!open) return null;
   return <span className="text-warn-text">{open} open</span>;
 }

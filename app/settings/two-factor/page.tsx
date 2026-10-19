@@ -18,6 +18,7 @@ import { useReauthGuard } from "@/components/reauth-sheet";
 import { wasDeclined } from "@/lib/reauth";
 import {
   CODE_COUNT,
+  PREF_KEYS,
   type RevealedCodes,
   type TwoFactorState,
   confirmSetup,
@@ -100,15 +101,6 @@ export default function TwoFactorPage() {
       toast.error(withRef(err instanceof Error ? err.message : "Couldn’t reach the account service", err));
     }
   }
-
-  /** Bag keys the extra-security switches live under on the account — the
-      same names the settings read returns them under. `twoFactorAlertSuspicious`
-      absent means ON, which is the server's own default, so the switch never
-      shows "off" for a choice nobody has made. */
-  const PREF_KEYS = {
-    requireForActions: "twoFactorRequireForActions",
-    alertSuspicious: "twoFactorAlertSuspicious",
-  } as const;
 
   /** Extra-security switches ride the account's settings write path: the
       optimistic bag write lets the store roll a refused value back and name
@@ -340,7 +332,7 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
                   setError(null);
                   setUseBackup((v) => !v);
                 }}
-                className="inline-flex min-h-12 items-center justify-center rounded-full bg-fill px-5 text-[15px] font-semibold text-accent-text outline-none transition-colors hover:bg-fill-hover active:bg-fill-press"
+                className="btn btn-secondary"
               >
                 {useBackup ? "Use app code" : "Use a backup code"}
               </button>
@@ -453,7 +445,7 @@ function AuthenticatorSheet({
           <p className="mt-4 text-center text-[12.5px] leading-relaxed text-muted">
             Scans into any authenticator app. The key below is the same code the QR carries.
           </p>
-          <div className="mt-5 w-full rounded-xl bg-surface-2 px-4 py-3">
+          <div className="mt-5 w-full rounded-lg bg-surface-2 px-4 py-3">
             <p className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">Setup key</p>
             <div className="mt-1.5 flex items-center justify-between gap-3">
               <span className="break-all font-mono text-[14.5px] font-semibold tracking-[0.08em] text-fg">

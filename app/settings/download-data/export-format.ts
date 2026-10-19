@@ -20,12 +20,12 @@
 
    `readDownloadPage` is the page's one read: the account's counts, the parts
    that couldn't be read, and the requests already made with their format and
-   whether the file was actually produced. It maps the same endpoint that
-   lib/download-data.ts reads, plus the two fields the format sheet needs.
+   whether the file was actually produced — GET /api/user/export-data?summary=1,
+   plus the two fields the format sheet needs.
    ═══════════════════════════════════════════════════════════════════ */
 
 import { ApiError, apiJson } from "@/lib/api";
-import { SECTIONS, recordsIn, sectionLabel, type Counts, type SecuritySummary } from "@/lib/download-data";
+import { sectionLabel, type Counts, type SecuritySummary } from "@/lib/download-data";
 
 export type ExportFormat = "json" | "html";
 export type ExportRequestStatus = "pending" | "ready" | "failed";
@@ -182,18 +182,6 @@ export async function requestArchive(format: ExportFormat): Promise<SavedArchive
   };
 }
 
-/** A history row described in one line — what it was, how big, how many records. */
-export function describeRow(row: ExportRequestRow): string {
-  const bits = [formatName(row.format)];
-  if (row.counts) bits.push(`${recordsIn(row.counts).toLocaleString()} records`);
-  if (row.bytes !== null) bits.push(`${row.bytes.toLocaleString()} bytes`);
-  if (row.status === "pending") {
-    bits.push(isStalePending(row) ? "confirmed, but no file was ever fetched" : "the file hasn't been written yet");
-  }
-  if (row.status === "failed") bits.push("writing the file failed");
-  return bits.join(" · ");
-}
-
 /** Which parts of a finished download the account couldn't read, said out loud. */
 export function missingSentence(missing: string[]): string {
   if (!missing.length) return "";
@@ -203,15 +191,6 @@ export function missingSentence(missing: string[]): string {
 export function truncatedSentence(truncated: string[]): string {
   if (!truncated.length) return "";
   return `${truncated.map(sectionLabel).join(", ")} passed the 10,000-record cap, so the newest rows after that aren't here.`;
-}
-
-/** The parts the account answered for, in the page's own order plus anything new. */
-export function partsOf(counts: Counts) {
-  const present = SECTIONS.filter((section) => section.key in counts);
-  const extra = Object.keys(counts)
-    .filter((key) => !SECTIONS.some((section) => section.key === key))
-    .map((key) => ({ key, label: sectionLabel(key), sub: "" }));
-  return [...present, ...extra];
 }
 
 async function toDownloadError(res: Response): Promise<ApiError> {

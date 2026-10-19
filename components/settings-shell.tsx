@@ -29,8 +29,11 @@ import { haptic } from "@/lib/haptics";
 export const ROW =
  "flex min-h-[48px] w-full items-center gap-4 px-4 py-[15px] text-left outline-none transition-colors sm:px-5 sm:py-[17px]";
 export const LIVE = "hover:bg-hover active:bg-field-focus";
-/** A bare glyph, not a coin: the picture belongs to the row, not to itself. */
-export const CHIP = "flex size-7 shrink-0 items-center justify-center text-text-4 [&_svg]:size-[19px]";
+/** The landing's row anatomy: the glyph sits in a 30px tinted rounded square,
+    so a list reads as a column of icons rather than a column of loose marks.
+    The tint is `systemFill`; the glyph's own colour is chosen per row (muted,
+    accent, danger) by the row primitives below. */
+export const CHIP = "flex size-[30px] shrink-0 items-center justify-center rounded-[8px] bg-fill text-text-4 [&_svg]:size-[17px]";
 /** The row's own line: 17px, Apple's body and headline size, and the one size
     every row shares — a title is a title whether it opens a page, holds a
     switch or just reports a fact. It wraps rather than clipping, because the
@@ -44,7 +47,7 @@ export const SUB = "mt-[3px] block text-[15px] leading-[1.45] text-text-3";
     A clean raised surface with a strong glyph, not a tinted slab: the colour
     belongs to the record's state, which the heading and the flags carry. */
 export const TILE =
-  "flex size-[62px] shrink-0 items-center justify-center rounded-[18px] border border-hairline bg-field text-fg [&_svg]:size-[26px]";
+  "flex size-[62px] shrink-0 items-center justify-center rounded-2xl border border-hairline bg-field text-fg [&_svg]:size-[26px]";
 
 export function SettingsPage({
   title,
@@ -334,23 +337,6 @@ export function Group({
   );
 }
 
-/** The control beside a section heading — the whole block's action, not
-    a row inside the block it acts on. Same 48px pill as every other action. */
-export function SectionAction({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        haptic("light");
-        onClick();
-      }}
-      className="relative inline-flex min-h-12 shrink-0 items-center justify-center rounded-full bg-fill px-5 text-[15px] font-semibold text-accent-text outline-none transition-colors hover:bg-fill-hover active:bg-fill-press"
-    >
-      {label}
-    </button>
-  );
-}
-
 /** The line of plain text that explains a card, or opens a page when that page
     has one fact to state before any list. `lead` is the page-opening size;
     `tone` colours it when the fact is a good or a bad one. A section that
@@ -371,7 +357,7 @@ export function Helper({
     <p
       className={cn(
         "leading-relaxed text-muted",
-        lead ? "mt-5 mb-1 max-w-[62ch] text-[14.5px]" : "mt-2.5 text-[13px]",
+        lead ? "mt-5 mb-1 max-w-[62ch] text-[15px]" : "mt-2.5 text-[13px]",
         tone === "ok" && "text-success-text",
         tone === "warn" && "text-warn-text",
         tone === "danger" && "text-danger-text",
@@ -796,66 +782,6 @@ export function PillButton({
         <span className="px-1 text-center text-[12.5px] leading-snug text-muted">{sub}</span>
       ) : null}
     </span>
-  );
-}
-
-/* ── Lines inside a sheet ───────────────────────────────────────── */
-
-const SHEET_ROW =
- "flex w-full items-center gap-4 px-4 py-4 text-left outline-none transition-colors sm:px-5";
-
-export function SheetAction({
-  icon,
-  label,
-  onClick,
-  danger,
-}: {
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        haptic("light");
-        onClick();
-      }}
-      className={cn(
-        SHEET_ROW,
-        danger ? "text-danger-text hover:bg-danger/8 active:bg-danger/15" : "hover:bg-hover active:bg-field-focus",
-      )}
-    >
-      <span className={cn("shrink-0", danger ? "text-danger-text" : "text-muted")}>{icon}</span>
-      <span className="min-w-0 flex-1 text-[15px] font-medium">{label}</span>
-    </button>
-  );
-}
-
-export function SheetButton({
-  label,
-  onClick,
-  danger,
-}: {
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        haptic("light");
-        onClick();
-      }}
-      className={cn(
-        SHEET_ROW,
-        danger ? "text-danger-text hover:bg-danger/8 active:bg-danger/15" : "hover:bg-hover active:bg-field-focus",
-      )}
-    >
-      <span className="min-w-0 flex-1 text-[15px] font-medium">{label}</span>
-    </button>
   );
 }
 

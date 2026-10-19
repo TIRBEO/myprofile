@@ -11,15 +11,11 @@ import {
   SettingsPage,
   StaticRow,
 } from "@/components/settings-shell";
-import { EmptyState } from "@/components/ig-ui";
 import {
   ACCOUNT_EVENT,
-  KIND_LABEL,
-  OUTCOME_LABEL,
-  OUTCOME_SENTENCE,
-  type AccountRequest,
-  useRequests,
-} from "@/lib/account-history";
+  type AccountState,
+  useAccountState,
+} from "@/lib/account-lifecycle";
 import {
   appealFor,
   findItemById,
@@ -37,24 +33,17 @@ import { ago, formatStamp } from "@/lib/dates";
 /* ═══════════════════════════════════════════════════════════════════
    Requests and history
 
-   Everything on this page is something this account asked for and
-   something this account then did something about — a pause ended, a close
-   called off, a review written out. The reviews come straight from the
-   account now, not from this browser: an appeal filed here is the same row
-   an admin answers, and the same row a second device will list.
+   Everything here is read from the account, not from this browser: the
+   pause or close still in force comes from the lifecycle row, and a review
+   filed here is the same row an admin answers and the same row a second
+   device lists. Nothing is claimed to be open that the account doesn't
+   agree is open — which is why the old per-device log of these went away.
 
-   Under the log sits the other half of the question — the decisions that
+   Under the list sits the other half of the question — the decisions that
    are still waiting on an answer from you. That's the list a good standing
    page can't show, because needing an answer and being in trouble aren't
    the same thing. When both lists are empty, they say so quietly.
    ═══════════════════════════════════════════════════════════════════ */
-
-const OUTCOME_TONE = {
-  open: "text-warn-text",
-  restored: "text-success-text",
-  reversed: "text-success-text",
-  reviewed: "text-muted",
-};
 
 const APPEAL_STATUS: Record<string, { word: string; tone: "warn" | "muted" | "ok" }> = {
   pending: { word: "Under review", tone: "warn" },
@@ -69,7 +58,7 @@ const APPEAL_TONE = {
 };
 
 export default function AccountHistoryPage() {
-  const requests = useRequests();
+  const { state, loading } = useAccountState();
   const [waiting, setWaiting] = useState<Pending[] | null>(null);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
 
@@ -88,29 +77,38 @@ export default function AccountHistoryPage() {
     return () => window.removeEventListener(ACCOUNT_EVENT, look);
   }, [look]);
 
-  const open = requests.filter((row) => row.closedAt === null && row.kind !== "appeal");
-  const ownRequests = requests.filter((row) => row.kind !== "appeal");
+  const rows = state ? inForce(state) : [];
+  const waitingReview = appeals.some((row) => (row.decision ?? "pending") === "pending");
+  const inForceWords = rows.map((row) => row.title.toLowerCase());
+  if (waitingReview) inForceWords.push("an appeal under review");
 
-  if (!waiting) return <PageSkeleton title="Requests and history" sections={3} />;
+  if (!waiting || (loading && !state)) return <PageSkeleton title="Requests and history" sections={3} />;
 
   return (
     <SettingsPage title="Requests and history">
-      <Helper lead tone={open.length ? "danger" : "ok"}>
-        {open.length
-          ? `${KIND_LABEL[open[0].kind]}${open.length === 1 ? " is" : "s are"} in force right now.`
+      <Helper lead tone={inForceWords.length ? "danger" : "ok"}>
+        {inForceWords.length
+          ? `In force right now: ${inForceWords.join(", ")}.`
           : "Nothing of yours is open — no pause running, no deletion scheduled, no review in."}
       </Helper>
 
       <SectionTitle>What you&apos;ve asked for</SectionTitle>
-      {ownRequests.length ? (
+      {rows.length ? (
         <Group>
-          {ownRequests.map((row) => (
-            <RequestRow key={`${row.kind}-${row.id}-${row.at}`} row={row} />
+          {rows.map((row) => (
+            <StaticRow
+              key={row.title}
+              title={row.title}
+              sub={row.sub}
+              right={<span className="text-warn-text">{row.right}</span>}
+            />
           ))}
         </Group>
       ) : (
         <p className="max-w-[58ch] text-[14px] leading-relaxed text-muted">
-          Nothing asked for yet — pausing the account or closing it leaves a row here.
+          {state
+            ? "Nothing is paused and no deletion is scheduled — either one puts a row here the moment you ask for it."
+            : "The account hasn’t answered, so nothing here can claim to be in force."}
         </p>
       )}
 
@@ -157,23 +155,45 @@ export default function AccountHistoryPage() {
   );
 }
 
-/* ── One row of the log ───────────────────────────────────────────
-   A pause or a close has nowhere else to be, so its own line carries the
-   whole story. Appeals live with the account now — see the Appeals list. */
+/* ── What the account says is in force ──────────────────────────
+   The lifecycle row is the only record a pause or a scheduled close has, so
+   this list can't claim a deactivation that was already signed out of, nor a
+   deletion called off on another device. Appeals come from the account too —
+   see the Appeals list below. */
 
-function RequestRow({ row }: { row: AccountRequest }) {
-  const label = OUTCOME_LABEL[row.outcome];
-  const tone = OUTCOME_TONE[row.outcome];
-  const when = `${formatStamp(row.at)} · ${ago(row.at)}`;
-  const closed = row.closedAt ? ` · closed ${formatStamp(row.closedAt)}` : "";
+type ForceRow = { title: string; sub: string; right: string };
 
-  return (
-    <StaticRow
-      title={KIND_LABEL[row.kind]}
-      sub={`${when}${closed} — ${OUTCOME_SENTENCE[row.outcome]}`}
-      right={<span className={tone}>{label}</span>}
-    />
-  );
+function inForce(state: AccountState): ForceRow[] {
+  const rows: ForceRow[] = [];
+  if (state.deactivated) {
+    const at = state.deactivatedAt ? Date.parse(state.deactivatedAt) : null;
+    rows.push({
+      title: "Deactivation",
+      sub: [
+        at ? `Paused ${formatStamp(at)} · ${ago(at)}` : "Paused",
+        state.deactivatedReason ? `“${state.deactivatedReason}”` : null,
+        "Signing back in is the only undo",
+      ]
+        .filter(Boolean)
+        .join(" — "),
+      right: "In force",
+    });
+  }
+  if (state.deletionPending) {
+    const at = state.deletionFinalAt ? Date.parse(state.deletionFinalAt) : null;
+    rows.push({
+      title: "Account deletion",
+      sub: [
+        at ? `Closes ${formatStamp(at)}` : "Scheduled",
+        state.refCode ? `Ref ${state.refCode}` : null,
+        "Cancelled by signing in and calling it off",
+      ]
+        .filter(Boolean)
+        .join(" — "),
+      right: "In force",
+    });
+  }
+  return rows;
 }
 
 /* ── An appeal, as the account holds it ─────────────────────────

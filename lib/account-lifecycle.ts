@@ -21,7 +21,11 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { apiJson, apiSend } from "@/lib/api";
-import { ACCOUNT_EVENT } from "@/lib/account-history";
+
+/** The bus every account-state change is announced on. The gate, the status
+    screens and the account's request rows all repaint from it, so a change
+    made on one screen reaches the others without a reload. */
+export const ACCOUNT_EVENT = "tirbeo:account-state";
 
 export type Connection = {
   id: string;
@@ -66,8 +70,43 @@ export type AccountState = {
   connections: Connection[];
 };
 
+/* ── The snapshot this device keeps ──────────────────────────────
+   The gate is presentation: every door behind it is enforced by the brain's
+   own status gate, so the settings shell has no reason to wait for a round
+   trip before it decides what to paint. The last answer is kept briefly and
+   a reload paints from it while the fresh read is in the air — which is the
+   difference between a page that opens and a page that spins.
+
+   Briefly, and per device, and dropped on sign-out (see `endSession`): the
+   snapshot names an account's state, its reason and its dates, and none of
+   that belongs to whoever sits down at this browser next. */
+const SNAPSHOT_STORE = "tirbeo:account-state";
+const SNAPSHOT_TTL = 5 * 60_000;
+
+function readSnapshot(): AccountState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SNAPSHOT_STORE);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as { state?: AccountState; at?: number };
+    if (!saved?.state || typeof saved.at !== "number" || Date.now() - saved.at > SNAPSHOT_TTL) return null;
+    return saved.state;
+  } catch {
+    return null;
+  }
+}
+
+function writeSnapshot(state: AccountState): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SNAPSHOT_STORE, JSON.stringify({ state, at: Date.now() }));
+  } catch {
+    /* private mode or a full quota — the read still lands in memory */
+  }
+}
+
 /** The last snapshot read from the brain, shared by every reader. */
-let cached: AccountState | null = null;
+let cached: AccountState | null = readSnapshot();
 let loadedOnce = false;
 /** The read that answered last time did not answer now. A gate that treats
     "the brain is unreachable" as "the account is open" hands a closed account
@@ -81,6 +120,23 @@ function notify(): void {
 
 export function getAccountState(): AccountState | null {
   return cached;
+}
+
+/** This browser has stopped holding that account — signed out, or switched to
+    another one. The bag is wiped by `clearAccountTraces`, and the copy in
+    memory goes with it: leaving it here would paint one account's state,
+    reason and dates over whoever signs in next. */
+export function forgetAccountState(): void {
+  cached = null;
+  loadedOnce = false;
+  failed = false;
+  inflight = null;
+}
+
+/** Whether this browser holds any answer at all, fresh or kept. The gate
+    paints from it; `accountStateLoaded` says whether it is this visit's. */
+export function accountStateKnown(): boolean {
+  return cached !== null;
 }
 
 /** Whether the brain has answered the account-state read at least once.
@@ -105,6 +161,7 @@ export function loadAccountState(): Promise<AccountState | null> {
     try {
       cached = await apiJson<AccountState>("/api/user/account-state");
       failed = false;
+      writeSnapshot(cached);
     } catch {
       /* Keep the last known state rather than flash the account open. */
       failed = true;

@@ -179,11 +179,6 @@ export function useLanguage() {
   return { id, lang: langFor(id), choose };
 }
 
-/** The name a human would recognise, for anywhere the code has to be shown. */
-export function languageName(id: string): string {
-  return langFor(id).endonym;
-}
-
 /** Inlined in <head> so the language is right on the very first paint. */
 export const LANGUAGE_BOOT = `(function(){try{var v=JSON.parse(localStorage.getItem(${JSON.stringify(
   LANGUAGE_KEY,

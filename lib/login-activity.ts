@@ -335,14 +335,6 @@ export async function clearAnswer(id: string): Promise<ActivityEvent[]> {
   );
 }
 
-/** Where an answer lives, in the page's own words. Nothing is claimed to be on
-    the account that isn't. */
-export function answerKeptLabel(event: ActivityEvent): string {
-  return event.reviewKept === "account"
-    ? "The account has your answer."
-    : "Kept on this device only — the sign-in ledger has nowhere to hold a review.";
-}
-
 /** The sign-out-everywhere you just performed is a real ledger row
     (`sessions.revoked_all`), so this only re-reads: nothing is written down
     here that the account did not record itself. */

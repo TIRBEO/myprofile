@@ -13,7 +13,7 @@
  */
 
 import { ProfileCache } from "./cache";
-import { loadConfig, type ApiConfig } from "./config";
+import { loadConfig } from "./config";
 import { createIdentityResolver } from "./session";
 import { lookupSessionCookie } from "./transport";
 
@@ -27,7 +27,3 @@ export function getCache(): ProfileCache<Record<string, unknown>> {
 /** No config needed to exist — only to answer, which happens inside the
     transport. So this one is safe to build eagerly. */
 export const resolveIdentity = createIdentityResolver(lookupSessionCookie);
-
-export function getConfig(): ApiConfig {
-  return loadConfig();
-}

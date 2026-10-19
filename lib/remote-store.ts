@@ -170,22 +170,6 @@ export function pushSetting<T>(key: string, value: T): void {
   persist(key, value);
 }
 
-/** Whether the store already holds a value for `key` — the account bag, the
-    local mirror, or a legacy per-store slot. Lets a caller tell "nothing saved
-    yet" from "saved, and it happens to be empty" (which a default-only read
-    can't, since both resolve to the default). */
-export function hasStored(key: string): boolean {
-  if (Object.prototype.hasOwnProperty.call(bag ?? readMirror(), key)) return true;
-  if (typeof window !== "undefined") {
-    try {
-      if (window.localStorage.getItem(key) != null) return true;
-    } catch {
-      /* unreadable slot — treat as absent */
-    }
-  }
-  return false;
-}
-
 const adopted = new Set<string>();
 
 /** One-time adoption of a value a store kept in a raw localStorage slot before
@@ -312,8 +296,4 @@ export function subscribeSettings(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
-}
-
-export function isSettingsLoaded(): boolean {
-  return loaded;
 }

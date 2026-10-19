@@ -15,7 +15,6 @@ import {
   SheetGroup,
   StaticRow,
 } from "@/components/settings-shell";
-import { REASONS } from "@/lib/deactivate";
 import { GRACE_DAYS } from "@/lib/delete-account";
 import { formatStamp } from "@/lib/dates";
 import { trackError, trackEvent } from "@/lib/telemetry";
@@ -52,6 +51,15 @@ const KEEP = [
 /** The one reason with room for more than a sentence. */
 const OTHER = "Something else";
 const NOTE_MAX = 240;
+
+const REASONS = [
+  "I'm taking a break from Tirbeo",
+  "I have too many other things to do",
+  "I'm not seeing anything I like",
+  "I saw too much content I don't like",
+  "My posts aren't getting seen",
+  OTHER,
+];
 
 export default function DeactivatePage() {
   const { state, loading } = useAccountState();

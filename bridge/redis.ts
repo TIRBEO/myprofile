@@ -65,9 +65,6 @@ if (!g2.__myprofileRedisPing && typeof process !== "undefined" && !process.env.V
   g2.__myprofileRedisPing.unref?.();
 }
 
-/** How long a negative (missing-key) answer is trusted before asking again. */
-export const NEGATIVE_TTL_MS = 15_000;
-
 /** The main API's own key names — read, never written. */
 export const SESSION_STATE_KEY = (sid: string) => `auth:session:${sid}`;
 export const SESSION_IDENTITY_KEY = (sid: string) => `session:cache:${sid}`;

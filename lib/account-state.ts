@@ -23,7 +23,14 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 import { useSyncExternalStore, useEffect } from "react";
-import { accountStateFailed, accountStateLoaded, getAccountState, loadAccountState } from "@/lib/account-lifecycle";
+import {
+  ACCOUNT_EVENT,
+  accountStateFailed,
+  accountStateKnown,
+  accountStateLoaded,
+  getAccountState,
+  loadAccountState,
+} from "@/lib/account-lifecycle";
 import {
   loadAccountChecks,
   loadAppeals,
@@ -32,7 +39,6 @@ import {
   type StatusItem,
   type StatusSection,
 } from "@/lib/account-status";
-import { ACCOUNT_EVENT } from "@/lib/account-history";
 import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
 
 export type LockKind =
@@ -228,8 +234,8 @@ export function useWelcome(): Welcome | null {
    the news that it changed — live in one place, which is why the gate and
    the page it shows can never end up disagreeing.                    */
 
-/** Fired by anything that starts or ends a state, including the request
-    log in lib/account-history that every mutation already writes to. */
+/** Fired by anything that starts or ends a state — the same event the
+    lifecycle snapshot is announced on, so one news item repaints both. */
 export function accountStateChanged(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(ACCOUNT_EVENT));
@@ -262,11 +268,15 @@ function currentKey(): string {
     if (CACHE.size > 16) CACHE.clear();
     CACHE.set(key, lock);
   }
-  if (accountStateLoaded()) return key;
+  /* This browser has an answer — read now, or kept from the last visit — so
+     the gate paints from it and the fresh read revalidates underneath. Making
+     someone wait for a round trip before the shell can appear is the one thing
+     a presentation-only gate has no excuse for. */
+  if (accountStateLoaded() || accountStateKnown()) return key;
+  /* No answer at all, and the read did not come back: not "open", not "unknown
+     yet", but "we could not ask" — a gate that renders the dashboard here is a
+     gate that fails open. */
   if (key) return `?${key}`;
-  /* Nothing cached and the read did not answer: not "open", not "unknown yet",
-     but "we could not ask" — a gate that renders the dashboard here is a gate
-     that fails open. */
   return accountStateFailed() ? "!" : "?";
 }
 
@@ -275,8 +285,9 @@ function currentKey(): string {
     `lock === null` with `loading === false` means the account is open normally;
     `loading === true` means nobody knows yet and `failed === true` means the
     read did not answer — neither is the same as "open", and neither may render
-    the dashboard. The first mount pulls the real state so a page opened cold
-    reflects the account rather than an empty browser cache. */
+    the dashboard. Every mount revalidates against the brain; what it paints
+    while that is in the air is the state this browser last saw, so a returning
+    reader is not made to watch a spinner for a round trip. */
 export function useAccountLock(): { lock: Lock | null; loading: boolean; failed: boolean } {
   const snapshot = useSyncExternalStore(subscribe, currentKey, () => "");
   useEffect(() => {

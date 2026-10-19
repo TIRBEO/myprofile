@@ -62,8 +62,11 @@ type CodesReply = {
 
 type SettingsReply = { ok: boolean; settings: Record<string, unknown> };
 
-/** The two switches on the two-factor page, kept in the account's settings. */
-const PREF_KEYS = {
+/** The two switches on the two-factor page, kept in the account's settings.
+    The page writes them through the settings bag, so the names live here once
+    and both halves — the read below and the switches above — use the same key,
+    rather than two files agreeing by luck. */
+export const PREF_KEYS = {
   requireForActions: "twoFactorRequireForActions",
   alertSuspicious: "twoFactorAlertSuspicious",
 } as const;
@@ -94,21 +97,6 @@ export async function readTwoFactor(): Promise<TwoFactorState> {
       })),
     },
   };
-}
-
-/** One switch at a time, so a row that fails reverts on its own. */
-export async function saveTwoFactorPrefs(
-  next: Partial<Pick<TwoFactorState, "requireForActions" | "alertSuspicious">>,
-): Promise<void> {
-  const body: Record<string, unknown> = {};
-  if (next.requireForActions !== undefined) body[PREF_KEYS.requireForActions] = next.requireForActions;
-  if (next.alertSuspicious !== undefined) body[PREF_KEYS.alertSuspicious] = next.alertSuspicious;
-  if (!Object.keys(body).length) return;
-  await apiSend("/api/settings", {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ settings: body }),
-  });
 }
 
 /** Step one of turning it on. Returns the provisioning URI the QR carries. */

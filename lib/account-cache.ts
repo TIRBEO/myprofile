@@ -1,5 +1,7 @@
 "use client";
 
+import { ACCOUNT_EVENT, forgetAccountState } from "@/lib/account-lifecycle";
+
 /* ═══════════════════════════════════════════════════════════════════
    One account's traces, gone when the account is
 
@@ -32,8 +34,9 @@
 const ACCOUNT_TRACES = [
   "tirbeo:edit-profile", // the profile cache — the name and email every header reads
   "tirbeo:settings-bag", // the local mirror of the account's settings
-  "tirbeo:account-requests", // export and deletion requests raised from here
-  "tirbeo:account-deactivation", // the "you paused this" record
+  "tirbeo:account-requests", // the retired per-device request log — the account keeps those rows itself
+  "tirbeo:account-deactivation", // the retired "you paused this" record — the account says it now
+  "tirbeo:account-state", // the lifecycle snapshot the settings gate paints from
   "tirbeo:account-status:appeals", // the account's appeals, as last read from the brain
   "tirbeo:account-status:checks", // the account's checks, as last read from the brain
   "tirbeo:account-status:skipped", // which notices were dismissed
@@ -71,7 +74,8 @@ export function clearAccountTraces(): void {
     }
   }
   // In-memory copies of the same data, held by the modules that read them.
-  for (const name of ["tirbeo:account-state", "tirbeo:profile", "tirbeo:session"]) {
+  forgetAccountState();
+  for (const name of [ACCOUNT_EVENT, "tirbeo:profile", "tirbeo:session"]) {
     try {
       window.dispatchEvent(new Event(name));
     } catch {
@@ -109,14 +113,4 @@ export function bindAccount(id: string | null | undefined): boolean {
     /* private mode — the wipe still happened for this session */
   }
   return true;
-}
-
-/** The account the local traces belong to, if any. */
-export function boundAccount(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(OWNER_KEY);
-  } catch {
-    return null;
-  }
 }

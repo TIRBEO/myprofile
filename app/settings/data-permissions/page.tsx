@@ -12,6 +12,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { DataUsagePrefs, readDataUsage, saveDataUsage } from "@/lib/data-usage";
 import { usePageRefresh } from "@/lib/page-refresh";
+import { noteAnalyticsCookiesConsent } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -154,6 +155,9 @@ export default function DataPermissionsPage() {
             // switches don't lie for the round trip — and the brain enforces
             // the same rule whatever this screen sends.
             if (await save(next ? { analyticsCookies: true } : { analyticsCookies: false, marketingCookies: false })) {
+              // The gate reads the stored answer once, so without this the
+              // events keep leaving the device until the page is reloaded.
+              noteAnalyticsCookiesConsent(next);
               if (next) toast.success("Analytics cookies on");
               else toast.error("Analytics cookies off — marketing cookies went with them, they run on this data");
             }

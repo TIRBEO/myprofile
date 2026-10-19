@@ -68,8 +68,6 @@ export type SessionEvent = {
   label: string;
 };
 
-export const DEVICE_ICON_KINDS: DeviceKind[] = ["computer", "phone", "tablet"];
-
 function newId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }

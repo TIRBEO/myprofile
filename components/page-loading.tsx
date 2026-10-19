@@ -43,26 +43,6 @@ export function RowsSkeleton({ count = 3, trailing = true }: { count?: number; t
   );
 }
 
-/** A section heading bar over a panel — the pair every list page draws. */
-export function SectionSkeleton({
-  count = 3,
-  trailing = true,
-  lead = false,
-}: {
-  count?: number;
-  trailing?: boolean;
-  /** The paragraph a page says before its first section. */
-  lead?: boolean;
-}) {
-  return (
-    <div className={lead ? undefined : "mt-9"}>
-      {lead ? <Skeleton className="mt-5 mb-1 h-[14px] w-[85%] rounded-full" /> : null}
-      <Skeleton className="mb-3 h-[20px] w-[140px] rounded-full" />
-      <RowsSkeleton count={count} trailing={trailing} />
-    </div>
-  );
-}
-
 /** Two stacked bars shaped like a toggle/switch row, for pages whose rows
     carry controls rather than values. */
 export function ToggleRowsSkeleton({ count = 3 }: { count?: number }) {

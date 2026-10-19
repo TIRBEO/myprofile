@@ -482,14 +482,6 @@ export const PROFILE_EVENT = "tirbeo:profile";
     listens for this and moves the reader to the accounts login. */
 export const SESSION_EXPIRED_EVENT = "tirbeo:session-expired";
 
-/** "Soham Dhitle" → "Soham D." — what fits beside an avatar without
-    pushing the rest of the row out. */
-export function shortName(name: string): string {
-  const parts = (name ?? "").trim().split(/\s+/);
-  if (parts.length < 2) return name.trim();
-  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
-}
-
 /* One server reconciliation per page load, shared by every component that
     mounts `useProfile` — not one fetch each. The first caller starts it;
     the rest await the same promise. A second load is only paid after the

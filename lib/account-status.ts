@@ -1,7 +1,7 @@
 "use client";
 
 import { apiJson } from "@/lib/api";
-import { ACCOUNT_EVENT, openRequest, type RequestKind } from "@/lib/account-history";
+import { ACCOUNT_EVENT } from "@/lib/account-lifecycle";
 
 /* ═══════════════════════════════════════════════════════════════════
    Account status — the real checks, from the account
@@ -352,9 +352,5 @@ export async function appeal(restrictionId: string, note: string): Promise<Appea
     decision: (res.appeal.decision ?? "pending") as Appeal["decision"],
   };
   writeAppealRows([row, ...readAppealRows().filter((a) => a.id !== row.id)]);
-  /* The brain names the decision it attached the filing to; when the caller
-     didn't know it (a banned/suspended screen appeals "the live decision"),
-     that returned id is the one to log against, not the empty string sent. */
-  openRequest(res.appeal.restrictionId || restrictionId, "appeal" satisfies RequestKind);
   return row;
 }

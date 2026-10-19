@@ -244,10 +244,6 @@ export function titleFor(pathname: string): string {
   return navItem(pathname)?.label ?? SUB_ROUTES.get(pathname) ?? "Settings";
 }
 
-export function descriptionFor(pathname: string): string {
-  return navItem(pathname)?.description ?? "";
-}
-
 /* ── Where the mobile back chevron goes ───────────────────────────
    Every page is one tap under the settings index, so the answer is
    usually /settings — except the index itself, and pages reached from
