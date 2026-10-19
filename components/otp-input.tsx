@@ -56,7 +56,7 @@ export function OtpInput({
           maxLength={1}
           autoFocus={i === 0}
           aria-label={`Digit ${i + 1}`}
-          className="h-14 min-w-0 flex-1 rounded-[14px] border border-border bg-field text-center text-[21px] font-semibold text-fg outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-placeholder hover:bg-field-hover focus:border-accent-solid focus:bg-field-focus focus:shadow-[0_0_0_3px_var(--accent-soft-ring)]"
+          className="h-14 min-w-0 flex-1 rounded-lg border border-border bg-field text-center text-[21px] font-semibold text-fg outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-placeholder hover:border-border-strong hover:bg-field-hover focus:border-accent-solid focus:bg-field-focus focus:shadow-[0_0_0_3px_var(--accent-soft-ring)]"
         />
       ))}
     </div>

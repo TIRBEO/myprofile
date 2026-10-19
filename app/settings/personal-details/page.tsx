@@ -394,7 +394,6 @@ export default function PersonalDetailsPage() {
         ))}
         <Button
           size="sm"
-          className="rounded-full px-4"
           disabled={full}
           onClick={() => {
             if (full) {

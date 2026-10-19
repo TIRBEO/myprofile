@@ -87,6 +87,8 @@
   --fill: rgba(120, 120, 128, 0.24);
   --fill-hover: rgba(120, 120, 128, 0.34);
   --fill-press: rgba(120, 120, 128, 0.42);
+  --btn-disabled-bg: rgba(255, 255, 255, 0.12);
+  --btn-disabled-fg: rgba(255, 255, 255, 0.45);
   --hairline: #38383a;
   --glass: rgba(28, 28, 30, 0.85);
   --glass-2: rgba(28, 28, 30, 0.94);
@@ -125,8 +127,10 @@
   --text-3: #5d5d66;
   --text-4: #6e6e76;
   --placeholder: #6e6e76;
-  --border: #eaeaea;
-  --border-strong: #d1d1d6;
+  /* Landing's values: a border-only plate needs an edge that actually reads
+     against the white — #eaeaea vanished once the plate shadow came off. */
+  --border: #d1d1d6;
+  --border-strong: #c6c6c8;
   --divider: #c6c6c8;
   --hover: #ececf1;
   --accent: #007aff;
@@ -166,6 +170,8 @@
   --fill: rgba(120, 120, 128, 0.16);
   --fill-hover: rgba(120, 120, 128, 0.24);
   --fill-press: rgba(120, 120, 128, 0.32);
+  --btn-disabled-bg: rgba(18, 19, 22, 0.08);
+  --btn-disabled-fg: rgba(18, 19, 22, 0.42);
   --hairline: #c6c6c8;
   --glass: rgba(255, 255, 255, 0.86);
   --glass-2: rgba(255, 255, 255, 0.95);
@@ -234,11 +240,13 @@
   --color-glass-3: var(--glass-3);
   --color-ambient: var(--ambient);
   --color-accent-press: var(--accent-press);
-  --radius-sm: 6px;
+  /* Landing's radius ladder (docs/design/apple-tokens.css): 14px rows-in-card,
+     17px cards/fields, 20px sheets/large plates. */
+  --radius-sm: 8px;
   --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-2xl: 24px;
+  --radius-lg: 14px;
+  --radius-xl: 17px;
+  --radius-2xl: 20px;
   --animate-fade-in: fade-in 180ms ease-out both;
   --animate-fade-out: fade-out 200ms ease-in both;
   --animate-scale-in: scale-in 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
@@ -611,11 +619,155 @@ input[type="number"]::-webkit-outer-spin-button {
   -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
 
-/* The landing/accounts card. Every settings section is one raised plate on
-   the grouped canvas: `--card` above `--bg`, a hairline edge and the same
-   soft landing shadow the auth card uses. 20px is that card's desktop
-   corner, and 14px is the field corner cut inside it, so a group and the
-   control in it are one family rather than two.
+/* ── Buttons ─────────────────────────────────────────────────────────
+   Ported verbatim from the landing site (apps/landing/app/globals.css,
+   "Buttons" block) so the two apps are one language: the pill the account
+   surfaces use, with the fill carrying the meaning. `--accent-solid` rather
+   than `--accent` for the primary — systemBlue under white text is 3.65:1,
+   which fails AA. The secondary is filled grey with an accent label, never
+   an outline. `.btn-danger` is this app's addition in the same family —
+   Apple draws destructive fills in systemRed, and delete-account and
+   deactivate need one. Unlayered on purpose, so it wins over stray
+   utilities and a button cannot accidentally re-shape itself at a call
+   site — which also makes leftover `px-*`/`text-*`/`h-*` on a `btn`
+   element dead code; strip them at the call site rather than "fixing"
+   them here.
+   ───────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.btn:active {
+  transform: scale(0.995);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+}
+
+/* A disabled fill is not an enabled one seen through glass — iOS mutes the
+   plate and the label. Half-transparent blue reads as "loading", not "off". */
+.btn-primary:disabled {
+  background: var(--btn-disabled-bg);
+  color: var(--btn-disabled-fg);
+}
+
+.btn-secondary:disabled,
+.btn-quiet:disabled,
+.btn-danger:disabled {
+  opacity: 0.5;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  background: var(--accent-solid);
+  color: var(--accent-fg);
+}
+
+.btn-primary:hover {
+  background: var(--accent-solid-hover);
+}
+
+.btn-secondary {
+  background: var(--fill);
+  color: var(--accent-text);
+}
+
+.btn-secondary:hover {
+  background: var(--fill-hover);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.btn-danger:hover {
+  background: var(--danger-hover);
+}
+
+/* Nav and dismiss affordances: no fill until you hover. */
+.btn-quiet {
+  background: transparent;
+  color: var(--muted);
+}
+
+.btn-quiet:hover {
+  background: var(--fill);
+  color: var(--fg);
+}
+
+/* The compact size for toolbar and nav-bar actions. */
+.btn-sm {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13.5px;
+}
+
+/* This app's hero size (landing has none): the settings screens' single
+   confirmations are cut a touch taller than the everyday pill. */
+.btn-lg {
+  min-height: 48px;
+  padding: 0 24px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* A link is not a pill — the text action beside a field's label. It shares
+   only the button behaviour (press, disabled, focus), never the plate. */
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--text-3);
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.btn-link:hover {
+  color: var(--fg);
+}
+
+.btn-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The landing plate. Every settings section is one bordered plate on the
+   grouped canvas: `--card` above `--bg` with a 1px edge at landing's 17px
+   corner — border-only, no shadow, exactly how landing cuts its cards
+   (`rounded-xl border border-border bg-card`). 14px is the field corner cut
+   inside it, so a group and the control in it are one family rather than two.
 
    `--list-inset` is the row's own gutter, so the hairline between two rows
    starts where the row's text does. `.grouped` keeps its name — 29 files
@@ -624,8 +776,7 @@ input[type="number"]::-webkit-outer-spin-button {
 .grouped {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 20px;
-  box-shadow: var(--shadow-card);
+  border-radius: 17px;
   overflow: hidden;
 }
 
@@ -666,6 +817,10 @@ input[type="number"]::-webkit-outer-spin-button {
   color: var(--text-3);
 }
 
+/* The fleet's one loading shape (accounts and social carry the same recipe).
+   Deliberately no border-radius here: this rule is unlayered, so a radius on
+   it would beat every `rounded-*` utility at the call site — the consumer
+   owns its own corners, promise-of-layout and all. */
 .skeleton {
   background: linear-gradient(
     90deg,
@@ -675,7 +830,6 @@ input[type="number"]::-webkit-outer-spin-button {
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
-  border-radius: 0;
 }
 
 ::-webkit-scrollbar {
@@ -923,7 +1077,9 @@ body:has(.auth-dark) {
 }
 
 /* The landing/accounts card: a raised plate on the canvas, hairline edge,
-   20px corners and the soft landing shadow. The form is no longer bare. */
+   landing's 17px corner. It keeps `--shadow-card` where in-page plates lost
+   it — the card genuinely floats on the empty canvas, a bordered plate
+   inside a page does not. Not drift; deliberate. */
 .login-page .login-card {
   --u: min(
     clamp(13px, 0.45vw + 10.6px, 18px),
@@ -939,7 +1095,7 @@ body:has(.auth-dark) {
   font-size: var(--u);
   text-align: left;
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 17px;
   background: var(--card);
   box-shadow: var(--shadow-card);
 }

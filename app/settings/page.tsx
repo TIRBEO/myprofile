@@ -313,11 +313,11 @@ function AccountHeader({ profile }: { profile: ReturnType<typeof useProfile> }) 
   const t = useT();
   if (!profile) {
     return (
-      <div className="mx-4 mt-4 flex items-center gap-3.5 rounded-[20px] border border-border bg-card px-4 py-4 shadow-[var(--shadow-card)] sm:mx-6" aria-busy="true">
-        <span className="size-[58px] shrink-0 animate-pulse rounded-full bg-field" />
+      <div className="mx-4 mt-4 flex items-center gap-3.5 rounded-xl border border-border bg-card px-4 py-4 sm:mx-6" aria-busy="true">
+        <span className="skeleton size-[58px] shrink-0 rounded-full" />
         <span className="min-w-0 flex-1 space-y-2">
-          <span className="block h-[16px] w-[46%] animate-pulse rounded-full bg-field" />
-          <span className="block h-[13px] w-[30%] animate-pulse rounded-full bg-field/80" />
+          <span className="skeleton block h-[16px] w-[46%] rounded-full" />
+          <span className="skeleton block h-[13px] w-[30%] rounded-full" />
         </span>
       </div>
     );
@@ -327,7 +327,7 @@ function AccountHeader({ profile }: { profile: ReturnType<typeof useProfile> }) 
     <Link
       href="/settings/edit-profile"
       onClick={() => haptic("light")}
-      className="mx-4 mt-4 flex items-center gap-3.5 rounded-[20px] border border-border bg-card px-4 py-4 outline-none shadow-[var(--shadow-card)] transition-colors hover:bg-field-focus active:bg-field-focus sm:mx-6"
+      className="mx-4 mt-4 flex items-center gap-3.5 rounded-xl border border-border bg-card px-4 py-4 outline-none transition-colors hover:border-border-strong hover:bg-field-focus active:bg-field-focus sm:mx-6"
     >
       <ProfilePicture photo={profile.photo} seed={profile.username || profile.email} name={name} size={58} />
       <span className="min-w-0 flex-1">

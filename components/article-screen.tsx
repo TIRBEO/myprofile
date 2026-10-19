@@ -414,7 +414,7 @@ export default function ArticlePage() {
       {/* One bordered strip: the question and the two answers in the same
           container, so it reads as one thing being asked rather than a
           sentence with two unrelated buttons after it. */}
-      <div className="mt-10 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-card shadow-[var(--shadow-card)] px-4 py-3.5 sm:px-5">
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5 sm:px-5">
         <p className="text-[14.5px] font-medium">
           {vote
             ? vote === "yes"
@@ -740,7 +740,7 @@ function Figure({
             onZoom(paths, label, figure.caption ?? "");
           }}
           aria-label={`Open the picture for ${label} full size`}
-          className="block w-full overflow-hidden rounded-[20px] border border-border bg-card text-left outline-none shadow-[var(--shadow-card)] transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="block w-full overflow-hidden rounded-xl border border-border bg-card text-left outline-none transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           <span className="block max-h-[340px] overflow-hidden sm:max-h-[420px]">
             <img
@@ -788,7 +788,7 @@ function FigureViewer({
     >
       <figure
         onClick={(event) => event.stopPropagation()}
-        className="max-h-full w-full max-w-[860px] overflow-auto rounded-[20px] border border-border bg-card p-3 shadow-[var(--shadow-pop)]"
+        className="max-h-full w-full max-w-[860px] overflow-auto rounded-2xl border border-border bg-card p-3 shadow-[var(--shadow-pop)]"
       >
         {/* The same single rule as the step: the palette you're reading in. */}
         {scheme ? (

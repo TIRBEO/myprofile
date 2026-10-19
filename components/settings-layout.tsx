@@ -360,7 +360,7 @@ function SideRail({
 }) {
   const t = useT();
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[22rem] flex-col border-r border-border bg-rail backdrop-blur-[20px] backdrop-saturate-[1.8] lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[22rem] flex-col border-r border-hairline bg-rail backdrop-blur-[20px] backdrop-saturate-[1.8] lg:flex">
       <div className="px-5 pt-7 pb-4">
         <Wordmark />
         <AccountChip />
@@ -383,7 +383,7 @@ function SideRail({
         <button
           type="button"
           onClick={onSignOut}
-          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-5 text-[15px] font-semibold tracking-[-0.01em] text-danger-text outline-none transition-colors hover:bg-fill active:bg-fill-press"
+          className="btn btn-block text-danger-text transition-colors hover:bg-fill active:bg-fill-press"
         >
           <LogOut className="size-[16px] shrink-0" strokeWidth={2.2} />
           {t("Log out")}
@@ -394,10 +394,13 @@ function SideRail({
 }
 
 function Wordmark() {
+  /* Landing's wordmark is text at its nav weight — semibold, tracking-tight,
+     one step under the loudest thing on the page. "MyProfile" rides beside it
+     at a quarter off, naming the surface without competing with the brand. */
   return (
     <span className="flex items-baseline gap-2 px-1 leading-none tracking-tight">
-      <span className="text-[24px] leading-none font-extrabold tracking-[-0.03em]">Tirbeo</span>
-      <span className="text-[24px] leading-none font-bold tracking-[-0.02em] text-fg/45">MyProfile</span>
+      <span className="text-[19px] font-semibold tracking-[-0.02em]">Tirbeo</span>
+      <span className="text-[19px] font-medium tracking-[-0.02em] text-fg/40">MyProfile</span>
     </span>
   );
 }
@@ -413,10 +416,10 @@ function AccountChip() {
   if (!profile) {
     return (
       <div className="mt-5 flex items-center gap-3 px-1" aria-busy="true">
-        <span className="size-10 shrink-0 animate-pulse rounded-full bg-field" />
+        <span className="skeleton size-10 shrink-0 rounded-full" />
         <span className="min-w-0 flex-1 space-y-2">
-          <span className="block h-[13px] w-[55%] animate-pulse rounded-full bg-field" />
-          <span className="block h-[11px] w-[70%] animate-pulse rounded-full bg-field/70" />
+          <span className="skeleton block h-[13px] w-[55%] rounded-full" />
+          <span className="skeleton block h-[11px] w-[70%] rounded-full" />
         </span>
       </div>
     );
@@ -428,7 +431,7 @@ function AccountChip() {
       href="/settings/edit-profile"
       aria-label={`${role}: ${name}`}
       onClick={() => haptic("light")}
-      className="mt-5 flex w-full items-center gap-3 rounded-xl px-1 py-1.5 outline-none transition-colors hover:bg-hover/60 active:bg-hover"
+      className="mt-5 flex w-full items-center gap-3 rounded-xl px-1 py-1.5 outline-none transition-colors hover:bg-fill active:bg-fill-hover"
     >
       <ProfilePicture
         photo={profile.photo}
@@ -558,14 +561,14 @@ function NavGroups({ query, onNavigate }: { query: string; onNavigate?: () => vo
                   }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex min-h-10 items-center gap-3 rounded-lg px-3 text-[14.5px] outline-none transition-colors",
+                    "flex min-h-10 items-center gap-3 rounded-full px-3.5 text-[14.5px] outline-none transition-colors",
                     active
-                      ? "bg-field font-semibold text-fg"
-                      : "font-medium text-text-2 hover:bg-hover active:bg-field-focus",
+                      ? "bg-fill font-semibold text-accent-text"
+                      : "font-medium text-text-2 hover:bg-fill hover:text-fg active:bg-fill-press",
                   )}
                 >
                   <Icon
-                    className={cn("size-5 shrink-0", active ? "text-fg" : "text-text-4")}
+                    className={cn("size-5 shrink-0", active ? "text-accent-text" : "text-text-4")}
                     strokeWidth={active ? 2.2 : 1.8}
                   />
                   <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>

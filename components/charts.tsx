@@ -142,7 +142,7 @@ export function Bars({
       >
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 w-[calc(100%/var(--cols))] rounded-xl bg-surface-2/70 transition-[left] duration-200 ease-out"
+          className="pointer-events-none absolute inset-y-0 w-[calc(100%/var(--cols))] rounded-lg bg-surface-2/70 transition-[left] duration-200 ease-out"
           style={{ left: `${(sel / points.length) * 100}%`, ["--cols" as string]: String(points.length) }}
         />
         {avg > 0 && avg < max ? (

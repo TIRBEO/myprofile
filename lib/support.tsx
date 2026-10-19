@@ -39,7 +39,7 @@ export function SupportPill({
   return (
     <a
       href={supportMailto(subject, lines)}
-      className="inline-flex min-h-12 w-full items-center justify-center gap-1.5 rounded-full bg-fill px-5 text-[15px] font-semibold text-accent-text transition-colors hover:bg-fill-hover sm:w-auto"
+      className="btn btn-secondary w-full sm:w-auto"
     >
       {label}
     </a>

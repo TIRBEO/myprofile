@@ -83,7 +83,7 @@ export function MapCard({ coords, label }: { coords: [number, number]; label: st
     );
     const tiles = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`;
     return (
-      <figure className="overflow-hidden rounded-[20px] border border-border bg-card shadow-[var(--shadow-card)]">
+      <figure className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="relative h-[220px] overflow-hidden sm:h-[260px]">
           <iframe
             src={tiles}
@@ -99,7 +99,7 @@ export function MapCard({ coords, label }: { coords: [number, number]; label: st
   }
 
   return (
-    <figure className="overflow-hidden rounded-[20px] border border-border bg-card shadow-[var(--shadow-card)]">
+    <figure className="overflow-hidden rounded-xl border border-border bg-card">
       <div
         ref={host}
         className="h-[220px] w-full sm:h-[260px]"

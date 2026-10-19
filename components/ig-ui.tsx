@@ -52,37 +52,32 @@ export function cn(...parts: (string | false | null | undefined)[]) {
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
 type ButtonSize = "sm" | "md" | "lg";
 
-/* The three fills, written once. `Button` names them by variant and the
-   page-ending action pills name them by tone, but they are the same skins —
-   spelling them out twice is how one gets tuned and the other left behind. */
+/* The fills, written once. They name the unlayered `.btn-*` classes in
+   globals.css (ported from the landing app) rather than spelling the shape
+   out as utilities — the recipe lives in one place, and a stray `px-*` at a
+   call site cannot re-shape a button. `Button` names them by variant and the
+   page-ending action pills name them by tone, but they are the same skins. */
 const FILL = {
-  /* The landing's filled action: the accessible accent-solid blue, never the
-     lighter system blue that fails contrast under white text. */
-  primary: "bg-accent-solid text-accent-fg hover:bg-accent-solid-hover active:bg-accent-solid-hover",
-  /* Apple's secondary is a filled grey, not an outlined one. The label has to
-     be the accent colour for that to read as a control: a grey pill with grey
-     words beside a blue one is indistinguishable from a disabled pair, and
-     the fill alone carries no "you can press this" at all. */
-  secondary: "bg-fill text-accent-text hover:bg-fill-hover active:bg-fill-press",
-  danger: "bg-danger text-accent-fg hover:bg-danger-hover active:brightness-95",
+  primary: "btn-primary",
+  secondary: "btn-secondary",
+  danger: "btn-danger",
 } as const;
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary: FILL.primary,
   secondary: FILL.secondary,
-  ghost: "text-text-3 hover:bg-hover hover:text-fg",
+  ghost: "btn-quiet",
   danger: FILL.danger,
-  link: "min-h-12 rounded-full px-2 text-[15px] font-semibold text-text-3 hover:text-fg",
+  /* The base class already names it for `link` — a link is not a pill, so it
+     carries no second fill. */
+  link: "",
 };
 
 /** Every action button in settings is built from these two, so a "Save" and a
     "Delete" can't drift apart in size, only in fill. Compact by design: the
     pill hugs its label on wide screens and only stretches to the column on a
     phone, the way iOS draws a confirmation action. */
-export const PILL_BASE =
-  "inline-flex min-h-[48px] w-full max-w-full sm:w-auto items-center justify-center gap-2 rounded-full px-5 py-2 " +
-  "text-center text-[15px] leading-snug font-semibold tracking-[-0.01em] outline-none transition " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+export const PILL_BASE = "btn w-full max-w-full sm:w-auto";
 
 export const PILL_FILL = {
   primary: FILL.primary,
@@ -94,21 +89,19 @@ export const PILL_FILL = {
   outline: FILL.secondary,
 } as const;
 
-/** A filled button that can't be used yet still has to read as accent-coloured, or as
-    red, rather than turning into a grey slab nobody can parse. */
-export const PILL_DISABLED = "pointer-events-none opacity-55";
+/** The disabled plate itself is CSS now (`.btn-primary:disabled` mutes like
+    iOS, the rest fade). This remains for the one case CSS can't reach: a
+    disabled pill that is a Link, not a button. */
+export const PILL_DISABLED = "pointer-events-none";
 
 /** The sheet's two footer buttons: one skin, two fills. A confirm that is a
     pixel taller than the Cancel beside it is only ever noticed side by side. */
-const SHEET_ACTION =
-  "flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-full px-4 py-2 " +
-  "text-[15px] font-semibold tracking-[-0.01em] outline-none transition " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const SHEET_ACTION = "btn flex-1 max-sm:w-full";
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "h-12 rounded-full px-5 text-[14px] gap-2",
-  md: "h-[48px] rounded-full px-6 text-[15px] gap-2",
-  lg: "h-[52px] rounded-full px-7 text-[15px] gap-2",
+  sm: "btn-sm",
+  md: "",
+  lg: "btn-lg",
 };
 
 export function Button({
@@ -134,12 +127,9 @@ export function Button({
       type={rest.type ?? "button"}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex touch-manipulation items-center justify-center font-semibold tracking-[-0.01em] whitespace-nowrap",
-        "transition-[filter,background-color,opacity] duration-150 active:scale-[0.995]",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-        "disabled:pointer-events-none disabled:opacity-45",
-        variant === "link" ? "text-[14px] font-medium" : BUTTON_SIZE[size],
+        variant === "link" ? "btn-link" : "btn touch-manipulation",
         BUTTON_VARIANT[variant],
+        BUTTON_SIZE[size],
         block && "w-full",
         className,
       )}
@@ -234,15 +224,15 @@ export function Segmented<T extends string>({
 
 /* ── Form controls ──────────────────────────────────────────────── */
 
-/* The accounts/landing field: a 48px plate with a hairline that turns accent
-   on focus, plus the landing's soft focus ring. 14px is the field corner the
-   accounts card uses, so a control inside a 20px card is the same family
+/* The accounts/landing field: a 48px plate whose hairline strengthens on
+   hover and turns accent on focus, plus the soft focus ring. `rounded-lg` is
+   the 14px field corner, so a control inside a 17px plate is the same family
    rather than a slightly rounder rectangle dropped on top. */
 const CONTROL =
-  "w-full rounded-[14px] border border-border bg-field px-4 text-[16px] text-fg outline-none " +
+  "w-full rounded-lg border border-border bg-field px-4 text-[16px] text-fg outline-none " +
   "placeholder:text-placeholder " +
   "transition-[border-color,box-shadow,background-color] duration-150 " +
-  "hover:bg-field-hover " +
+  "hover:border-border-strong hover:bg-field-hover " +
   "focus:border-ig-hover focus:bg-field-focus " +
   "focus:shadow-[0_0_0_3px_var(--accent-soft-ring)] focus:outline-none " +
   "disabled:opacity-50";
@@ -464,7 +454,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
       {icon ? (
-        <span className="mb-4 flex size-14 items-center justify-center rounded-[20px] border border-border bg-card text-text-4 shadow-[var(--shadow-card)]">
+        <span className="mb-4 flex size-14 items-center justify-center rounded-2xl border border-border bg-card text-text-4">
           {icon}
         </span>
       ) : null}
@@ -800,9 +790,9 @@ export function Sheet({
                 (closing
                   ? "animate-sheet-down sm:animate-scale-out"
                   : "animate-sheet-up sm:animate-scale-in"),
-              "rounded-t-[20px] border border-border bg-card",
-              "shadow-[0_-30px_90px_-20px_rgb(0_0_0/0.7)]",
-              "sm:rounded-[20px] sm:shadow-[var(--shadow-pop)]",
+              "rounded-t-2xl border border-border bg-card",
+              "shadow-[var(--shadow-sheet)]",
+              "sm:rounded-xl sm:shadow-[var(--shadow-pop)]",
               width === "lg" ? "sm:max-w-[560px]" : "sm:max-w-[420px]",
             )}
             style={{
@@ -828,7 +818,7 @@ export function Sheet({
               {...dragHandlers}
               aria-hidden
             >
-              <span className="h-1 w-12 rounded-full bg-fg/15" />
+              <span className="h-1 w-9 rounded-full bg-border-strong" />
             </div>
 
             {title || description ? (

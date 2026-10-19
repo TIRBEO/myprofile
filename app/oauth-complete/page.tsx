@@ -202,17 +202,15 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: "sm" | "md" | "lg";
 };
 
-const BUTTON_BASE =
-  "relative inline-flex w-full select-none items-center justify-center gap-2 overflow-hidden " +
-  "rounded-full font-semibold normal-case tracking-[-0.01em] whitespace-nowrap " +
-  "transition-[background-color,color,border-color,opacity,transform,box-shadow] duration-150 " +
-  "disabled:pointer-events-none";
+/* The shared `.btn` pill from globals (the landing recipe) — the auth card
+   and the settings app are one family, so this page names the classes instead
+   of spelling the shape a fourth time. */
+const BUTTON_BASE = "btn btn-block relative";
 
-/* The landing pill at every size — 48px, matching the rest of the app. */
 const BUTTON_SIZE: Record<"sm" | "md" | "lg", string> = {
-  sm: "h-12 px-5 text-[15px]",
-  md: "h-12 px-6 text-[15px]",
-  lg: "h-12 px-6 text-[15px]",
+  sm: "btn-sm",
+  md: "",
+  lg: "btn-lg",
 };
 
 /** Primary — the accounts `.login-cta` recipe: accounts-blue fill, darker on
@@ -236,15 +234,7 @@ function Button({
       className={cn(
         BUTTON_BASE,
         BUTTON_SIZE[size],
-        variant === "primary"
-          ? cn(
-              "bg-accent-solid text-accent-fg hover:bg-accent-solid-hover active:bg-accent-solid-hover",
-              "disabled:bg-surface-3 disabled:text-placeholder disabled:opacity-100 disabled:shadow-none",
-            )
-          : cn(
-              "bg-fill text-accent-text hover:bg-fill-hover active:bg-fill-press",
-              "disabled:text-text-4 disabled:opacity-100",
-            ),
+        variant === "primary" ? "btn-primary" : "btn-secondary",
         className,
       )}
       {...rest}
@@ -264,9 +254,7 @@ function TextAction({children, className, ...rest}: React.ButtonHTMLAttributes<H
       type="button"
       {...rest}
       className={cn(
-        "inline-flex min-h-12 w-full items-center justify-center gap-1.5 rounded-full px-1 text-[15px] font-semibold text-text-3",
-        "transition-colors hover:text-fg active:text-text-2",
-        "focus-visible:outline-none focus-visible:text-fg",
+        "btn-link w-full",
         className,
       )}
     >
@@ -308,7 +296,7 @@ function Field({label, hint, error, required, optional, children, className}: {
    accent-coloured on focus. Height and radius come from globals.css (.login-card input)
    so the plates are the same 58px/16px as the accounts sign-in form. */
 const CONTROL =
-  "w-full rounded-[14px] border border-border bg-field px-4 text-[16px] text-fg " +
+  "w-full rounded-lg border border-border bg-field px-4 text-[16px] text-fg " +
   "transition-[border-color,box-shadow,background-color] duration-150 " +
   "placeholder:text-placeholder " +
   "hover:bg-field-hover " +
@@ -555,18 +543,19 @@ function UsernameStatus({state, message}: {
   );
 }
 
-/** Skeleton loader while the pending data is fetched. */
+/** Skeleton loader while the pending data is fetched — the app's one
+    `.skeleton` shimmer, same as every settings page. */
 function PanelSkeleton() {
   return (
     <div className="space-y-6" aria-busy={true}>
       <div className="flex flex-col items-center gap-4">
-        <span className="size-28 animate-pulse rounded-full bg-field" />
-        <span className="block h-[18px] w-[60%] animate-pulse rounded bg-field" />
-        <span className="block h-[13px] w-[80%] animate-pulse rounded bg-field/60" />
+        <span className="skeleton size-28 rounded-full" />
+        <span className="skeleton block h-[18px] w-[60%] rounded" />
+        <span className="skeleton block h-[13px] w-[80%] rounded" />
       </div>
-      <span className="block h-[48px] animate-pulse rounded-2xl bg-field" />
-      <span className="block h-[48px] animate-pulse rounded-2xl bg-field" />
-      <span className="block h-[48px] animate-pulse rounded-2xl bg-field" />
+      <span className="skeleton block h-[48px] rounded-2xl" />
+      <span className="skeleton block h-[48px] rounded-2xl" />
+      <span className="skeleton block h-[48px] rounded-2xl" />
     </div>
   );
 }
@@ -628,7 +617,7 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
       {/* Panel — glass plate on a hairline */}
       <div
         className={cn(
-          "relative z-[91] flex w-full max-w-3xl flex-col overflow-hidden rounded-t-[22px] border border-hairline bg-glass-2 text-fg backdrop-blur-xl sm:max-w-3xl sm:rounded-[22px]",
+          "relative z-[91] flex w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-hairline bg-glass-2 text-fg backdrop-blur-xl sm:max-w-3xl sm:rounded-2xl",
           "shadow-[0_32px_100px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.07)]",
         )}
         onClick={(e) => e.stopPropagation()}
@@ -673,12 +662,7 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
           <button
             type="button"
             onClick={onClose}
-            className={cn(
-              BUTTON_BASE,
-              BUTTON_SIZE.md,
-              "bg-accent-solid text-accent-fg hover:bg-accent-solid-hover active:bg-accent-solid-hover",
-              "disabled:bg-surface-3 disabled:text-placeholder",
-            )}
+            className={cn(BUTTON_BASE, BUTTON_SIZE.md, "btn-primary")}
           >
             I understand
           </button>
@@ -1074,7 +1058,7 @@ function Complete() {
     return shell(
       <>
         {who ? (
-          <div className="flex items-center gap-3 rounded-[16px] border border-hairline bg-field p-3.5">
+          <div className="flex items-center gap-3 rounded-xl border border-hairline bg-field p-3.5">
             <ProfilePicture photo={who.photoUrl} seed={pending.email} name={who.name || undefined} size={48} />
             <div className="min-w-0 flex-1">
               <span className="block truncate text-[15px] font-semibold text-fg">

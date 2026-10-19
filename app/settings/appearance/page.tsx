@@ -102,7 +102,7 @@ function ThemeTile({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "flex min-w-0 flex-col gap-2 rounded-[20px] border-2 bg-card p-2 text-left shadow-[var(--shadow-card)] transition-colors sm:p-2.5",
+        "flex min-w-0 flex-col gap-2 rounded-xl border-2 bg-card p-2 text-left transition-colors sm:p-2.5",
         selected
           ? "border-accent"
           : "border-border hover:border-border-strong",
