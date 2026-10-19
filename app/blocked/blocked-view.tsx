@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Ban, Check, ChevronLeft, Copy, Hourglass, PauseCircle, Trash2 } from "lucide-react";
-import { Field, Input, Textarea } from "@/components/ig-ui";
+import { cn, Field, Input, Textarea } from "@/components/ig-ui";
+import { ProfilePicture } from "@/components/profile-picture";
 import { OtpInput } from "@/components/otp-input";
 import { Group, PillButton } from "@/components/settings-shell";
 import { Prose, StatementMark, StatementScreen, Value } from "@/components/statement";
@@ -124,6 +125,38 @@ function Mark({ kind }: { kind: Kind }) {
   );
 }
 
+/** The account's face with the decision's mark on it — shown once the
+    credential gate has proved who owns this screen, so the interruption
+    greets the person by their own picture rather than a bare status glyph. */
+function FaceMark({ kind, profile }: { kind: Kind; profile: { name: string | null; photo: string | null; username: string } }) {
+  const danger = kind === "banned" || kind === "deleted";
+  const glyph =
+    kind === "banned" ? <Ban /> :
+    kind === "deleted" ? <Trash2 /> :
+    kind === "deactivated" ? <PauseCircle /> :
+    <Hourglass />;
+  return (
+    <span className="relative inline-block">
+      <ProfilePicture
+        photo={profile.photo}
+        seed={profile.username}
+        name={profile.name ?? undefined}
+        size={92}
+        className="shadow-[0_0_0_1px_var(--border)]"
+      />
+      <span
+        aria-hidden
+        className={cn(
+          "absolute -right-1.5 -bottom-1.5 grid size-8 place-items-center rounded-full border-[3px] border-bg",
+          danger ? "bg-danger text-accent-fg" : "bg-surface-3 text-fg",
+        )}
+      >
+        {glyph}
+      </span>
+    </span>
+  );
+}
+
 /** The two kinds that can be ended from this screen, and the verb each one
     uses for the button that ends it. */
 const RECOVERY: Partial<Record<Kind, { action: "cancel-deletion" | "reactivate"; label: string }>> = {
@@ -142,6 +175,7 @@ export function BlockedView({
   reason,
   until,
   verified = true,
+  profile = null,
 }: {
   kind: Kind;
   eventId: string | null;
@@ -151,6 +185,9 @@ export function BlockedView({
       details that arrived in the URL are not repeated as fact. The recovery
       flow is unaffected — it authenticates with a code instead. */
   verified?: boolean;
+  /** The owning account, once the credential gate has proved it — its face
+      greets the person instead of a bare status glyph. */
+  profile?: { name: string | null; photo: string | null; username: string } | null;
 }) {
   const [copied, setCopied] = useState(false);
   /** Which inline flow is standing open. Both halves of the screen's advice —
@@ -218,7 +255,7 @@ export function BlockedView({
               ? `${kind === "suspended" ? "Under review until" : "Until"} ${formatStamp(untilAt!)}`
               : undefined
       }
-      mark={restored ? <RestoredMark /> : <Mark kind={kind} />}
+      mark={restored ? <RestoredMark /> : profile ? <FaceMark kind={kind} profile={profile} /> : <Mark kind={kind} />}
       avatar={false}
       blocks={[
         {

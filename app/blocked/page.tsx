@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { redirect } from "next/navigation";
-import { BlockedView, type Kind } from "./blocked-view";
+import { BlockedGate } from "./blocked-gate";
+import type { Kind } from "./blocked-view";
 
 /* ═══════════════════════════════════════════════════════════════════
    The interruption screen.
@@ -89,12 +90,12 @@ export default async function BlockedPage({
   }
 
   return (
-    <BlockedView
+    <BlockedGate
       kind={kind as Kind}
       eventId={(verified && eventId) || null}
       reason={(verified && reason) || null}
       until={(verified && until) || null}
-      verified={verified}
+      verifiedSignature={verified}
     />
   );
 }
