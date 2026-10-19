@@ -146,9 +146,65 @@ export function accountStateLoaded(): boolean {
   return loadedOnce;
 }
 
-/** The read failed and there is no snapshot to fall back on. */
+/** The read failed and there is nothing standing in for it.
+ *
+ *  A kept *lock* is not "nothing" — it is the conservative answer, and what it
+ *  paints is a lock screen. A kept *absence* of a lock is not an answer either:
+ *  it is the state of a visit that has not asked, and the person whose account
+ *  is closed is the one holding the browser that decides whether the question
+ *  gets through. So a failed read over a kept "open" counts as a failure here,
+ *  even though a value is in the cache, and the gate shows what it cannot
+ *  prove rather than what it can no longer check. */
 export function accountStateFailed(): boolean {
-  return loadedOnce && failed && cached === null;
+  if (!loadedOnce || !failed) return false;
+  return cached === null || cached.status === "active";
+}
+
+/* ── The read, and the clock on it ────────────────────────────────
+   The gate holds the whole settings shell behind this one answer, so the
+   read's worst case IS the reader's worst case. Two rules follow from that:
+
+   • Start it as early as the document allows. `app/layout.tsx` fires it from
+     a boot script, so the round trip is in the air while the bundle is still
+     downloading instead of after hydration — see `PREFETCH_GLOBAL`.
+   • Never wait for an answer that is not coming. The bridge aborts its own
+     upstream at PROFILE_TIMEOUT_MS (10s by default) and the browser's fetch
+     has no deadline of its own, so an unbounded read here is a 10-second
+     spinner at best and a permanently hanging one if a hop never returns.
+     A bounded read turns "stuck" into `CouldNotRead`, which offers Retry and
+     Sign out — both of which are actions. */
+const READ_TIMEOUT_MS = 6_000;
+
+/** The hand-off the boot script leaves behind: the read it already started. */
+const PREFETCH_GLOBAL = "__tirbeoAccountState";
+
+function takePrefetch(): Promise<AccountState | null> | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as Record<string, unknown>;
+  const pending = w[PREFETCH_GLOBAL] as Promise<AccountState | null> | undefined;
+  if (!pending) return null;
+  /* Taken once, and taken for good: a later call (after a write, or a Retry)
+     has to ask again for real, not re-read the answer the page came in with. */
+  delete w[PREFETCH_GLOBAL];
+  return pending;
+}
+
+function readSignal(): AbortSignal | undefined {
+  const factory = (globalThis.AbortSignal as { timeout?: (ms: number) => AbortSignal } | undefined)?.timeout;
+  return typeof factory === "function" ? factory.call(globalThis.AbortSignal, READ_TIMEOUT_MS) : undefined;
+}
+
+/** Stop waiting, whatever the request underneath is still doing. The signal
+    above normally kills the fetch too; this is the guarantee, and the fallback
+    for a runtime without `AbortSignal.timeout`. */
+function bounded<T>(read: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Account state read timed out")), READ_TIMEOUT_MS);
+    read.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
 }
 
 /** Pull the real state and republish it. Concurrent callers share one read —
@@ -159,7 +215,18 @@ export function loadAccountState(): Promise<AccountState | null> {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      cached = await apiJson<AccountState>("/api/user/account-state");
+      const prefetched = takePrefetch();
+      const state = await bounded(
+        prefetched ?? apiJson<AccountState>("/api/user/account-state", { signal: readSignal() }),
+      );
+      /* The boot script answers `null` for a 401, a 502 or a body it could not
+         read, and `apiJson` answers a shaped object. Neither is a fact about
+         the account, so neither may be stored as one: a gate that read an
+         empty answer here would paint the dashboard for an account it has
+         never actually heard about. Anything that is not a state is a failure,
+         and a failure is the `CouldNotRead` screen. */
+      if (!state || typeof state.status !== "string") throw new Error("Account state did not answer");
+      cached = state;
       failed = false;
       writeSnapshot(cached);
     } catch {

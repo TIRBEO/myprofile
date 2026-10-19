@@ -273,12 +273,13 @@ function currentKey(): string {
      the account can have been closed since that read, and painting the
      dashboard on that guess is exactly the frame this gate exists to prevent.
      So "open" only counts once this document has actually asked. */
-  if (key || accountStateLoaded()) return key;
+  if (key) return key;
   /* No answer at all, and the read did not come back: not "open", not "unknown
      yet", but "we could not ask" — a gate that renders the dashboard here is a
      gate that fails open. */
-  if (key) return `?${key}`;
-  return accountStateFailed() ? "!" : "?";
+  if (accountStateFailed()) return "!";
+  if (accountStateLoaded()) return "";
+  return "?";
 }
 
 /** The lock in force, and whether the account has been asked yet. Re-read

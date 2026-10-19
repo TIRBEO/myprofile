@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { ToastProvider } from "@/lib/use-toast";
 import { LANGUAGE_BOOT } from "@/lib/language";
 import { THEME_BOOT } from "@/lib/theme";
+import { ACCOUNT_STATE_BOOT } from "@/lib/account-prefetch";
 import { ThemeSync } from "@/components/theme-sync";
 import { LanguageProvider } from "@/components/language-provider";
 import { MachineTranslate } from "@/lib/machine-translate";
@@ -40,6 +41,11 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: LANGUAGE_BOOT }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+        {/* Third because it is the only one of the three that waits on the
+            network: it asks for the account's state now, while the bundle is
+            still coming down, so the settings gate is not sitting behind
+            hydration as well as a round trip. See lib/account-prefetch.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: ACCOUNT_STATE_BOOT }} />
       </head>
       <body>
         <ThemeSync />
