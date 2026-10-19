@@ -254,8 +254,6 @@
   --animate-sheet-up: sheet-up 340ms cubic-bezier(0.32, 0.72, 0, 1) both;
   --animate-sheet-down: sheet-down 280ms cubic-bezier(0.32, 0, 0.67, 0) both;
   --animate-drawer-in: drawer-in 300ms cubic-bezier(0.32, 0.72, 0, 1) both;
-  --animate-rise: rise 420ms cubic-bezier(0.32, 0.72, 0, 1) both;
-  --animate-shimmer: shimmer 1.6s linear infinite;
 }
 
 @layer base {
@@ -440,18 +438,6 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 }
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @keyframes shimmer {
   from {
     background-position: 200% 0;
@@ -515,7 +501,22 @@ input[type="number"]::-webkit-outer-spin-button {
   }
 }
 
-.animate-spin-slow {
+/* The fleet's one in-flight mark: a ring that takes the colour of the label
+   beside it and thickens with its own box, so it stays visible on a filled
+   button, a quiet pill and plain text alike — a fixed accent would vanish on
+   the accent. Call sites set --spinner-size for the box and never a size
+   utility; this rule is unlayered, so it would beat `size-*`. Under
+   prefers-reduced-motion the kill-switch stops the turn and the ring reads as
+   a static arc: still a waiting mark, never a spinning one. */
+.spinner {
+  display: inline-block;
+  flex: none;
+  inline-size: var(--spinner-size, 16px);
+  block-size: var(--spinner-size, 16px);
+  border: max(2px, calc(var(--spinner-size, 16px) / 8)) solid
+    color-mix(in srgb, currentColor 26%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
   animation: spin 700ms linear infinite;
 }
 

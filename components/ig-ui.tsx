@@ -2,6 +2,7 @@
 
 import type {
   ButtonHTMLAttributes,
+  CSSProperties,
   InputHTMLAttributes,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
@@ -23,7 +24,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Eye, EyeOff, Loader2, Search, X } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, Search, X } from "lucide-react";
 import { haptic } from "@/lib/haptics";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -134,7 +135,7 @@ export function Button({
         className,
       )}
     >
-      {loading ? <Loader2 className="size-4 animate-spin-slow" /> : icon}
+      {loading ? <Spinner size={16} /> : icon}
       {children}
     </button>
   );
@@ -543,6 +544,26 @@ export function SearchField({
 
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("skeleton", className)} />;
+}
+
+/** The fleet's one in-flight mark: a 2px ring that inherits the colour of the
+    label beside it, so it stays visible on a filled pill, a quiet one and
+    plain text alike (`.spinner` in globals.css — accounts, landing and social
+    carry the same recipe). `size` sets the box; the geometry is the CSS's. */
+export function Spinner({
+  size = 14,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("spinner", className)}
+      style={{ "--spinner-size": `${size}px` } as CSSProperties}
+      aria-hidden="true"
+    />
+  );
 }
 
 /* ── Sheet ──────────────────────────────────────────────────────── */
@@ -976,7 +997,7 @@ export function SheetActions({
           (disabled || loading) && PILL_DISABLED,
         )}
       >
-        {loading ? <Loader2 className="size-4 animate-spin-slow" /> : null}
+        {loading ? <Spinner size={16} /> : null}
         {confirmLabel}
       </button>
       <button
