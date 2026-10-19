@@ -26,7 +26,6 @@ import { useSyncExternalStore, useEffect } from "react";
 import {
   ACCOUNT_EVENT,
   accountStateFailed,
-  accountStateKnown,
   accountStateLoaded,
   getAccountState,
   loadAccountState,
@@ -268,11 +267,13 @@ function currentKey(): string {
     if (CACHE.size > 16) CACHE.clear();
     CACHE.set(key, lock);
   }
-  /* This browser has an answer — read now, or kept from the last visit — so
-     the gate paints from it and the fresh read revalidates underneath. Making
-     someone wait for a round trip before the shell can appear is the one thing
-     a presentation-only gate has no excuse for. */
-  if (accountStateLoaded() || accountStateKnown()) return key;
+  /* A lock carried over from the last visit paints at once: it is the
+     conservative answer, and the fresh read underneath can only confirm or
+     replace it with another lock. A carried-over *absence* of lock is not —
+     the account can have been closed since that read, and painting the
+     dashboard on that guess is exactly the frame this gate exists to prevent.
+     So "open" only counts once this document has actually asked. */
+  if (key || accountStateLoaded()) return key;
   /* No answer at all, and the read did not come back: not "open", not "unknown
      yet", but "we could not ask" — a gate that renders the dashboard here is a
      gate that fails open. */
@@ -289,7 +290,12 @@ function currentKey(): string {
     while that is in the air is the state this browser last saw, so a returning
     reader is not made to watch a spinner for a round trip. */
 export function useAccountLock(): { lock: Lock | null; loading: boolean; failed: boolean } {
-  const snapshot = useSyncExternalStore(subscribe, currentKey, () => "");
+  /* The server has never asked, so it answers "unknown" and the gate holds.
+     Every screen here is prerendered, so whatever this snapshot picks is the
+     first HTML a reader sees — and a closed account reading back its own rail,
+     panels and search box for the length of hydration is a glimpse all the
+     same, with no client code able to take it back. */
+  const snapshot = useSyncExternalStore(subscribe, currentKey, () => "?");
   useEffect(() => {
     void loadAccountState().then((state) => {
       /* A hard closure (banned / suspended / deleted) has nothing to enumerate
