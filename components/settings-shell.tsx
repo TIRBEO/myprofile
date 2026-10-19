@@ -269,13 +269,15 @@ function BackLink({ href }: { href: string }) {
 export function PageSkeleton({ title, sections = 1 }: { title: string; sections?: number }) {
   return (
     <SettingsPage title={title}>
-      <div className="mb-3 h-[68px] animate-pulse rounded-2xl bg-fg/[0.045] sm:h-[76px]" />
+      {/* The app's one waiting shape: the shimmer plate, not a pulse — same
+          gradient and speed as every row skeleton in page-loading. */}
+      <div className="skeleton mb-3 h-[68px] rounded-2xl sm:h-[76px]" />
       {Array.from({ length: sections }, (_, i) => (
         <div key={i}>
-          <div className="mt-10 mb-3 h-[20px] w-[140px] animate-pulse rounded-full bg-fg/[0.06]" />
+          <div className="skeleton mt-10 mb-3 h-[20px] w-[140px] rounded-full" />
           <div className="list-divide">
-            <div className="h-[52px] animate-pulse bg-fg/[0.04]" />
-            <div className="h-[52px] animate-pulse bg-fg/[0.03]" />
+            <div className="skeleton h-[52px] rounded-lg" />
+            <div className="skeleton h-[52px] rounded-lg" />
           </div>
         </div>
       ))}

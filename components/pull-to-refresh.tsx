@@ -146,7 +146,7 @@ export function PullToRefresh({
       <span className="mt-3 grid size-9 place-items-center rounded-full border border-border bg-surface shadow-[0_6px_18px_-8px_rgb(0_0_0/0.5)]">
         <svg
           viewBox="0 0 24 24"
-          className={cn("size-[18px] text-accent", busy && "motion-safe:animate-spin")}
+          className={cn("size-[18px] text-accent", busy && "motion-safe:animate-spin-slow")}
           style={busy ? undefined : { transform: `rotate(${progress * 300}deg)` }}
         >
           <path
