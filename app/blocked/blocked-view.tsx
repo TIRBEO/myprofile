@@ -141,11 +141,16 @@ export function BlockedView({
   eventId,
   reason,
   until,
+  verified = true,
 }: {
   kind: Kind;
   eventId: string | null;
   reason: string | null;
   until: string | null;
+  /** False when the hand-off link's signature could not be checked, so the
+      details that arrived in the URL are not repeated as fact. The recovery
+      flow is unaffected — it authenticates with a code instead. */
+  verified?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   /** Which inline flow is standing open. Both halves of the screen's advice —
@@ -220,6 +225,13 @@ export function BlockedView({
           label: "Why this happened",
           body: (
             <>
+              {!verified && (
+                <Prose className="text-fg">
+                  This link reached us without a signature we could check, so the details it
+                  carried are not repeated here. What sits below is what the account itself says
+                  once you have proved the address is yours.
+                </Prose>
+              )}
               <Prose>{copy.why}</Prose>
               <Prose>
                 {reason ? (
