@@ -70,6 +70,8 @@
   --autofill-fill: #3a3a3c;
   --ink: #ffffff;
   --ink-fg: #000000;
+  --shadow-ambient: 0 1px 2px rgb(0 0 0 / 45%), 0 10px 26px -18px rgb(0 0 0 / 60%);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 45%), 0 10px 26px -18px rgb(0 0 0 / 60%);
   --shadow-sheet: 0 -20px 60px -12px rgb(0 0 0 / 68%);
   --shadow-pop: 0 16px 44px -12px rgb(0 0 0 / 62%);
   /* Accounts-app aliases — identical values, shared naming so component
@@ -154,6 +156,8 @@
   --autofill-fill: #ececf1;
   --ink: #171717;
   --ink-fg: #ffffff;
+  --shadow-ambient: 0 1px 2px rgb(18 19 22 / 8%);
+  --shadow-card: 0 1px 2px rgb(18 19 22 / 7%), 0 14px 36px -20px rgb(18 19 22 / 20%);
   --shadow-sheet: 0 -20px 56px -12px rgb(18 19 22 / 26%), 0 2px 8px rgb(18 19 22 / 12%);
   --shadow-pop: 0 14px 36px -10px rgb(18 19 22 / 22%), 0 2px 6px rgb(18 19 22 / 10%);
   --field: #ffffff;
@@ -508,10 +512,10 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .tb-heading {
-  font-size: 30px;
-  font-weight: 800;
+  font-size: clamp(30px, 1vw + 26px, 36px);
+  font-weight: 700;
   line-height: 1.12;
-  letter-spacing: -.032em;
+  letter-spacing: -0.03em;
   text-align: center;
   text-wrap: balance;
   color: var(--fg);
@@ -529,7 +533,7 @@ input[type="number"]::-webkit-outer-spin-button {
   display: block;
   margin-bottom: 8px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-2);
 }
 
@@ -607,21 +611,21 @@ input[type="number"]::-webkit-outer-spin-button {
   -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
 
-/* Apple's grouped list. The plate is the only surface: no frame drawn around
-   it and nothing floating under it, because a border plus a 24px radius is
-   what made every section here read as a box sunk into a box rather than as
-   the page's own content. `--list-inset` is the row's own gutter, so the
-   hairline between two rows starts where the row's text does.
+/* The landing/accounts card. Every settings section is one raised plate on
+   the grouped canvas: `--card` above `--bg`, a hairline edge and the same
+   soft landing shadow the auth card uses. 20px is that card's desktop
+   corner, and 14px is the field corner cut inside it, so a group and the
+   control in it are one family rather than two.
 
-   17px is the canonical card radius — the same plate a field is cut from, so
-   a group and the control inside it are one family rather than two.
-
-   `.grouped` keeps its name — 29 files reach it through `Group`, three write
-   the class directly, and inventing a second synonym for one shape is how the
-   two drift apart later. */
+   `--list-inset` is the row's own gutter, so the hairline between two rows
+   starts where the row's text does. `.grouped` keeps its name — 29 files
+   reach it through `Group`, three write the class directly, and inventing a
+   second synonym for one shape is how the two drift apart later. */
 .grouped {
-  background: var(--surface);
-  border-radius: 17px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
@@ -918,7 +922,8 @@ body:has(.auth-dark) {
   background: var(--bg);
 }
 
-/* The form sits bare on the charcoal canvas — no container, no plate. */
+/* The landing/accounts card: a raised plate on the canvas, hairline edge,
+   20px corners and the soft landing shadow. The form is no longer bare. */
 .login-page .login-card {
   --u: min(
     clamp(13px, 0.45vw + 10.6px, 18px),
@@ -928,19 +933,19 @@ body:has(.auth-dark) {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(600px, 100%);
+  width: min(468px, 100%);
   margin: auto;
-  padding: 1.8em 1.5em 2.2em;
+  padding: 24px 20px 22px;
   font-size: var(--u);
   text-align: left;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
 }
 
 .login-page .login-card[data-wide="true"] {
-  width: min(640px, 100%);
+  width: min(560px, 100%);
 }
 
 /* The wordmark rides the top-left corner at every width. */
@@ -1073,23 +1078,23 @@ body:has(.auth-dark) {
 @media (max-width: 1279px) {
   .login-page .login-card {
     --u: 16px;
-    width: min(680px, 100%);
+    width: min(468px, 100%);
     margin: auto;
-    padding: 24px;
+    padding: 30px 30px 26px;
   }
 
   .login-page .login-card[data-wide='true'] {
-    width: min(680px, 100%);
+    width: min(560px, 100%);
   }
 
   .login-page .login-card .tb-heading {
-    font-size: 40px;
-    letter-spacing: -0.032em;
-    line-height: 1.1;
+    font-size: 32px;
+    letter-spacing: -0.03em;
+    line-height: 1.12;
   }
 
   .login-page .login-card .tb-sub {
-    font-size: 16.5px;
+    font-size: 15px;
   }
 
   .login-page .login-head {
@@ -1106,16 +1111,17 @@ body:has(.auth-dark) {
     margin-bottom: 10px;
   }
 
-  /* Fields and buttons share the PC plate size at every width. */
+  /* Fields and buttons share the accounts card sizes at every width. */
   .login-page .login-card input,
   .login-page .login-card select {
-    height: 58px;
-    border-radius: 999px;
+    height: 48px;
+    border-radius: 14px;
+    border-color: var(--border);
     font-size: 16px;
   }
 
   .login-page .login-card button[type='submit'] {
-    height: 58px;
+    height: 42px;
     border-radius: 999px;
   }
 
@@ -1128,12 +1134,12 @@ body:has(.auth-dark) {
 @media (max-width: 639px) {
   .login-page .login-card {
     --u: 12.5px;
-    padding: 1.15em 1.1em 1.5em;
+    padding: 24px 20px 22px;
   }
 
   .login-page .login-card .tb-heading {
-    font-size: 1.72em;
-    letter-spacing: -0.026em;
+    font-size: 30px;
+    letter-spacing: -0.03em;
   }
 
   .login-page .login-head {
@@ -1167,8 +1173,8 @@ body:has(.auth-dark) {
 
   .login-page .login-card {
     --u: 16px;
-    width: min(680px, 92%);
-    max-width: 680px;
+    width: min(468px, 92%);
+    max-width: 468px;
     /* Auto margins, not `align-items: center`: when the card is taller than
        the band there is no free space to distribute, so the margins collapse
        to zero and the card runs off the BOTTOM (where it scrolls) instead of
@@ -1180,14 +1186,14 @@ body:has(.auth-dark) {
   }
 
   .login-page .login-card .tb-heading {
-    font-size: 40px;
+    font-size: 36px;
     letter-spacing: -0.035em;
-    line-height: 1.08;
+    line-height: 1.1;
     color: var(--fg);
   }
 
   .login-page .login-head {
-    margin-bottom: 26px;
+    margin-bottom: 24px;
   }
 
   .login-page .login-card .tb-label {
@@ -1198,11 +1204,11 @@ body:has(.auth-dark) {
   }
 
   .login-page .login-card input {
-    height: 58px;
+    height: 48px;
     font-size: 16px;
-    border-radius: 999px;
+    border-radius: 14px;
     background: var(--field);
-    border-color: transparent;
+    border-color: var(--border);
     color: var(--fg);
   }
 
@@ -1221,8 +1227,8 @@ body:has(.auth-dark) {
   }
 
   .login-page .login-card button[type='submit'] {
-    height: 58px;
-    font-size: 16px;
+    height: 42px;
+    font-size: 14.5px;
     border-radius: 999px;
   }
 
@@ -1246,21 +1252,17 @@ body:has(.auth-dark) {
   }
 }
 
-/* Premium polish on the card's primary action: gradient fill, lift, glow.
-   OAuth-complete's comment notes it — the submit plate lives here. */
+/* The landing action is flat: one accent-solid fill, a darker hover, and the
+   same 42px pill as everywhere else. No gradient, lift or glow. */
 .login-page .login-card button[type='submit']:not(:disabled) {
-  background-image: linear-gradient(180deg, var(--accent-solid-hover), var(--accent-solid));
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  transition: filter 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+  box-shadow: none;
+  transition: background-color 150ms ease;
 }
 
 .login-page .login-card button[type='submit']:hover:not(:disabled) {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(10, 132, 255, 0.35);
+  background-color: var(--accent-solid-hover);
 }
 
 .login-page .login-card button[type='submit']:active:not(:disabled) {
-  transform: translateY(0);
-  background-image: linear-gradient(180deg, var(--accent-solid), var(--accent-press));
+  background-color: var(--accent-solid-hover);
 }

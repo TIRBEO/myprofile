@@ -185,7 +185,7 @@ export default function SettingsIndex() {
         <div className="px-4 pt-3.5 pb-1 sm:px-6">
           {/* The same pill the rest of the app searches from, at the height a
               thumb actually aims at. */}
-          <div className="[&_input]:h-12 [&_input]:rounded-full [&_input]:border-transparent [&_input]:bg-field">
+          <div className="[&_input]:h-12 [&_input]:rounded-full [&_input]:border-border [&_input]:bg-field">
             <SearchField value={query} onChange={setQuery} placeholder={t("Search settings")} />
           </div>
         </div>
@@ -313,7 +313,7 @@ function AccountHeader({ profile }: { profile: ReturnType<typeof useProfile> }) 
   const t = useT();
   if (!profile) {
     return (
-      <div className="flex items-center gap-3.5 px-4 pt-4 pb-1 sm:px-6" aria-busy="true">
+      <div className="mx-4 mt-4 flex items-center gap-3.5 rounded-[20px] border border-border bg-card px-4 py-4 shadow-[var(--shadow-card)] sm:mx-6" aria-busy="true">
         <span className="size-[58px] shrink-0 animate-pulse rounded-full bg-field" />
         <span className="min-w-0 flex-1 space-y-2">
           <span className="block h-[16px] w-[46%] animate-pulse rounded-full bg-field" />
@@ -327,7 +327,7 @@ function AccountHeader({ profile }: { profile: ReturnType<typeof useProfile> }) 
     <Link
       href="/settings/edit-profile"
       onClick={() => haptic("light")}
-      className="flex items-center gap-3.5 px-4 pt-4 pb-1 outline-none transition-colors hover:bg-hover active:bg-field-focus sm:px-6"
+      className="mx-4 mt-4 flex items-center gap-3.5 rounded-[20px] border border-border bg-card px-4 py-4 outline-none shadow-[var(--shadow-card)] transition-colors hover:bg-field-focus active:bg-field-focus sm:mx-6"
     >
       <ProfilePicture photo={profile.photo} seed={profile.username || profile.email} name={name} size={58} />
       <span className="min-w-0 flex-1">

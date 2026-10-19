@@ -122,7 +122,7 @@ export function SettingsPage({
       {title ? (
         <h1
           className={cn(
-            "mb-4 text-[26px] leading-[1.15] font-bold tracking-[-0.022em] sm:mb-5 sm:text-[28px]",
+            "mb-5 text-[30px] leading-[1.12] font-bold tracking-[-0.03em] sm:mb-6 sm:text-[34px]",
             inBar && "hidden lg:block",
             !crumb && back && "mt-1.5",
           )}

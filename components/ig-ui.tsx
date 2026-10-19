@@ -56,7 +56,9 @@ type ButtonSize = "sm" | "md" | "lg";
    page-ending action pills name them by tone, but they are the same skins —
    spelling them out twice is how one gets tuned and the other left behind. */
 const FILL = {
-  primary: "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
+  /* The landing's filled action: the accessible accent-solid blue, never the
+     lighter system blue that fails contrast under white text. */
+  primary: "bg-accent-solid text-accent-fg hover:bg-accent-solid-hover active:bg-accent-solid-hover",
   /* Apple's secondary is a filled grey, not an outlined one. The label has to
      be the accent colour for that to read as a control: a grey pill with grey
      words beside a blue one is indistinguishable from a disabled pair, and
@@ -104,8 +106,8 @@ const SHEET_ACTION =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "h-9 rounded-full px-4 text-[14px] gap-1.5",
-  md: "h-10 rounded-full px-5 text-[14.5px] gap-2",
+  sm: "h-9 rounded-full px-4 text-[13.5px] gap-1.5",
+  md: "h-[42px] rounded-full px-5 text-[14.5px] gap-2",
   lg: "h-[44px] rounded-full px-6 text-[14.5px] gap-2",
 };
 
@@ -133,7 +135,8 @@ export function Button({
       disabled={disabled || loading}
       className={cn(
         "inline-flex touch-manipulation items-center justify-center font-semibold tracking-[-0.01em] whitespace-nowrap",
-        "transition-[filter,background-color,opacity] duration-100 active:opacity-65",
+        "transition-[filter,background-color,opacity] duration-150 active:scale-[0.995]",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         "disabled:pointer-events-none disabled:opacity-45",
         variant === "link" ? "text-[14px] font-medium" : BUTTON_SIZE[size],
         BUTTON_VARIANT[variant],
@@ -165,9 +168,9 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full text-fg",
+        "flex shrink-0 items-center justify-center rounded-full text-fg outline-none",
         !sized && "size-10",
-        "transition-colors duration-100 hover:bg-hover active:bg-field-focus",
+        "transition-colors duration-100 hover:bg-hover active:bg-field-focus focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         "disabled:pointer-events-none disabled:opacity-45",
         className,
       )}
@@ -198,7 +201,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className={cn("flex gap-1 rounded-[17px] border border-border bg-field p-1.5", block && "w-full")}
+      className={cn("flex gap-1 rounded-full border border-border bg-surface-2 p-1", block && "w-full")}
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -217,8 +220,8 @@ export function Segmented<T extends string>({
               "transition-all duration-150",
               size === "sm" ? "h-8 text-[13px]" : "h-9 text-[14px]",
               active
-                ? "bg-border-strong text-fg shadow-[0_1px_3px_rgba(0,0,0,0.4)]"
-                : "bg-transparent text-text-4 hover:text-fg",
+                ? "bg-card text-fg shadow-[var(--shadow-ambient)]"
+                : "bg-transparent text-text-3 hover:text-fg",
             )}
           >
             {opt.label}
@@ -231,14 +234,12 @@ export function Segmented<T extends string>({
 
 /* ── Form controls ──────────────────────────────────────────────── */
 
-/* The accounts field: a grey plate, borderless until focus, then an
-   accent border plus a soft accent ring. The whole box is the target.
-
-   17px is the canonical field radius — the same corner the grouped plate is
-   cut from, so a control sitting inside a group is one family with it rather
-   than a slightly rounder rectangle dropped on top. */
+/* The accounts/landing field: a 48px plate with a hairline that turns accent
+   on focus, plus the landing's soft focus ring. 14px is the field corner the
+   accounts card uses, so a control inside a 20px card is the same family
+   rather than a slightly rounder rectangle dropped on top. */
 const CONTROL =
-  "w-full rounded-[17px] border border-border bg-field px-4 text-[16px] text-fg outline-none " +
+  "w-full rounded-[14px] border border-border bg-field px-4 text-[16px] text-fg outline-none " +
   "placeholder:text-placeholder " +
   "transition-[border-color,box-shadow,background-color] duration-150 " +
   "hover:bg-field-hover " +
@@ -438,7 +439,7 @@ export function Chip({
         "inline-flex min-h-9 touch-manipulation items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13.5px] font-semibold whitespace-nowrap outline-none transition-colors",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
         active
-          ? "border-transparent bg-ig text-accent-fg hover:bg-ig-hover"
+          ? "border-transparent bg-accent-solid text-accent-fg hover:bg-accent-solid-hover"
           : "border-border-strong bg-transparent text-text-2 hover:bg-hover hover:text-fg",
         className,
       )}
@@ -463,7 +464,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
       {icon ? (
-        <span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-field text-text-4">
+        <span className="mb-4 flex size-14 items-center justify-center rounded-[20px] border border-border bg-card text-text-4 shadow-[var(--shadow-card)]">
           {icon}
         </span>
       ) : null}
@@ -799,9 +800,9 @@ export function Sheet({
                 (closing
                   ? "animate-sheet-down sm:animate-scale-out"
                   : "animate-sheet-up sm:animate-scale-in"),
-              "rounded-t-xl bg-surface",
+              "rounded-t-[20px] border border-border bg-card",
               "shadow-[0_-30px_90px_-20px_rgb(0_0_0/0.7)]",
-              "sm:rounded-xl sm:shadow-[0_44px_120px_-24px_rgb(0_0_0/0.75)]",
+              "sm:rounded-[20px] sm:shadow-[var(--shadow-pop)]",
               width === "lg" ? "sm:max-w-[560px]" : "sm:max-w-[420px]",
             )}
             style={{

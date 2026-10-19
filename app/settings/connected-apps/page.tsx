@@ -231,7 +231,7 @@ function AvailableRow({
       </span>
       <span
         aria-hidden
-        className="inline-flex min-h-9 shrink-0 items-center rounded-full bg-accent-solid px-3.5 text-[13.5px] font-semibold text-accent-fg"
+        className="inline-flex min-h-9 shrink-0 items-center rounded-full bg-accent-solid px-3.5 text-[13.5px] font-semibold text-accent-fg transition-colors hover:bg-accent-solid-hover active:bg-accent-solid-hover"
       >
         {busy ? "Opening…" : "Connect"}
       </span>

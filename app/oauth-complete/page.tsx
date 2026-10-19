@@ -208,10 +208,11 @@ const BUTTON_BASE =
   "transition-[background-color,color,border-color,opacity,transform,box-shadow] duration-150 " +
   "disabled:pointer-events-none";
 
+/* The landing pill at every size: 36 compact, 42 standard, 44 large. */
 const BUTTON_SIZE: Record<"sm" | "md" | "lg", string> = {
-  sm: "h-12 px-4 text-[14px]",
-  md: "h-12 px-5 text-[15px]",
-  lg: "h-[56px] px-6 text-[15px]",
+  sm: "h-9 px-4 text-[13.5px]",
+  md: "h-[42px] px-5 text-[14.5px]",
+  lg: "h-[44px] px-6 text-[14.5px]",
 };
 
 /** Primary — the accounts `.login-cta` recipe: accounts-blue fill, darker on
@@ -237,7 +238,7 @@ function Button({
         BUTTON_SIZE[size],
         variant === "primary"
           ? cn(
-              "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
+              "bg-accent-solid text-accent-fg hover:bg-accent-solid-hover active:bg-accent-solid-hover",
               "disabled:bg-surface-3 disabled:text-placeholder disabled:opacity-100 disabled:shadow-none",
             )
           : cn(
@@ -307,7 +308,7 @@ function Field({label, hint, error, required, optional, children, className}: {
    accent-coloured on focus. Height and radius come from globals.css (.login-card input)
    so the plates are the same 58px/16px as the accounts sign-in form. */
 const CONTROL =
-  "w-full rounded-[16px] border border-transparent bg-field px-4 text-[16px] text-fg " +
+  "w-full rounded-[14px] border border-border bg-field px-4 text-[16px] text-fg " +
   "transition-[border-color,box-shadow,background-color] duration-150 " +
   "placeholder:text-placeholder " +
   "hover:bg-field-hover " +
@@ -509,7 +510,7 @@ function ToggleRow({title, sub, on, onChange}: {
         }}
         className={cn(
           "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200",
-          on ? "bg-ig" : "bg-track",
+          on ? "bg-accent" : "bg-track",
         )}
       >
         <span
@@ -675,7 +676,7 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
             className={cn(
               BUTTON_BASE,
               BUTTON_SIZE.md,
-              "bg-ig text-accent-fg hover:bg-ig-hover active:bg-ig-press",
+              "bg-accent-solid text-accent-fg hover:bg-accent-solid-hover active:bg-accent-solid-hover",
               "disabled:bg-surface-3 disabled:text-placeholder",
             )}
           >
@@ -1195,7 +1196,7 @@ function Complete() {
             aria-hidden
             className={cn(
               "pointer-events-none absolute right-0 bottom-1 z-20 grid size-[38px] place-items-center rounded-full",
-              "border-[3px] border-bg bg-ig text-accent-fg",
+              "border-[3px] border-bg bg-accent-solid text-accent-fg",
               "shadow-[0_6px_14px_-6px_rgba(0,0,0,0.7)]",
             )}
           >
