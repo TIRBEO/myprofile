@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, SearchX } from "lucide-react";
-import { Button, SearchField } from "@/components/ig-ui";
+import { Button, SearchField, Spinner } from "@/components/ig-ui";
 import { SignOutSheet } from "@/components/settings-layout";
 import { ActionRow, Group, Helper, LinkRow, SettingsPage } from "@/components/settings-shell";
 import { ProfilePicture } from "@/components/profile-picture";
@@ -199,10 +199,12 @@ export default function SettingsIndex() {
               {`${stuck.join(", ")} ${stuck.length === 1 ? "didn’t save" : "didn’t save"} — your account is holding its own answer, not what you tapped. `}
               <button
                 type="button"
-                className="font-semibold underline disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 font-semibold underline disabled:opacity-60"
                 onClick={retryStuck}
                 disabled={retrying}
+                aria-busy={retrying || undefined}
               >
+                {retrying ? <Spinner size={13} /> : null}
                 {retrying ? "Trying…" : "Try again"}
               </button>
               .

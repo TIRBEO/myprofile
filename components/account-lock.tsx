@@ -23,8 +23,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2 } from "lucide-react";
-import { Button, Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Textarea, cn } from "@/components/ig-ui";
+import { Check } from "lucide-react";
+import { Button, Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Spinner, Textarea, cn } from "@/components/ig-ui";
 import { ProfilePicture } from "@/components/profile-picture";
 import { Prose, StatementScreen } from "@/components/statement";
 import { SupportPill } from "@/lib/support";
@@ -85,11 +85,11 @@ export function AccountLockScreen() {
 }
 
 /** The first read hasn't answered yet. It's a moment, not a page — a plain
-    spinner, no headline, no skeleton theatre. */
+    ring, no headline, no skeleton theatre. */
 function Checking() {
   return (
-    <div className="flex min-h-dvh items-center justify-center" role="status" aria-label="Loading">
-      <Loader2 className="size-6 animate-spin-slow text-muted" aria-hidden />
+    <div className="flex min-h-dvh items-center justify-center text-muted" role="status" aria-label="Loading">
+      <Spinner size={26} />
     </div>
   );
 }
@@ -176,6 +176,7 @@ function Full({
     <button
       type="button"
       disabled={busy}
+      aria-busy={busy || undefined}
       onClick={() => {
         if (busy) return;
         haptic(tone === "outline" ? "light" : "medium");
@@ -183,6 +184,7 @@ function Full({
       }}
       className={cn(PILL_BASE, PILL_FILL[tone], busy && "opacity-60")}
     >
+      {busy ? <Spinner size={17} /> : null}
       <span className="min-w-0">{label}</span>
     </button>
   );
@@ -755,6 +757,7 @@ function ReviewSheet({
           cancelLabel="Cancel"
           onCancel={onClose}
           confirmLabel={busy ? "Sending…" : "Send appeal"}
+          loading={busy}
           onConfirm={() => { if (!busy) onFiled(trimmed); }}
           disabled={short || busy}
         />

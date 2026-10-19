@@ -340,7 +340,7 @@ function SessionNotice({ onRetry, rechecking }: { onRetry: () => void; recheckin
       <span className="min-w-0 flex-1">
         {t("Tirbeo isn't answering right now, so some of your settings may not have loaded.")}
       </span>
-      <Button variant="secondary" size="sm" onClick={onRetry} disabled={rechecking}>
+      <Button variant="secondary" size="sm" onClick={onRetry} loading={rechecking}>
         {rechecking ? t("Checking…") : t("Try again")}
       </Button>
     </div>

@@ -184,6 +184,7 @@ export default function EmailPreferencesPage() {
           }
           on={paused}
           disabled={pending}
+          busy={pending}
           blockedHint={pending ? busyHint : undefined}
           onChange={(next) => (next ? setPauseSheet(true) : void resume())}
           label="Pause all non-essential emails"
@@ -213,6 +214,7 @@ export default function EmailPreferencesPage() {
           sub="New features, improvements and tips to get the most out of Tirbeo."
           on={prefs.productEmail}
           disabled={pending}
+          busy={pending}
           blockedHint={pending ? busyHint : undefined}
           onChange={async (next) => {
             if (await save({ productEmail: next }))
@@ -225,6 +227,7 @@ export default function EmailPreferencesPage() {
           sub="Deals, campaigns and special offers from Tirbeo."
           on={prefs.offersEmail}
           disabled={pending}
+          busy={pending}
           blockedHint={pending ? busyHint : undefined}
           onChange={async (next) => {
             if (await save({ offersEmail: next }))
@@ -237,6 +240,7 @@ export default function EmailPreferencesPage() {
           sub="Short guides on settings, privacy and getting around Tirbeo."
           on={prefs.tipsEmail}
           disabled={pending}
+          busy={pending}
           blockedHint={pending ? busyHint : undefined}
           onChange={async (next) => {
             if (await save({ tipsEmail: next }))
@@ -260,6 +264,7 @@ export default function EmailPreferencesPage() {
           }
           on={prefs.summaryEnabled}
           disabled={pending}
+          busy={pending}
           blockedHint={pending ? busyHint : undefined}
           onChange={async (next) => {
             if (await save({ summaryEnabled: next }))

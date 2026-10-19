@@ -109,6 +109,7 @@ export default function DataPermissionsPage() {
           }
           on={prefs.personalised}
           disabled={pending}
+          busy={pending}
           blockedHint={pending ? busyHint : undefined}
           onChange={async (next) => {
             if (await save({ personalised: next }))
@@ -121,6 +122,7 @@ export default function DataPermissionsPage() {
           sub="Counts of how the app is used, with no name, profile or content attached."
           on={prefs.shareWithPartners}
           disabled={pending}
+          busy={pending}
           blockedHint={pending ? busyHint : undefined}
           onChange={async (next) => {
             if (await save({ shareWithPartners: next }))
@@ -149,6 +151,7 @@ export default function DataPermissionsPage() {
           sub="Tell the Tirbeo team which features people use and where they get stuck."
           on={prefs.analyticsCookies}
           disabled={pending}
+          busy={pending}
           blockedHint={pending ? busyHint : undefined}
           onChange={async (next) => {
             // Turning analytics off takes marketing with it here, so the
@@ -173,6 +176,7 @@ export default function DataPermissionsPage() {
           }
           on={prefs.analyticsCookies && prefs.marketingCookies}
           disabled={!prefs.analyticsCookies || pending}
+          busy={pending}
           blockedHint={() =>
             !prefs.analyticsCookies
               ? toast.error("Marketing cookies need analytics cookies on first")

@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { cn } from "@/components/ig-ui";
+import { Spinner } from "@/components/ig-ui";
 import { haptic } from "@/lib/haptics";
 import { refreshCurrentPage } from "@/lib/page-refresh";
 
@@ -143,20 +143,26 @@ export function PullToRefresh({
         transition: busy || from.current !== null ? "none" : "height 320ms cubic-bezier(0.16,1,0.3,1)",
       }}
     >
-      <span className="mt-3 grid size-9 place-items-center rounded-full border border-border bg-surface shadow-[0_6px_18px_-8px_rgb(0_0_0/0.5)]">
-        <svg
-          viewBox="0 0 24 24"
-          className={cn("size-[18px] text-accent", busy && "motion-safe:animate-spin-slow")}
-          style={busy ? undefined : { transform: `rotate(${progress * 300}deg)` }}
-        >
-          <path
-            d="M20.5 12a8.5 8.5 0 1 1-5.9-8.06"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-          />
-        </svg>
+      <span className="mt-3 grid size-9 place-items-center rounded-full border border-border bg-surface text-accent shadow-[0_6px_18px_-8px_rgb(0_0_0/0.5)]">
+        {/* The drag draws the arc; the hand-off to the fleet's ring is the
+            refresh itself — one waiting language, no bespoke spin. */}
+        {busy ? (
+          <Spinner size={18} />
+        ) : (
+          <svg
+            viewBox="0 0 24 24"
+            className="size-[18px]"
+            style={{ transform: `rotate(${progress * 300}deg)` }}
+          >
+            <path
+              d="M20.5 12a8.5 8.5 0 1 1-5.9-8.06"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        )}
       </span>
     </div>
   );

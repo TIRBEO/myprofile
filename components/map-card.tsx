@@ -31,6 +31,9 @@ export function MapCard({ coords, label }: { coords: [number, number]; label: st
   const [lat, lng] = coords;
   const host = useRef<HTMLDivElement>(null);
   const [fallback, setFallback] = useState(false);
+  /* Mapbox asks for a style, then tiles, and the plate is empty until the
+     first frame lands — so the waiting shimmer sits behind it, not a hole. */
+  const [drawn, setDrawn] = useState(false);
 
   useEffect(() => {
     if (fallback || !host.current) return;
@@ -67,6 +70,9 @@ export function MapCard({ coords, label }: { coords: [number, number]; label: st
         map.on("error", () => {
           if (!cancelled) setFallback(true);
         });
+        map.on("load", () => {
+          if (!cancelled) setDrawn(true);
+        });
       })
       .catch(() => setFallback(true));
 
@@ -99,13 +105,14 @@ export function MapCard({ coords, label }: { coords: [number, number]; label: st
   }
 
   return (
-    <figure className="overflow-hidden rounded-xl border border-border bg-card">
+    <figure className="relative overflow-hidden rounded-xl border border-border bg-card">
       <div
         ref={host}
         className="h-[220px] w-full sm:h-[260px]"
         role="img"
         aria-label={`Map showing ${label}`}
       />
+      {drawn ? null : <span className="skeleton absolute inset-0" aria-hidden="true" />}
     </figure>
   );
 }

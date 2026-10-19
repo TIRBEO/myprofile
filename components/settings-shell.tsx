@@ -15,8 +15,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Lock } from "lucide-react";
-import { cn, PILL_BASE, PILL_DISABLED, PILL_FILL } from "@/components/ig-ui";
+import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
+import { cn, PILL_BASE, PILL_DISABLED, PILL_FILL, Spinner } from "@/components/ig-ui";
 import { navItem, parentHref, titleFor } from "@/lib/nav";
 import { guidesFor } from "@/lib/docs-links";
 import { useT } from "@/lib/i18n";
@@ -406,6 +406,7 @@ export function ToggleRow({
   disabled,
   blockedHint,
   locked,
+  busy,
 }: {
   icon?: ReactNode;
   title: string;
@@ -420,6 +421,9 @@ export function ToggleRow({
   blockedHint?: () => void;
   /** Shows why a disabled switch can't move. */
   locked?: boolean;
+  /** The write for the last tap is still in flight: the thumb keeps showing
+      where it stands, and a ring beside it says the account hasn't agreed yet. */
+  busy?: boolean;
 }) {
   return (
     <button
@@ -428,6 +432,7 @@ export function ToggleRow({
       aria-checked={on}
       aria-label={label ?? title}
       aria-disabled={disabled || undefined}
+      aria-busy={busy || undefined}
       onClick={() => {
         haptic("light");
         if (disabled) blockedHint?.();
@@ -446,6 +451,7 @@ export function ToggleRow({
         </span>
         <span className={SUB}>{sub}</span>
       </span>
+      {busy ? <Spinner size={16} className="shrink-0" /> : null}
       <SwitchVisual on={on} />
     </button>
   );
@@ -771,12 +777,12 @@ export function PillButton({
     <span className="flex min-w-0 flex-col gap-1.5">
       {href ? (
         <Link href={href} onClick={go} className={shared}>
-          {icon}
+          {loading ? <Spinner size={17} /> : icon}
           <span className="min-w-0">{label}</span>
         </Link>
       ) : (
         <button type="button" onClick={go} disabled={off} aria-busy={loading || undefined} className={shared}>
-          {loading ? <Loader2 className="size-[17px] shrink-0 animate-spin-slow" /> : icon}
+          {loading ? <Spinner size={17} /> : icon}
           <span className="min-w-0">{label}</span>
         </button>
       )}

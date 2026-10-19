@@ -20,11 +20,12 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Camera, Check, Loader2, X, Eye, EyeOff, FileText, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Camera, Check, X, Eye, EyeOff, FileText, ShieldCheck, TriangleAlert } from "lucide-react";
 import { createPortal } from "react-dom";
 import { ProfilePicture } from "@/components/profile-picture";
 import { AvatarEditor } from "@/components/avatar-editor";
 import { ProviderGlyph } from "@/components/provider-glyph";
+import { Skeleton, Spinner } from "@/components/ig-ui";
 import { haptic } from "@/lib/haptics";
 import { emailDomain, trackError, trackEvent, withRef } from "@/lib/telemetry";
 
@@ -240,7 +241,7 @@ function Button({
       {...rest}
     >
       <span className="inline-flex items-center justify-center gap-1.5">
-        {loading ? <Loader2 className="size-4 animate-spin-slow" /> : null}
+        {loading ? <Spinner size={16} /> : null}
         {children}
       </span>
     </button>
@@ -523,7 +524,7 @@ function UsernameStatus({state, message}: {
   let icon: React.ReactNode;
   if (state === "checking") {
     tone = "text-text-3";
-    icon = <Loader2 className="size-[13px] animate-spin-slow" />;
+    icon = <Spinner size={13} />;
   } else if (state === "available") {
     tone = "text-success-text";
     icon = <Check className="size-[14px]" strokeWidth={3} />;
@@ -1330,9 +1331,30 @@ function Complete() {
   );
 }
 
+/* useSearchParams suspends on a cold load, and a blank canvas there reads as a
+   dead link. This is the card the page is about to fill in, plated. */
+function Splash() {
+  return (
+    <div className="login-page">
+      <div className="login-card" aria-busy="true" aria-live="polite">
+        <span className="sr-only">Loading…</span>
+        <header className="login-head">
+          <Skeleton className="mx-auto h-[1.15em] w-[62%] rounded-full" />
+          <Skeleton className="mx-auto mt-[0.9em] h-[0.85em] w-[84%] rounded-full" />
+        </header>
+        <div className="login-form space-y-3">
+          <Skeleton className="h-12 rounded-lg" />
+          <Skeleton className="h-12 rounded-lg" />
+          <Skeleton className="mt-1 h-[42px] rounded-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OAuthCompletePage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<Splash />}>
       <Complete />
     </Suspense>
   );
