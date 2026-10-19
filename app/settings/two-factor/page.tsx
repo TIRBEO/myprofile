@@ -178,7 +178,7 @@ export default function TwoFactorPage() {
           title="Require 2FA for sensitive actions"
           sub={
             on
-              ? "Ask for a code from your app when signing in and before changing your password."
+              ? "Ask for a code from your app as well as the password before sensitive actions — changing your password, removing a passkey, signing out everywhere, deleting the account."
               : "Needs the authenticator app on first — requiring a code you can't produce would lock you out."
           }
           on={state.requireForActions}
@@ -189,7 +189,7 @@ export default function TwoFactorPage() {
         />
         <ToggleRow
           title="Alert on suspicious sign-in"
-          sub="Email me if a sign-in looks unusual."
+          sub="Email me when a sign-in comes from a device we haven't seen before. A new IP on a known device won't."
           on={state.alertSuspicious}
           onChange={(v) => savePref({ alertSuspicious: v })}
           label="Alert on suspicious sign-in"
