@@ -3,11 +3,12 @@
 /* ═══════════════════════════════════════════════════════════════════
    Whether the account is open at all
 
-   Three things can shut the settings area: a pause you took, a deletion
-   waiting to become final, and a decision the account has to answer
-   before it carries on. They are read here, in one place, in the order
-   that matters — a scheduled deletion outranks everything, because it is
-   the only one that runs down a clock by itself.
+   Six things can shut the settings area: a ban, a suspension, a deletion
+   that already ran, a pause you took, a deletion waiting to become final,
+   and a decision the account has to answer before it carries on. They are
+   read here, in one place, in the order that matters — the states a person
+   cannot undo outrank the ones they can, and a scheduled deletion outranks
+   the rest, because it is the only one that runs down a clock by itself.
 
    The point of resolving them to a single answer is that the gate and the
    screen it shows can never disagree, and no page has to remember to
@@ -22,7 +23,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 import { useSyncExternalStore, useEffect } from "react";
-import { accountStateLoaded, getAccountState, loadAccountState } from "@/lib/account-lifecycle";
+import { accountStateFailed, accountStateLoaded, getAccountState, loadAccountState } from "@/lib/account-lifecycle";
 import {
   loadAccountChecks,
   loadAppeals,
@@ -31,10 +32,16 @@ import {
   type StatusItem,
   type StatusSection,
 } from "@/lib/account-status";
-import { ACCOUNT_EVENT, requestFor } from "@/lib/account-history";
+import { ACCOUNT_EVENT } from "@/lib/account-history";
 import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
 
-export type LockKind = "deletion" | "deactivated" | "restriction";
+export type LockKind =
+  | "deletion"
+  | "deactivated"
+  | "restriction"
+  | "banned"
+  | "suspended"
+  | "deleted";
 
 export type Lock = {
   kind: LockKind;
@@ -90,6 +97,38 @@ function openRestriction(): Lock["decision"] | null {
     which is what let a second device or a cleared cache disagree with reality. */
 export function readLock(): Lock | null {
   const account = getAccountState();
+
+  /* A closure that the person cannot un-do by themselves outranks every other
+     state, and — unlike a decision — it is not something to be read and set
+     aside. A banned or suspended account that could "carry on" past this screen
+     would be a ban in name only, so these are checked before the restriction
+     gate ever gets a chance to be dismissed. */
+  if (account?.status === "deleted") {
+    return {
+      kind: "deleted",
+      skippable: false,
+      title: "Your account has been deleted",
+      sub: "The account and everything saved to it are gone. This screen is the last place the account was — there is nothing left on it to open.",
+    };
+  }
+
+  if (account?.status === "banned") {
+    return {
+      kind: "banned",
+      skippable: false,
+      title: "Your account has been banned",
+      sub: "Access is closed until this decision is lifted. You can appeal it below, or write to support — either way nothing else on the account opens while the ban stands.",
+    };
+  }
+
+  if (account?.status === "suspended") {
+    return {
+      kind: "suspended",
+      skippable: false,
+      title: "Your account is suspended",
+      sub: "Access is paused for a set time. You can appeal it below, or write to support — the account opens again on its own when the suspension ends.",
+    };
+  }
 
   if (account?.deletionPending) {
     return {
@@ -183,13 +222,6 @@ export function useWelcome(): Welcome | null {
   }
 }
 
-/** The history row that explains why a lock is here, when there is one. */
-export function lockRequest(lock: Lock) {
-  if (!lock) return null;
-  const id = lock.kind === "restriction" ? lock.decision?.item.id : lock.kind;
-  return id ? requestFor(id) : null;
-}
-
 /* ── Telling the gate about it ────────────────────────────────────
    Every state on this page comes out of storage, so a lock only exists as
    long as the thing that made it does. Both halves of that — the value and
@@ -230,31 +262,39 @@ function currentKey(): string {
     if (CACHE.size > 16) CACHE.clear();
     CACHE.set(key, lock);
   }
-  /* The loading bit is part of the snapshot, not a second store: the answer
-     "no lock" looks identical to "the account hasn't been asked yet", and a
-     snapshot that didn't change between the two would leave the gate showing
-     the dashboard to an account that is about to be told it is closed. */
-  return accountStateLoaded() ? key : `?${key}`;
+  if (accountStateLoaded()) return key;
+  if (key) return `?${key}`;
+  /* Nothing cached and the read did not answer: not "open", not "unknown yet",
+     but "we could not ask" — a gate that renders the dashboard here is a gate
+     that fails open. */
+  return accountStateFailed() ? "!" : "?";
 }
 
 /** The lock in force, and whether the account has been asked yet. Re-read
-    whenever the route changes, a state is announced, or a fresh read from the
-    brain lands. `lock === null` with `loading === false` means the account is
-    open normally; `lock === null` with `loading === true` means nobody knows
-    yet, which is not the same thing and must not render the dashboard.
-    The first mount pulls the real state so a page opened cold reflects the
-    account rather than an empty browser cache. */
-export function useAccountLock(): { lock: Lock | null; loading: boolean } {
+    whenever a state is announced or a fresh read from the brain lands.
+    `lock === null` with `loading === false` means the account is open normally;
+    `loading === true` means nobody knows yet and `failed === true` means the
+    read did not answer — neither is the same as "open", and neither may render
+    the dashboard. The first mount pulls the real state so a page opened cold
+    reflects the account rather than an empty browser cache. */
+export function useAccountLock(): { lock: Lock | null; loading: boolean; failed: boolean } {
   const snapshot = useSyncExternalStore(subscribe, currentKey, () => "");
   useEffect(() => {
-    void loadAccountState();
-    // The checks and the appeals are read from the account too, so the
-    // restriction lock reflects what the brain says — never a stale guess,
-    // and never anything invented.
-    void loadAccountChecks().catch(() => {});
-    void loadAppeals().catch(() => {});
+    void loadAccountState().then((state) => {
+      /* A hard closure (banned / suspended / deleted) has nothing to enumerate
+         and its status gate refuses those reads — asking would only spend the
+         session on a 403. The lock itself needs none of it. For every other
+         state the checks and appeals are read from the account too, so the
+         restriction lock reflects what the brain says — never a stale guess. */
+      if (state && (state.status === "banned" || state.status === "suspended" || state.status === "deleted")) {
+        return;
+      }
+      void loadAccountChecks().catch(() => {});
+      void loadAppeals().catch(() => {});
+    });
   }, []);
-  const loading = snapshot.startsWith("?");
+  const failed = snapshot === "!";
+  const loading = !failed && snapshot.startsWith("?");
   const key = loading ? snapshot.slice(1) : snapshot;
-  return { lock: key ? (CACHE.get(key) ?? null) : null, loading };
+  return { lock: key && !failed ? (CACHE.get(key) ?? null) : null, loading, failed };
 }

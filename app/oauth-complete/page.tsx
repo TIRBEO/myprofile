@@ -876,6 +876,13 @@ function Complete() {
         ),
       });
       const d = await res.json().catch(() => ({}));
+      /* A closed account is answered with a session and the decision of record
+         (blockedAccountResponse in the account service). The settings gate is
+         the one place that explains a closure, so hand the person there. */
+      if (d?.blocked) {
+        window.location.href = "/settings";
+        return;
+      }
       if (!res.ok || !d?.ok) {
         /* An address claimed while this form was open is not a mistake to
            repeat. Ask again, and show what the person can do with the account

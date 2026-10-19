@@ -275,7 +275,7 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
      asked for — so a typed address, a bookmark and the back button all reach
      the same answer. The redirect that follows is the address bar catching
      up with what's already on screen, not the thing enforcing it.          */
-  const { lock, loading } = useAccountLock();
+  const { lock, loading, failed } = useAccountLock();
   const welcome = useWelcome();
 
   /* And the account's own record of the way back — a ban lifted, a suspension
@@ -289,10 +289,10 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
     if ((lock || welcome || welcomeBack) && pathname !== "/settings") router.replace("/settings");
   }, [lock, welcome, welcomeBack, pathname, router]);
 
-  /* Also while the first read is in flight: "the account hasn't been asked
-     yet" must not render the dashboard, because the answer could be that the
-     account is closed. */
-  if (lock || welcome || loading) return <AccountLockScreen />;
+  /* Also while the first read is in flight, and while it failed: "the account
+     hasn't answered" is not "the account is open", and rendering the dashboard
+     into either is a gate that opens on the side of the person it should hold. */
+  if (lock || welcome || loading || failed) return <AccountLockScreen />;
 
   /* The lock is off and the account has just been given back: one screen,
      before any of the dashboard is painted, and pressed away once. */

@@ -53,8 +53,8 @@ export function SettingsGone() {
   );
 }
 
-/** The one everywhere else in this app — /login, /blocked, a path with no
-    segment in it at all — where there is no layout to borrow a column from. */
+/** The one everywhere else in this app — /login, a path with no segment in
+    it at all — where there is no layout to borrow a column from. */
 export function RootGone() {
   return (
     <div className="min-h-dvh bg-bg">

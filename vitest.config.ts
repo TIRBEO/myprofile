@@ -10,7 +10,7 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
   },
   test: {
-    include: ["bridge/**/*.test.ts", "lib/**/*.test.ts"],
+    include: ["bridge/**/*.test.ts", "lib/**/*.test.ts", "proxy.test.ts"],
     environment: "node",
   },
 });

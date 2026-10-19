@@ -540,7 +540,10 @@ function schedule(id: string, delay = 700) {
   );
 }
 
-export function stopScheduling() {
+/** Drop every queued pass. A timer belongs to the language that scheduled it,
+    and a pass for the language the reader has walked away from would repaint
+    the page under them. */
+function stopScheduling() {
   for (const timer of timers.values()) clearTimeout(timer);
   timers.clear();
 }
@@ -592,8 +595,12 @@ export function MachineTranslate() {
       if (current !== SOURCE) pauseWrites(restoreAll);
       else restoreAll();
       current = next;
-      if (next === SOURCE) stopScheduling();
-      else void pass(next);
+      /* Whatever the outgoing language still had queued dies here — including
+         a deferred pass that would otherwise fire over the restored text. */
+      stopScheduling();
+      // Immediately trigger a translation pass when language changes, so
+      // all text updates fast rather than waiting for the next scheduled pass.
+      void pass(next);
     });
 
     return () => {

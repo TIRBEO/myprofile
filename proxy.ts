@@ -48,49 +48,11 @@ const SESSION_COOKIE = "__session";
  * `redirect_to` pointing straight back here, and back again forever. `/login`
  * is a server-side redirect to the accounts app now (see `app/login/page.tsx`)
  * — it renders no screen of its own and must stay reachable signed-out, so it
- * is public by definition. `/blocked` is the
- * interruption screen a banned/suspended visitor is sent to *because* they have
- * no usable session — gating it would bounce them back to login forever.
+ * is public by definition. There is no `/blocked` here any more: a closed
+ * account now arrives signed in (the sign-in hands it a session) and the
+ * settings gate puts the closure screen up in place of the dashboard.
  */
-const PUBLIC_PATHS = ["/login", "/oauth-complete", "/blocked"];
-
-/**
- * The interruption the accounts app hands over.
- *
- * A banned, suspended, deleted, paused or soon-deleted account is sent here
- * with the decision in the query string (`?blocked=<kind>&eventId=&reason=&until=&sig=`),
- * signed by `apps/accounts/src/lib/blockSignature.ts` and checked by
- * `app/blocked/page.tsx` — this file only decides which screen the visitor
- * gets, never whether the payload is real.
- *
- * Pinning happens at the edge because the visitor standing in front of it has
- * no usable session — that is the whole reason they were handed over. Falling
- * through to the gate below would bounce them back to the accounts login, the
- * page they had just been redirected away from, and the loop would be the
- * last thing they saw of Tirbeo. So a recognised kind is rewritten onto
- * `/blocked` with its query intact, ahead of every other decision here.
- *
- * The kinds are listed rather than matched loosely so a `?blocked=` left over
- * in someone's bookmarks, a link a third party wrote, or a value that names
- * nothing cannot pin an interruption screen over the dashboard.
- */
-const BLOCKED_KINDS = new Set([
-  "banned",
-  "suspended",
-  "deleted",
-  "deletion_pending",
-  "deactivated",
-]);
-
-/** Where a block hand-off belongs: the interruption page, query and all. */
-function blockedTarget(request: NextRequest): URL | null {
-  const kind = request.nextUrl.searchParams.get("blocked");
-  if (!kind || !BLOCKED_KINDS.has(kind)) return null;
-  if (request.nextUrl.pathname === "/blocked") return null;
-  const target = request.nextUrl.clone();
-  target.pathname = "/blocked";
-  return target;
-}
+const PUBLIC_PATHS = ["/login", "/oauth-complete"];
 
 function secretKey(): Uint8Array | null {
   const secret = process.env.JWT_SECRET;
@@ -100,17 +62,14 @@ function secretKey(): Uint8Array | null {
 /** Where a signed-out reader goes: the accounts app owns login. The path they
     asked for rides along, so signing in puts them back where they were. */
 function toLogin(request: NextRequest): NextResponse {
-  const base = accountsOrigin(request);
-  const target = base ? new URL(`${base}/login`) : new URL("/settings", request.nextUrl);
-  if (base) {
-    // Send them back to the host they actually arrived on, not the container's
-    // bind address — so a production login returns to *.tirbeo.com.
-    const { origin } = requestOrigin(request);
-    const here = origin
-      ? `${origin}${request.nextUrl.pathname}${request.nextUrl.search}`
-      : request.nextUrl.href;
-    target.searchParams.set("redirect_to", here);
-  }
+  const target = new URL(`${accountsOrigin(request)}/login`);
+  // Send them back to the host they actually arrived on, not the container's
+  // bind address — so a production login returns to *.tirbeo.com.
+  const { origin } = requestOrigin(request);
+  const here = origin
+    ? `${origin}${request.nextUrl.pathname}${request.nextUrl.search}`
+    : request.nextUrl.href;
+  target.searchParams.set("redirect_to", here);
   const response = NextResponse.redirect(target);
   // A redirect for a person who isn't signed in is theirs alone; shared caches
   // must not hold it, or the next visitor inherits the wrong answer.
@@ -150,9 +109,14 @@ function requestOrigin(request: NextRequest): { origin: string | null; hostname:
  * resolves to accounts.<parent> (same protocol), so a production visitor is
  * never bounced to a localhost address even if one is configured. Off those
  * domains it falls back to an explicit NEXT_PUBLIC_ACCOUNTS_URL, then the local
- * accounts port on localhost, then a same-origin hop for an unrecognised host.
+ * accounts port on localhost, then the canonical accounts app.
+ *
+ * It never answers "nowhere": a null here sent the reader to a same-origin
+ * /settings, which is itself gated, which redirected back to login, which
+ * asked the same question again. A loop is the worst reply to "where is
+ * login?".
  */
-function accountsOrigin(request: NextRequest): string | null {
+function accountsOrigin(request: NextRequest): string {
   const { hostname } = requestOrigin(request);
   const parent = hostname.match(/(?:^|\.)(tirbeo\.(?:com|app))$/i);
   if (parent) {
@@ -167,31 +131,37 @@ function accountsOrigin(request: NextRequest): string | null {
     return explicit;
   }
   if (hostname === "localhost" || hostname === "127.0.0.1") return "http://localhost:3002";
-  // Unknown host in production (preview/alias domain): the canonical accounts
-  // app — returning null here would send toLogin to same-origin /settings,
-  // which is itself gated, and the redirect would loop.
-  if (process.env.NODE_ENV === "production") return "https://accounts.tirbeo.com";
-  return null;
+  // Unknown host — a preview or alias domain: the canonical accounts app. Local
+  // dev is already answered by the branch above, so this can't pull a developer
+  // onto production by accident.
+  return "https://accounts.tirbeo.com";
 }
 
 export async function proxy(request: NextRequest) {
-  /* A block hand-off is pinned onto its screen before anything else here runs
-     — see BLOCKED_KINDS. It comes first because the visitor standing in front
-     of it has no session to gate, and the place the gate would send them is
-     the login page they have just been handed off from. */
-  const blocked = blockedTarget(request);
-  if (blocked) {
-    const move = NextResponse.redirect(blocked);
-    move.headers.set("Cache-Control", "no-store");
-    return move;
-  }
-
   // Pre-auth pages are never gated — see PUBLIC_PATHS.
   const { pathname } = request.nextUrl;
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     const pass = NextResponse.next();
     pass.headers.set("Cache-Control", "no-store");
     return pass;
+  }
+
+  /* The retired interruption page. Old bookmarks, recorded links and stale
+     bundles still speak — including the unsound `?blocked=…&sig=…` hand-off
+     this address used to take — so every hit is answered by dropping the
+     query and sending the reader to the settings gate, which is where a
+     closure is explained now. Nothing in the query is carried over: a link
+     can carry an address, never a verdict. The same holds for a live page
+     that a stale bundle has stitched the hand-off's query onto. */
+  const handoff =
+    pathname === "/blocked" ||
+    pathname.startsWith("/blocked/") ||
+    request.nextUrl.searchParams.has("blocked") ||
+    request.nextUrl.searchParams.has("sig");
+  if (handoff) {
+    const away = NextResponse.redirect(new URL("/settings", request.nextUrl));
+    away.headers.set("Cache-Control", "no-store");
+    return away;
   }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;

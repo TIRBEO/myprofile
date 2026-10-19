@@ -41,13 +41,24 @@ export type SignInMethods = {
 };
 
 export type AccountState = {
+  /** active | restricted | banned | suspended | deactivated | deletion_pending
+      | deleted — the account's own lifecycle row on the brain. */
   status: string;
+  /** The reason behind the current enforcement, when one was recorded. */
+  reason: string | null;
+  /** When the current enforcement ends (ISO) — a suspension's end, a
+      deletion's final date. Null for open-ended states. */
+  until: string | null;
+  /** The decision row behind a ban or suspension, when there is one. An appeal
+      is filed against it, so the screen never has to guess which decision. */
+  decisionId: string | null;
+  /** Whether that decision has already been appealed. */
+  appealFiled: boolean;
   deactivated: boolean;
   deactivatedAt: string | null;
   deactivatedReason: string | null;
   deletionPending: boolean;
   deletionFinalAt: string | null;
-  deletionDaysRemaining: number | null;
   /** Persisted event reference for the current enforcement state — what
       support and the admin lookup search by. Null when nothing was decided. */
   refCode: string | null;
@@ -58,6 +69,11 @@ export type AccountState = {
 /** The last snapshot read from the brain, shared by every reader. */
 let cached: AccountState | null = null;
 let loadedOnce = false;
+/** The read that answered last time did not answer now. A gate that treats
+    "the brain is unreachable" as "the account is open" hands a closed account
+    its dashboard — so the failure is a state of its own, not an empty cache. */
+let failed = false;
+let inflight: Promise<AccountState | null> | null = null;
 
 function notify(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(ACCOUNT_EVENT));
@@ -74,18 +90,31 @@ export function accountStateLoaded(): boolean {
   return loadedOnce;
 }
 
-/** Pull the real state and republish it. Never throws — a failed read leaves
-    the last snapshot in place and the gate simply shows what it already knew. */
-export async function loadAccountState(): Promise<AccountState | null> {
-  try {
-    const next = await apiJson<AccountState>("/api/user/account-state");
-    cached = next;
-  } catch {
-    /* network/auth hiccup — keep the last known state rather than flash open */
-  }
-  loadedOnce = true;
-  notify();
-  return cached;
+/** The read failed and there is no snapshot to fall back on. */
+export function accountStateFailed(): boolean {
+  return loadedOnce && failed && cached === null;
+}
+
+/** Pull the real state and republish it. Concurrent callers share one read —
+    the gate and the screen it renders both ask, and two round-trips for one
+    fact is how a screen ends up rendering against a snapshot that changed
+    underneath it. */
+export function loadAccountState(): Promise<AccountState | null> {
+  if (inflight) return inflight;
+  inflight = (async () => {
+    try {
+      cached = await apiJson<AccountState>("/api/user/account-state");
+      failed = false;
+    } catch {
+      /* Keep the last known state rather than flash the account open. */
+      failed = true;
+    }
+    loadedOnce = true;
+    inflight = null;
+    notify();
+    return cached;
+  })();
+  return inflight;
 }
 
 /* ── Actions ───────────────────────────────────────────────────────
@@ -112,43 +141,13 @@ export async function apiReactivate(): Promise<AccountState | null> {
 }
 
 /* ── Coming back with no session to spend ─────────────────────────
-   The same endpoint, reached from the public interruption page — where
-   there is no cookie at all, because the account that owns it is the thing
-   that is closed. So ownership is proved the way the API asks for it: a
-   6-digit code mailed to the sign-in address.
-
-     • POST /api/user/reactivate { step: 'request', email }
-     • POST /api/user/reactivate { step: 'verify', email, code }
-
-   One endpoint covers both a pause (`deactivated`) and a deletion that has
-   not run yet (`deletion_pending`) — cancelling the schedule and reopening
-   the account are the same write. The brain's own reply is handed back
-   rather than rewritten here, because it names the address it mailed and
-   the reason it refused, and a page that guesses at either is a page that
-   mails a code to the wrong inbox.                                         */
-
-export type ReactivationReply = { message: string };
-
-export async function apiRequestReactivationCode(email: string): Promise<ReactivationReply> {
-  const reply = await apiJson<{ message?: string }>("/api/user/reactivate", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ step: "request", email: email.trim() }),
-  });
-  return { message: reply.message || "A code is on its way to that address." };
-}
-
-export async function apiVerifyReactivationCode(
-  email: string,
-  code: string,
-): Promise<ReactivationReply> {
-  const reply = await apiJson<{ message?: string }>("/api/user/reactivate", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ step: "verify", email: email.trim(), code }),
-  });
-  return { message: reply.message || "Your account is back. You can sign in." };
-}
+   There is no such path any more. Sign-in answers a deactivated or
+   deletion-pending account the same way it answers every other closure: the
+   decision of record plus a session whose only room is the settings gate,
+   where the buttons above live. An email-code door that reopened the account
+   without a credential would have been both redundant and an oracle — it
+   would have told anyone who typed an address whether that account was closed.
+*/
 
 /** Step one of closing the account: the brain mails a 6-digit code to the
     sign-in address and says so. Its reply is handed back, because the page

@@ -352,44 +352,9 @@ export async function appeal(restrictionId: string, note: string): Promise<Appea
     decision: (res.appeal.decision ?? "pending") as Appeal["decision"],
   };
   writeAppealRows([row, ...readAppealRows().filter((a) => a.id !== row.id)]);
-  openRequest(restrictionId, "appeal" satisfies RequestKind);
-  return row;
-}
-
-/** The same filing, for somebody standing on the interruption page.
- *
- * There is no session there — the account that owns the cookie is the thing
- * that is closed — so the brain takes the credentials instead and files
- * against the account they open. `restrictionId` is optional on the endpoint
- * and stays absent here: the hand-off carries an *event* reference, which is
- * not a restriction row, and sending one where the API expects the other
- * would only get the appeal refused for a reason the writer can't act on.
- * The brain attaches the note to the decision in force on that account.
- *
- * Nothing about it is written to this browser's request log either — that log
- * belongs to whichever account this device last held, which is precisely the
- * thing a blocked hand-off cannot establish. */
-export async function appealWithCredentials(input: {
-  email: string;
-  password: string;
-  note: string;
-}): Promise<Appeal> {
-  const res = await apiJson<{ ok: boolean; appeal: ServerAppeal }>("/api/support/appeal", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      email: input.email.trim(),
-      password: input.password,
-      note: input.note.trim(),
-    }),
-  });
-  const row: Appeal = {
-    id: res.appeal.id,
-    restrictionId: res.appeal.restrictionId,
-    at: Date.parse(res.appeal.createdAt) || Date.now(),
-    note: res.appeal.note,
-    decision: (res.appeal.decision ?? "pending") as Appeal["decision"],
-  };
-  writeAppealRows([row, ...readAppealRows().filter((a) => a.id !== row.id)]);
+  /* The brain names the decision it attached the filing to; when the caller
+     didn't know it (a banned/suspended screen appeals "the live decision"),
+     that returned id is the one to log against, not the empty string sent. */
+  openRequest(res.appeal.restrictionId || restrictionId, "appeal" satisfies RequestKind);
   return row;
 }

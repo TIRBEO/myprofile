@@ -43,7 +43,9 @@ import {
   apiCancelDeletion,
   apiReactivate,
   getAccountState,
+  loadAccountState,
 } from "@/lib/account-lifecycle";
+import { endSessionAndLeave } from "@/lib/session";
 import { ago, formatDate, formatStamp } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 import { useProfile } from "@/lib/profile";
@@ -55,7 +57,7 @@ const MIN_CHARS = 40;
 const MAX_CHARS = 900;
 
 export function AccountLockScreen() {
-  const { lock, loading } = useAccountLock();
+  const { lock, loading, failed } = useAccountLock();
   const welcome = useWelcome();
 
   return (
@@ -65,12 +67,19 @@ export function AccountLockScreen() {
           one moment where the account's state is genuinely unknown — and a
           dashboard is the wrong thing to render into an unknown. */}
       {!lock && !welcome && loading ? <Checking /> : null}
+      {/* The read did not answer and there is nothing cached to fall back on.
+          Showing the dashboard here would be the gate failing open, so the
+          account is held at a door that says it could not ask. */}
+      {!lock && !welcome && failed ? <CouldNotRead /> : null}
       {lock?.kind === "deactivated" ? <Deactivated lock={lock} /> : null}
       {lock?.kind === "deletion" ? <Deletion lock={lock} /> : null}
       {lock?.kind === "restriction" ? <Restricted lock={lock} /> : null}
+      {lock && (lock.kind === "banned" || lock.kind === "suspended" || lock.kind === "deleted") ? (
+        <Blocked lock={lock} />
+      ) : null}
       {/* A lock that has just been lifted is the only thing on this screen
           while the account is otherwise open. */}
-      {!lock && welcome ? <BackAgain welcome={welcome} /> : null}
+      {!lock && !failed && welcome ? <BackAgain welcome={welcome} /> : null}
     </div>
   );
 }
@@ -85,25 +94,94 @@ function Checking() {
   );
 }
 
+/** The account-state read failed. Say so, offer the two things that can
+    actually move it: ask again, or leave this device's session. */
+function CouldNotRead() {
+  const [busy, setBusy] = useState(false);
+  return (
+    <StatementScreen
+      title="We couldn't read your account"
+      lead="The network or the account did not answer, so nothing here can say which state the account is in. Until it does, this is the only page it opens."
+      blocks={[
+        {
+          label: "What you can do",
+          body: <Prose>Try again below. If it keeps failing, write to support — or sign out of this device and come back later.</Prose>,
+        },
+      ]}
+      actions={
+        <>
+          <Full
+            label={busy ? "Trying again…" : "Try again"}
+            busy={busy}
+            onClick={async () => {
+              setBusy(true);
+              await loadAccountState();
+              setBusy(false);
+            }}
+          />
+          <SupportPill subject="Account state could not be read" lines={["Account state: unknown — the account-state read failed"]} />
+          <Plain label="Sign out of this device" onClick={endSessionAndLeave} />
+        </>
+      }
+    />
+  );
+}
+
 /* ── The one screen they are all built from ─────────────────────── */
+
+/** Every action on this screen is a write to the account followed by a re-read
+ *  of it. One runner holds all three halves of that — the busy flag that stops
+ *  a second press, the catch that says why it failed, and the success buzz —
+ *  because each screen used to hold its own `try/finally` and several of them
+ *  forgot the `catch`, which left a failed reactivation with no message at all
+ *  and a button that looked idle. */
+function useAction() {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+
+  async function run<T>(doWrite: () => Promise<T>, said: string): Promise<T | null> {
+    if (busy) return null;
+    setBusy(true);
+    try {
+      const value = await doWrite();
+      haptic("success");
+      toast.success(said);
+      return value;
+    } catch (err) {
+      trackError("account-lock.action", err);
+      haptic("error");
+      toast.error(withRef(err instanceof Error && err.message ? err.message : "That didn't go through. Try again.", err));
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return { busy, run };
+}
 
 function Full({
   label,
   onClick,
+  busy = false,
   tone = "primary",
 }: {
   label: string;
   onClick: () => void;
+  /** The label already says "Doing…"; this stops the second press behind it. */
+  busy?: boolean;
   tone?: keyof typeof PILL_FILL;
 }) {
   return (
     <button
       type="button"
+      disabled={busy}
       onClick={() => {
+        if (busy) return;
         haptic(tone === "outline" ? "light" : "medium");
         onClick();
       }}
-      className={cn(PILL_BASE, PILL_FILL[tone])}
+      className={cn(PILL_BASE, PILL_FILL[tone], busy && "opacity-60")}
     >
       <span className="min-w-0">{label}</span>
     </button>
@@ -124,6 +202,13 @@ function Plain({ label, onClick }: { label: string; onClick: () => void }) {
       {label}
     </Button>
   );
+}
+
+/** The locked screen is the only page the account opens, so it has to hold the
+    way out of it: the rail's sign-out is unreachable behind the gate, and
+    without this a closed account is stranded on its own closure screen. */
+function SignOutPill() {
+  return <Plain label="Sign out of this device" onClick={endSessionAndLeave} />;
 }
 
 /** The face in the ring a reopened account puts around it, with the tick on
@@ -161,18 +246,16 @@ function Deactivated({ lock }: { lock: Lock }) {
   const record = account?.deactivated
     ? { at: account.deactivatedAt ? Date.parse(account.deactivatedAt) : Date.now(), reason: account.deactivatedReason ?? "" }
     : null;
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAction();
 
   async function comeBack() {
-    setBusy(true);
-    try {
-      await apiReactivate();
-      trackEvent("settings.account_reactivated", { detail: "lock_screen" });
-      if (record) writeWelcome({ kind: "reactivated", at: Date.now(), from: record.at });
-      haptic("success");
-    } finally {
-      setBusy(false);
-    }
+    /* The write re-reads the account, which repaints this screen from a
+       snapshot that no longer says "deactivated". Whatever the hand-off screen
+       needs is taken before the write, not after. */
+    const from = record?.at ?? Date.now();
+    if (!await run(() => apiReactivate(), "Your account is open again")) return;
+    trackEvent("settings.account_reactivated", { detail: "lock_screen" });
+    writeWelcome({ kind: "reactivated", at: Date.now(), from });
   }
 
   return (
@@ -222,7 +305,7 @@ function Deactivated({ lock }: { lock: Lock }) {
       ]}
       actions={
         <>
-          <Full label={busy ? "Reactivating…" : "Reactivate now"} onClick={comeBack} />
+          <Full label={busy ? "Reactivating…" : "Reactivate now"} busy={busy} onClick={comeBack} />
           <SupportPill
             subject={`Paused account — ref ${getAccountState()?.refCode ?? "none"}`}
             lines={[
@@ -231,6 +314,7 @@ function Deactivated({ lock }: { lock: Lock }) {
               record ? `Paused on: ${formatStamp(record.at)}` : null,
             ]}
           />
+          <SignOutPill />
         </>
       }
     />
@@ -245,18 +329,12 @@ function Deletion({ lock }: { lock: Lock }) {
   /* The window is a fixed 30 days from the request, so the request moment is
      the final date minus that. */
   const asked = finalAtMs != null ? finalAtMs - GRACE_DAYS * 86_400_000 : Date.now();
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useAction();
 
   async function keepIt() {
-    setBusy(true);
-    try {
-      await apiCancelDeletion();
-      trackEvent("settings.account_deletion_cancelled", { detail: "lock_screen" });
-      writeWelcome({ kind: "deletion-cancelled", at: Date.now(), from: asked });
-      haptic("success");
-    } finally {
-      setBusy(false);
-    }
+    if (!await run(() => apiCancelDeletion(), "The deletion is called off")) return;
+    trackEvent("settings.account_deletion_cancelled", { detail: "lock_screen" });
+    writeWelcome({ kind: "deletion-cancelled", at: Date.now(), from: asked });
   }
 
   const left = finalAtMs != null ? remaining(finalAtMs, Date.now()) : null;
@@ -285,8 +363,9 @@ function Deletion({ lock }: { lock: Lock }) {
         ]}
         actions={
           <>
-            <Full label={busy ? "Cancelling…" : "Keep my account"} onClick={keepIt} />
+            <Full label={busy ? "Cancelling…" : "Keep my account"} busy={busy} onClick={keepIt} />
             <SupportPill subject="Scheduled deletion — no final date" lines={supportLines} />
+            <SignOutPill />
           </>
         }
       />
@@ -328,8 +407,9 @@ function Deletion({ lock }: { lock: Lock }) {
       ]}
       actions={
         <>
-          <Full label={busy ? "Cancelling…" : "Keep my account"} onClick={keepIt} />
+          <Full label={busy ? "Cancelling…" : "Keep my account"} busy={busy} onClick={keepIt} />
           <SupportPill subject={`Scheduled deletion — ref ${refCode ?? "none"}`} lines={supportLines} />
+          <SignOutPill />
         </>
       }
     />
@@ -346,6 +426,7 @@ function Restricted({ lock }: { lock: Lock }) {
     decision ? appealFor(decision.item.id) : null,
   );
   const [sheetOpen, setSheetOpen] = useState(false);
+  const { busy, run } = useAction();
 
   if (!decision) return null;
   const { section, item } = decision;
@@ -360,32 +441,23 @@ function Restricted({ lock }: { lock: Lock }) {
   }
 
   async function send(note: string) {
-    try {
-      /* The event reference rides along inside the note, so the reviewer (and
-         the admin ref lookup) can pull the exact record behind the decision. */
-      const ref = getAccountState()?.refCode;
-      const fullNote = `${ref ? `[ref ${ref} · decision ${item.id}] ` : `[decision ${item.id}] `}${note}`.slice(0, MAX_CHARS);
-      const filed = await appeal(item.id, fullNote);
-      /* An appeal is an answer, so it clears the stop the same way reading the
-         decision does. Both leave the decision itself on file — now on the
-         account, where a review server can answer it. */
-      skipRestriction(item.id);
-      setAppealRow(filed);
-      setSheetOpen(false);
-      trackEvent("settings.appeal_filed", { metadata: { decision: item.id, appeal: filed?.id } });
-      haptic("success");
-      toast.success("Review requested — we'll answer under Account status");
-      router.replace("/settings");
-    } catch (err) {
-      trackError("account-lock.appeal", err);
-      haptic("error");
-      toast.error(
-        withRef(
-          err instanceof Error && err.message ? err.message : "The appeal couldn't be filed.",
-          err,
-        ),
-      );
-    }
+    /* The event reference rides along inside the note, so the reviewer (and
+       the admin ref lookup) can pull the exact record behind the decision. */
+    const ref = getAccountState()?.refCode;
+    const fullNote = `${ref ? `[ref ${ref} · decision ${item.id}] ` : `[decision ${item.id}] `}${note}`.slice(0, MAX_CHARS);
+    const filed = await run(
+      () => appeal(item.id, fullNote),
+      "Review requested — we'll answer under Account status",
+    );
+    if (!filed) return;
+    /* An appeal is an answer, so it clears the stop the same way reading the
+       decision does. Both leave the decision itself on file — now on the
+       account, where a review server can answer it. */
+    skipRestriction(item.id);
+    setAppealRow(filed);
+    setSheetOpen(false);
+    trackEvent("settings.appeal_filed", { metadata: { decision: item.id, appeal: filed.id } });
+    router.replace("/settings");
   }
 
   return (
@@ -432,10 +504,7 @@ function Restricted({ lock }: { lock: Lock }) {
         actions={
           <>
             {appealRow ? (
-              <>
-                <Full label="I've read this — carry on" onClick={carryOn} />
-                <Plain label="Follow it up under Account status" onClick={carryOn} />
-              </>
+              <Full label="I've read this — carry on" onClick={carryOn} />
             ) : (
               <>
                 <Full label="Appeal this decision" onClick={() => setSheetOpen(true)} />
@@ -452,13 +521,136 @@ function Restricted({ lock }: { lock: Lock }) {
                 item.at ? `Decided on: ${formatStamp(item.at)}` : null,
               ]}
             />
+            <SignOutPill />
           </>
         }
         foot="Setting the decision aside stops it blocking the account; it stays listed under Account status."
       />
 
       {sheetOpen ? (
-        <ReviewSheet ask={item.ask} onClose={() => setSheetOpen(false)} onFiled={send} />
+        <ReviewSheet ask={item.ask} busy={busy} onClose={() => setSheetOpen(false)} onFiled={send} />
+      ) : null}
+    </>
+  );
+}
+
+/* ── 3b. A closure only the account can explain ────────────────────
+   A ban, a suspension and a deletion read the same way on purpose: the
+   reason, what it means for the data, and the one way out. What differs is
+   the way out — a ban and a suspension can be appealed (both are decisions
+   with a live restriction behind them), a deletion cannot, so it only offers
+   support. Unlike a restriction, none of these can be set aside: they are
+   closure, not a notice. */
+
+function Blocked({ lock }: { lock: Lock }) {
+  const account = getAccountState();
+  const [appealRow, setAppealRow] = useState<Appeal | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const { busy, run } = useAction();
+
+  const banned = lock.kind === "banned";
+  const suspended = lock.kind === "suspended";
+  const deleted = lock.kind === "deleted";
+  const appealable = banned || suspended;
+  /* The account says whether the live decision has already been appealed, so a
+     reload cannot hand back a button for a second filing of the same decision —
+     and a closure that was closed before this device ever opened it is shown as
+     what it is: waiting on a review. */
+  const filed = appealRow !== null || (account?.appealFiled ?? false);
+
+  const refCode = account?.refCode ?? null;
+  const reason = account?.reason ?? null;
+  const untilMs = account?.until ? Date.parse(account.until) : null;
+  const meta = untilMs
+    ? suspended
+      ? `Suspended until ${formatDate(untilMs)}`
+      : `Ends ${formatDate(untilMs)}`
+    : null;
+
+  async function send(note: string) {
+    /* The event reference rides inside the note so the reviewer (and the admin
+       ref lookup) can pull the exact decision behind the closure. The decision
+       row is named too — the API only falls back to "the latest live
+       restriction" when a session can't say which decision it means. */
+    const ref = getAccountState()?.refCode;
+    const fullNote = `${ref ? `[ref ${ref}] ` : ""}${note}`.slice(0, MAX_CHARS);
+    const row = await run(
+      () => appeal(getAccountState()?.decisionId ?? "", fullNote),
+      "Review requested — we'll answer under Account status",
+    );
+    if (!row) return;
+    setAppealRow(row);
+    setSheetOpen(false);
+    trackEvent("settings.appeal_filed", { metadata: { scope: lock.kind, appeal: row.id } });
+  }
+
+  const supportLines = [
+    `Event reference: ${refCode ?? "none"}`,
+    `Account state: ${deleted ? "deleted" : banned ? "banned" : "suspended"}`,
+    reason ? `Reason: ${reason}` : null,
+    untilMs ? `Ends on: ${formatDate(untilMs)}` : null,
+  ];
+
+  return (
+    <>
+      <StatementScreen
+        title={lock.title}
+        lead={lock.sub}
+        meta={meta}
+        blocks={[
+          {
+            label: "Why this happened",
+            body: reason ? (
+              <Prose>{reason}</Prose>
+            ) : (
+              <Prose>
+                A decision on this account closed access. Its reason is on the account record, and
+                support can read it back to you.
+              </Prose>
+            ),
+          },
+          {
+            label: "What this means",
+            body: deleted ? (
+              <Prose>The account and everything saved to it have been removed. Nothing here can bring it back.</Prose>
+            ) : (
+              <Prose>
+                Nothing has been deleted. The account is simply closed to you until the decision
+                changes — your details, choices and records are held exactly as they were.
+              </Prose>
+            ),
+          },
+          {
+            label: "What you can do",
+            body: appealable ? (
+              filed ? (
+                <Prose>Your appeal is filed and waiting on a review. Support can be reached below as well.</Prose>
+              ) : (
+                <Prose>Appeal the decision below, or write to support. A person reads every appeal.</Prose>
+              )
+            ) : (
+              <Prose>Write to support using the button below — the account cannot be reopened from this screen.</Prose>
+            ),
+          },
+        ]}
+        actions={
+          <>
+            {appealable && !filed ? (
+              <Full label="Appeal this decision" onClick={() => setSheetOpen(true)} />
+            ) : null}
+            <SupportPill subject={`Closed account — ref ${refCode ?? "none"}`} lines={supportLines} />
+            <SignOutPill />
+          </>
+        }
+      />
+
+      {sheetOpen ? (
+        <ReviewSheet
+          ask="What happened, in your own words — and what you think was misread."
+          busy={busy}
+          onClose={() => setSheetOpen(false)}
+          onFiled={send}
+        />
       ) : null}
     </>
   );
@@ -540,10 +732,12 @@ function BackAgain({ welcome }: { welcome: Welcome }) {
 
 function ReviewSheet({
   ask,
+  busy = false,
   onClose,
   onFiled,
 }: {
   ask: string;
+  busy?: boolean;
   onClose: () => void;
   onFiled: (note: string) => void;
 }) {
@@ -560,9 +754,9 @@ function ReviewSheet({
         <SheetActions
           cancelLabel="Cancel"
           onCancel={onClose}
-          confirmLabel="Send appeal"
-          onConfirm={() => onFiled(trimmed)}
-          disabled={short}
+          confirmLabel={busy ? "Sending…" : "Send appeal"}
+          onConfirm={() => { if (!busy) onFiled(trimmed); }}
+          disabled={short || busy}
         />
       }
     >
