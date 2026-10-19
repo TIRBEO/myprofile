@@ -813,7 +813,7 @@ function Complete() {
     };
   }, [signupToken, username]);
 
-  const finishTarget = redirectTo || "/";
+  const finishTarget = redirectTo || "/settings";
   const providerName = PROVIDER_LABELS[pending?.provider ?? ""] ?? "your provider";
 
   function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
