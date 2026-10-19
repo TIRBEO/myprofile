@@ -15,6 +15,7 @@
    inside a box with padding.
    ═══════════════════════════════════════════════════════════════════ */
 
+import { Fragment } from "react";
 import { cn } from "@/components/ig-ui";
 import { ProfilePicture } from "@/components/profile-picture";
 import { useT } from "@/lib/i18n";
@@ -151,6 +152,58 @@ export function StatementBody({ children }: { children: React.ReactNode }) {
   return <div className="flex flex-col gap-2.5">{children}</div>;
 }
 
+/** The bottom bar, in the one order every one of these screens uses.
+ *
+ *  A screen that explains a stop has three kinds of thing to offer, and they
+ *  used to arrive as whatever the page happened to write: a loud pill, then an
+ *  outline pill, then a word, stacked in a column that read as three buttons
+ *  of the same weight. This is the recipe instead:
+ *
+ *    • one loud thing, full width, because the reader came for that;
+ *    • the equal-weight ones beside each other, half width on a phone, so the
+ *      bar costs two lines of screen rather than four;
+ *    • the way out (signing out) as a plain word, last and smallest — it has
+ *      to be reachable, and it must never look like the point of the page.
+ *
+ *  A screen with nothing loud passes no `primary`: a deleted account has no
+ *  action worth shouting, and the bar should say that. */
+export function StatementActions({
+  primary,
+  secondary,
+  quiet,
+}: {
+  primary?: React.ReactNode;
+  secondary?: React.ReactNode[];
+  quiet?: React.ReactNode;
+}) {
+  const rest = (secondary ?? []).filter(Boolean);
+  return (
+    <div className="flex w-full flex-col items-stretch gap-2 sm:items-center">
+      {primary}
+      {rest.length ? (
+        <div
+          className={cn(
+            "grid w-full gap-2",
+            rest.length > 1 ? "grid-cols-2" : "grid-cols-1",
+            "sm:flex sm:w-auto sm:justify-center",
+          )}
+        >
+          {/* Keyed here so a screen writes its buttons, not a list. */}
+          {rest.map((node, index) => (
+            <Fragment key={index}>{node}</Fragment>
+          ))}
+        </div>
+      ) : null}
+      {quiet ? (
+        /* Full width on every breakpoint, so the word sits under the buttons
+           rather than beside them — it is the way out of the page, not a
+           fourth choice. */
+        <div className="flex w-full justify-center pt-0.5 text-[13px]">{quiet}</div>
+      ) : null}
+    </div>
+  );
+}
+
 /** The whole screen: the statement, its answers, and the one action held to the
     bottom edge.
  *
@@ -209,8 +262,10 @@ export function StatementScreen({
       </div>
 
       {actions ? (
-        <div className="sticky bottom-0 border-t border-divider bg-bg/92 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
-          <div className="mx-auto flex w-full max-w-[560px] flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-center">
+        <div className="sticky bottom-0 border-t border-divider bg-bg/92 px-5 pt-3.5 pb-[max(0.9rem,env(safe-area-inset-bottom))] backdrop-blur sm:px-6">
+          {/* Stretch on a phone so the pills reach edge to edge, centre on a
+              wider screen where `sm:w-auto` has already shrunk them. */}
+          <div className="mx-auto flex w-full max-w-[560px] flex-col items-stretch gap-2 sm:items-center">
             {actions}
           </div>
         </div>

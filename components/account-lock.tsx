@@ -26,7 +26,7 @@ import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { Button, Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Spinner, Textarea, cn } from "@/components/ig-ui";
 import { ProfilePicture } from "@/components/profile-picture";
-import { Prose, StatementScreen } from "@/components/statement";
+import { Prose, StatementActions, StatementScreen } from "@/components/statement";
 import { SupportPill } from "@/lib/support";
 import {
   clearWelcome,
@@ -84,12 +84,22 @@ export function AccountLockScreen() {
   );
 }
 
-/** The first read hasn't answered yet. It's a moment, not a page — a plain
-    ring, no headline, no skeleton theatre. */
+/** The first read hasn't answered yet. It's a moment, not a page — a ring and
+    one line saying what it is waiting for. The line matters: a bare spinner on
+    an empty screen reads as a page that broke, and the reader has nothing to
+    decide about. It is also bounded now — the read gives up at six seconds and
+    becomes `CouldNotRead` below, which has actions. */
 function Checking() {
   return (
-    <div className="flex min-h-dvh items-center justify-center text-muted" role="status" aria-label="Loading">
-      <Spinner size={26} />
+    <div
+      className="grid min-h-dvh place-items-center px-6 text-center"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex flex-col items-center gap-3 text-muted">
+        <Spinner size={26} />
+        <p className="text-[13.5px] leading-none">Checking your account…</p>
+      </div>
     </div>
   );
 }
@@ -109,19 +119,26 @@ function CouldNotRead() {
         },
       ]}
       actions={
-        <>
-          <Full
-            label={busy ? "Trying again…" : "Try again"}
-            busy={busy}
-            onClick={async () => {
-              setBusy(true);
-              await loadAccountState();
-              setBusy(false);
-            }}
-          />
-          <SupportPill subject="Account state could not be read" lines={["Account state: unknown — the account-state read failed"]} />
-          <Plain label="Sign out of this device" onClick={endSessionAndLeave} />
-        </>
+        <StatementActions
+          primary={
+            <Full
+              label={busy ? "Trying again…" : "Try again"}
+              busy={busy}
+              onClick={async () => {
+                setBusy(true);
+                await loadAccountState();
+                setBusy(false);
+              }}
+            />
+          }
+          secondary={[
+            <SupportPill
+              subject="Account state could not be read"
+              lines={["Account state: unknown — the account-state read failed"]}
+            />,
+          ]}
+          quiet={<SignOutPill />}
+        />
       }
     />
   );
@@ -306,18 +323,20 @@ function Deactivated({ lock }: { lock: Lock }) {
         },
       ]}
       actions={
-        <>
-          <Full label={busy ? "Reactivating…" : "Reactivate now"} busy={busy} onClick={comeBack} />
-          <SupportPill
-            subject={`Paused account — ref ${getAccountState()?.refCode ?? "none"}`}
-            lines={[
-              `Event reference: ${getAccountState()?.refCode ?? "none"}`,
-              "Account state: paused (self-deactivated)",
-              record ? `Paused on: ${formatStamp(record.at)}` : null,
-            ]}
-          />
-          <SignOutPill />
-        </>
+        <StatementActions
+          primary={<Full label={busy ? "Reactivating…" : "Reactivate now"} busy={busy} onClick={comeBack} />}
+          secondary={[
+            <SupportPill
+              subject={`Paused account — ref ${getAccountState()?.refCode ?? "none"}`}
+              lines={[
+                `Event reference: ${getAccountState()?.refCode ?? "none"}`,
+                "Account state: paused (self-deactivated)",
+                record ? `Paused on: ${formatStamp(record.at)}` : null,
+              ]}
+            />,
+          ]}
+          quiet={<SignOutPill />}
+        />
       }
     />
   );
@@ -364,11 +383,11 @@ function Deletion({ lock }: { lock: Lock }) {
           },
         ]}
         actions={
-          <>
-            <Full label={busy ? "Cancelling…" : "Keep my account"} busy={busy} onClick={keepIt} />
-            <SupportPill subject="Scheduled deletion — no final date" lines={supportLines} />
-            <SignOutPill />
-          </>
+          <StatementActions
+            primary={<Full label={busy ? "Cancelling…" : "Keep my account"} busy={busy} onClick={keepIt} />}
+            secondary={[<SupportPill subject="Scheduled deletion — no final date" lines={supportLines} />]}
+            quiet={<SignOutPill />}
+          />
         }
       />
     );
@@ -408,11 +427,11 @@ function Deletion({ lock }: { lock: Lock }) {
         },
       ]}
       actions={
-        <>
-          <Full label={busy ? "Cancelling…" : "Keep my account"} busy={busy} onClick={keepIt} />
-          <SupportPill subject={`Scheduled deletion — ref ${refCode ?? "none"}`} lines={supportLines} />
-          <SignOutPill />
-        </>
+        <StatementActions
+          primary={<Full label={busy ? "Cancelling…" : "Keep my account"} busy={busy} onClick={keepIt} />}
+          secondary={[<SupportPill subject={`Scheduled deletion — ref ${refCode ?? "none"}`} lines={supportLines} />]}
+          quiet={<SignOutPill />}
+        />
       }
     />
   );
@@ -504,27 +523,35 @@ function Restricted({ lock }: { lock: Lock }) {
           },
         ]}
         actions={
-          <>
-            {appealRow ? (
-              <Full label="I've read this — carry on" onClick={carryOn} />
-            ) : (
-              <>
+          <StatementActions
+            primary={
+              appealRow ? (
+                <Full label="I've read this — carry on" onClick={carryOn} />
+              ) : (
                 <Full label="Appeal this decision" onClick={() => setSheetOpen(true)} />
-                <Plain label="I've read this — carry on" onClick={carryOn} />
-              </>
-            )}
-            <SupportPill
-              subject={`Account decision — ref ${getAccountState()?.refCode ?? "none"}`}
-              lines={[
-                `Event reference: ${getAccountState()?.refCode ?? "none"}`,
-                `Decision: ${item.title}`,
-                `Decision id: ${item.id}`,
-                item.guideline ? `Rule applied: ${item.guideline}` : null,
-                item.at ? `Decided on: ${formatStamp(item.at)}` : null,
-              ]}
-            />
-            <SignOutPill />
-          </>
+              )
+            }
+            secondary={[
+              /* Setting the decision aside is the choice most readers of a
+                 notice actually want, so it is a button beside support rather
+                 than a word under it — once it has been taken, the loud row
+                 above is the same thing, and saying it twice would be noise. */
+              appealRow ? null : (
+                <Full tone="outline" label="I've read this — carry on" onClick={carryOn} />
+              ),
+              <SupportPill
+                subject={`Account decision — ref ${getAccountState()?.refCode ?? "none"}`}
+                lines={[
+                  `Event reference: ${getAccountState()?.refCode ?? "none"}`,
+                  `Decision: ${item.title}`,
+                  `Decision id: ${item.id}`,
+                  item.guideline ? `Rule applied: ${item.guideline}` : null,
+                  item.at ? `Decided on: ${formatStamp(item.at)}` : null,
+                ]}
+              />,
+            ]}
+            quiet={<SignOutPill />}
+          />
         }
         foot="Setting the decision aside stops it blocking the account; it stays listed under Account status."
       />
@@ -636,13 +663,20 @@ function Blocked({ lock }: { lock: Lock }) {
           },
         ]}
         actions={
-          <>
-            {appealable && !filed ? (
-              <Full label="Appeal this decision" onClick={() => setSheetOpen(true)} />
-            ) : null}
-            <SupportPill subject={`Closed account — ref ${refCode ?? "none"}`} lines={supportLines} />
-            <SignOutPill />
-          </>
+          <StatementActions
+            /* Nothing loud for a closure that cannot be undone from here: a
+               deleted account has no action worth shouting, and support is the
+               only way it can speak to anyone. */
+            primary={
+              appealable && !filed ? (
+                <Full label="Appeal this decision" onClick={() => setSheetOpen(true)} />
+              ) : null
+            }
+            secondary={[
+              <SupportPill subject={`Closed account — ref ${refCode ?? "none"}`} lines={supportLines} />,
+            ]}
+            quiet={<SignOutPill />}
+          />
         }
       />
 
@@ -726,7 +760,7 @@ function BackAgain({ welcome }: { welcome: Welcome }) {
           ),
         },
       ]}
-      actions={<Full label="Done" onClick={done} />}
+      actions={<StatementActions primary={<Full label="Done" onClick={done} />} />}
       foot="This screen only tells you what already happened — the account reopened the moment you pressed the button on the page before it."
     />
   );

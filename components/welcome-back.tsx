@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PillButton } from "@/components/settings-shell";
-import { Prose, StatementScreen, Value } from "@/components/statement";
+import { Prose, StatementActions, StatementScreen, Value } from "@/components/statement";
 import {
   acknowledgeWelcomeBack,
   type WelcomeBack,
@@ -134,7 +134,7 @@ export function WelcomeBackScreen({ welcome }: { welcome: WelcomeBack }) {
           ),
         },
       ]}
-      actions={<PillButton label="Continue" onClick={carryOn} disabled={busy} />}
+      actions={<StatementActions primary={<PillButton label="Continue" onClick={carryOn} disabled={busy} />} />}
       foot="Everything behind this screen is the account's own record — the state it was in, the reason it was put there and the moment it was given back. Where that record was silent, this page said so rather than filling the gap."
     />
   );
