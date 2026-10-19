@@ -47,14 +47,25 @@ const g = globalThis as unknown as { __myprofilePool?: Pool };
 export type ProfileRow = Record<string, unknown>;
 
 function createPool(): Pool {
-  const base = process.env.DATABASE_URL || process.env.DIRECT_DATABASE_URL || "";
+  let base = process.env.DATABASE_URL || process.env.DIRECT_DATABASE_URL || "";
   if (!base) throw new Error("DATABASE_URL is not set — the direct read path is unavailable.");
+  /* Supabase's SESSION pooler (:5432) pins one server session per pooled
+     client for that client's whole lifetime, and the project cap is around
+     fifteen sessions shared with the main API. Leaving this pool on 5432 meant
+     the profile read could sit on `connectionTimeoutMillis` (15s) while the
+     pooler refused it, and take sessions the brain's own reads then could not
+     have. The TRANSACTION pooler (:6543) assigns a backend per transaction, so
+     an idle client costs nothing — the same rewrite the main API applies. */
+  const poolerMatch = base.match(/pooler\.supabase\.com:(\d+)/);
+  if (poolerMatch && poolerMatch[1] === "5432") {
+    base = base.replace("pooler.supabase.com:5432", "pooler.supabase.com:6543");
+  }
   const sep = base.includes("?") ? "&" : "?";
   // Same pooler-friendly parameters the main API appends: transaction-mode
   // PgBouncer on :6543 needs pgbouncer=true, and Supabase's certificates are
   // self-signed, so sslmode=require is read with libpq semantics.
-  const portMatch = base.match(/pooler\.supabase\.com:(\d+)/);
-  const pgbouncer = portMatch && portMatch[1] === "6543" ? "&pgbouncer=true" : "";
+  const isTransactionPooler = /pooler\.supabase\.com:6543/.test(base);
+  const pgbouncer = isTransactionPooler ? "&pgbouncer=true" : "";
   const connectionString = `${base}${sep}uselibpqcompat=true&sslmode=require${pgbouncer}`;
 
   return new Pool({
