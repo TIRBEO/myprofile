@@ -334,8 +334,8 @@ export function Group({
   );
 }
 
-/** The small control beside a section heading — the whole block's action, not
-    a row inside the block it acts on. */
+/** The control beside a section heading — the whole block's action, not
+    a row inside the block it acts on. Same 48px pill as every other action. */
 export function SectionAction({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
@@ -344,7 +344,7 @@ export function SectionAction({ label, onClick }: { label: string; onClick: () =
         haptic("light");
         onClick();
       }}
- className="relative shrink-0 rounded-full px-2.5 py-1 text-[13px] font-semibold text-accent-text outline-none transition-colors hover:bg-accent/10 after:absolute after:-inset-y-2 after:inset-x-0 after:content-['']"
+      className="relative inline-flex min-h-12 shrink-0 items-center justify-center rounded-full bg-fill px-5 text-[15px] font-semibold text-accent-text outline-none transition-colors hover:bg-fill-hover active:bg-fill-press"
     >
       {label}
     </button>

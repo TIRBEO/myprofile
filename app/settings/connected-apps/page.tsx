@@ -193,7 +193,7 @@ function ConnectedRow({ app, onDisconnect }: { app: ConnectedApp; onDisconnect: 
           haptic("light");
           onDisconnect();
         }}
-        className="shrink-0 rounded-full border border-border px-3.5 py-1.5 text-[13.5px] font-semibold text-danger-text outline-none transition-colors hover:bg-danger/10 active:bg-danger/15"
+        className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-full border border-border px-5 text-[15px] font-semibold text-danger-text outline-none transition-colors hover:bg-danger/10 active:bg-danger/15"
       >
         Disconnect
       </button>
@@ -231,7 +231,7 @@ function AvailableRow({
       </span>
       <span
         aria-hidden
-        className="inline-flex min-h-9 shrink-0 items-center rounded-full bg-accent-solid px-3.5 text-[13.5px] font-semibold text-accent-fg transition-colors hover:bg-accent-solid-hover active:bg-accent-solid-hover"
+        className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-full bg-accent-solid px-5 text-[15px] font-semibold text-accent-fg transition-colors hover:bg-accent-solid-hover active:bg-accent-solid-hover"
       >
         {busy ? "Opening…" : "Connect"}
       </span>

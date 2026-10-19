@@ -263,7 +263,7 @@ export function BlockedView({
                     type="button"
                     onClick={copyRef}
                     aria-label={`Copy event reference ${eventId}`}
-                    className="ml-0.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 align-baseline text-[13.5px] font-semibold text-accent-text transition-colors hover:bg-fill"
+                    className="ml-0.5 inline-flex min-h-12 items-center gap-1.5 rounded-full bg-fill px-5 align-baseline text-[15px] font-semibold text-accent-text transition-colors hover:bg-fill-hover"
                   >
                     {copied ? (
                       <Check className="size-[13px] shrink-0" strokeWidth={2.6} aria-hidden />
@@ -492,7 +492,7 @@ function ReactivateFlow({
       <button
         type="button"
         onClick={onBack}
-        className="-ml-1 mb-1 inline-flex items-center gap-1 rounded-full px-1 py-1 text-[13.5px] font-semibold text-muted transition-colors hover:bg-fill hover:text-fg"
+        className="-ml-1 mb-1 inline-flex min-h-12 items-center gap-1 rounded-full px-4 text-[15px] font-semibold text-muted transition-colors hover:bg-fill hover:text-fg"
       >
         <ChevronLeft className="size-4 shrink-0" aria-hidden />
         {stage === "email" ? "Back" : "Change the email address"}
@@ -643,7 +643,7 @@ function AppealFlow({
       <button
         type="button"
         onClick={onBack}
-        className="-ml-1 mb-1 inline-flex items-center gap-1 rounded-full px-1 py-1 text-[13.5px] font-semibold text-muted transition-colors hover:bg-fill hover:text-fg"
+        className="-ml-1 mb-1 inline-flex min-h-12 items-center gap-1 rounded-full px-4 text-[15px] font-semibold text-muted transition-colors hover:bg-fill hover:text-fg"
       >
         <ChevronLeft className="size-4 shrink-0" aria-hidden />
         Back

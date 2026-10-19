@@ -116,7 +116,6 @@ function Plain({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <Button
       variant="ghost"
-      size="lg"
       onClick={() => {
         haptic("light");
         onClick();

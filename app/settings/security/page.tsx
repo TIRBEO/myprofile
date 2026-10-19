@@ -501,7 +501,7 @@ function ChangePasswordSheet({
                   setError(null);
                   setUseBackup((v) => !v);
                 }}
-                className="text-[12.5px] font-medium text-accent"
+                className="inline-flex min-h-12 items-center justify-center rounded-full bg-fill px-5 text-[15px] font-semibold text-accent-text outline-none transition-colors hover:bg-fill-hover active:bg-fill-press"
               >
                 {useBackup ? "Use app code" : "Use a backup code"}
               </button>

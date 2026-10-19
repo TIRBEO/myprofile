@@ -1228,7 +1228,7 @@ function PickerRow({
         onClick={onClick}
         aria-describedby={invalid ? noteId : undefined}
         className={cn(
-          "h-11 w-full gap-3 bg-surface-2 text-left",
+          "h-12 w-full gap-3 bg-surface-2 text-left",
           invalid ? "border border-danger/70 hover:border-danger" : "border border-transparent hover:bg-surface-3",
         )}
       >

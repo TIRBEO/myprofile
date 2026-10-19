@@ -383,7 +383,7 @@ function SideRail({
         <button
           type="button"
           onClick={onSignOut}
-          className="flex min-h-10 w-full items-center justify-center gap-2 rounded-full px-3.5 text-[14px] font-semibold tracking-[-0.01em] text-danger-text outline-none transition-colors hover:bg-fill active:bg-fill-press"
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-5 text-[15px] font-semibold tracking-[-0.01em] text-danger-text outline-none transition-colors hover:bg-fill active:bg-fill-press"
         >
           <LogOut className="size-[16px] shrink-0" strokeWidth={2.2} />
           {t("Log out")}

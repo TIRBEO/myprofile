@@ -1121,7 +1121,7 @@ body:has(.auth-dark) {
   }
 
   .login-page .login-card button[type='submit'] {
-    height: 42px;
+    height: 48px;
     border-radius: 999px;
   }
 
@@ -1227,8 +1227,8 @@ body:has(.auth-dark) {
   }
 
   .login-page .login-card button[type='submit'] {
-    height: 42px;
-    font-size: 14.5px;
+    height: 48px;
+    font-size: 15px;
     border-radius: 999px;
   }
 

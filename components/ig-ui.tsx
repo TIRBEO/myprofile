@@ -72,7 +72,7 @@ const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   secondary: FILL.secondary,
   ghost: "text-text-3 hover:bg-hover hover:text-fg",
   danger: FILL.danger,
-  link: "min-h-10 rounded-full px-1 text-[15px] font-semibold text-text-3 hover:text-fg",
+  link: "min-h-12 rounded-full px-2 text-[15px] font-semibold text-text-3 hover:text-fg",
 };
 
 /** Every action button in settings is built from these two, so a "Save" and a

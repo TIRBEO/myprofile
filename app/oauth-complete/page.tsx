@@ -208,11 +208,11 @@ const BUTTON_BASE =
   "transition-[background-color,color,border-color,opacity,transform,box-shadow] duration-150 " +
   "disabled:pointer-events-none";
 
-/* The landing pill at every size: 36 compact, 42 standard, 44 large. */
+/* The landing pill at every size — 48px, matching the rest of the app. */
 const BUTTON_SIZE: Record<"sm" | "md" | "lg", string> = {
-  sm: "h-9 px-4 text-[13.5px]",
-  md: "h-[42px] px-5 text-[14.5px]",
-  lg: "h-[44px] px-6 text-[14.5px]",
+  sm: "h-12 px-5 text-[15px]",
+  md: "h-12 px-6 text-[15px]",
+  lg: "h-12 px-6 text-[15px]",
 };
 
 /** Primary — the accounts `.login-cta` recipe: accounts-blue fill, darker on
@@ -257,14 +257,14 @@ function Button({
   );
 }
 
-/** Inline text action — colour carries the affordance, 40px hit area. */
+/** Inline text action — colour carries the affordance, 48px hit area. */
 function TextAction({children, className, ...rest}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
       {...rest}
       className={cn(
-        "inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full px-1 text-[15px] font-semibold text-text-3",
+        "inline-flex min-h-12 w-full items-center justify-center gap-1.5 rounded-full px-1 text-[15px] font-semibold text-text-3",
         "transition-colors hover:text-fg active:text-text-2",
         "focus-visible:outline-none focus-visible:text-fg",
         className,

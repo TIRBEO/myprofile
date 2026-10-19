@@ -515,6 +515,7 @@ export default function ArticlePage() {
                   haptic("light");
                   voice.rewind();
                 }}
+                className="size-12"
                 icon={<Rewind className="size-[19px]" strokeWidth={2} />}
               />
               <IconButton
@@ -524,7 +525,7 @@ export default function ArticlePage() {
                   if (voice.playing) voice.pause();
                   else voice.play();
                 }}
-                className="size-11 bg-accent-solid text-accent-fg hover:brightness-110 active:brightness-95"
+                className="size-12 bg-accent-solid text-accent-fg hover:brightness-110 active:brightness-95"
                 icon={
                   voice.playing ? (
                     <Pause className="size-[19px]" strokeWidth={2.4} />
@@ -542,6 +543,7 @@ export default function ArticlePage() {
                   haptic("light");
                   setVoiceSheet(true);
                 }}
+                className="size-12"
                 icon={<AudioLines className="size-[19px]" strokeWidth={2} />}
               />
               <IconButton
@@ -550,7 +552,7 @@ export default function ArticlePage() {
                   haptic("light");
                   voice.stop();
                 }}
-                className="text-muted hover:text-fg"
+                className="size-12 text-muted hover:text-fg"
                 icon={<Square className="size-[15px]" strokeWidth={2.2} fill="currentColor" />}
               />
             </div>
