@@ -147,6 +147,17 @@ export function setStored<T>(key: string, value: T): void {
   persist(key, value);
 }
 
+/** Optimistic write with NO auto-persist — for a caller that is about to
+    `await persistNow` itself. Using `setStored` there would fire a second,
+    duplicate PATCH for the same key (one fire-and-forget, one awaited), which
+    is what made the extra-security switches feel slow. */
+export function setStoredLocal<T>(key: string, value: T): void {
+  bag = { ...(bag ?? readMirror()), [key]: value };
+  writeMirror(bag);
+  mirrorPerStore(key, value);
+  emit();
+}
+
 /** Like setStored, but leaves the store's own localStorage slot untouched.
     For values whose boot script reads a raw (non-JSON) value from that slot —
     the theme, which <head> compares against the literal strings "light"/

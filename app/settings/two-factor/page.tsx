@@ -27,7 +27,7 @@ import {
 } from "@/lib/two-factor";
 import { formatKey, secretFromUri } from "@/lib/totp";
 import { formatStamp } from "@/lib/dates";
-import { persistNow, setStored } from "@/lib/remote-store";
+import { persistNow, setStoredLocal } from "@/lib/remote-store";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { trackError, trackEvent, withRef } from "@/lib/telemetry";
@@ -122,7 +122,7 @@ export default function TwoFactorPage() {
     try {
       for (const [field, value] of Object.entries(next) as [keyof typeof PREF_KEYS, boolean][]) {
         const key = PREF_KEYS[field];
-        setStored(key, value);
+        setStoredLocal(key, value);
         await persistNow(key, value);
       }
       trackEvent("settings.2fa_pref_changed", { metadata: { ...next } });
