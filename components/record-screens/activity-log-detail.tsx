@@ -255,7 +255,7 @@ export default function ChangeDetailPage({ id }: { id: string }) {
           <div className="mt-3">
             <SupportPill
               refCode={record.ref}
-              subject={`Question about an account change — event ${record.ref}`}
+              subject={`Question about "${record.title}" on ${formatDate(record.at)}`}
               lines={[
                 `What: ${record.title}`,
                 record.fields?.length ? `Fields moved: ${record.fields.join(", ")}` : null,

@@ -330,7 +330,7 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
           <div className="mt-3">
             <SupportPill
               refCode={record.ref ?? record.id}
-              subject={`Question about a sign-in — event ${record.ref ?? record.id}`}
+              subject={`Question about "${whatHappened}" on ${formatDate(record.at)}`}
               lines={[
                 `What: ${whatHappened}`,
                 `Device: ${record.device}`,
