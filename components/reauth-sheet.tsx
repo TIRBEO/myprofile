@@ -5,7 +5,6 @@ import {
   Button,
   Field,
   PasswordField,
-  Segmented,
   Sheet,
   SheetActions,
 } from "@/components/ig-ui";
@@ -23,18 +22,21 @@ import {
 } from "@/lib/reauth";
 
 /* ═══════════════════════════════════════════════════════════════════
-   "Confirm it's you"
+   "Confirm it's you" — every door, in order
 
    One dialog for every action the account service refuses until it gets a
    fresh proof — removing a passkey, regenerating backup codes, signing other
-   devices out, disconnecting an app, deleting the account. Before this each
-   screen guessed at a password box (which an account signed in through Google
-   has never had), so the honest answer was a field that could not be filled.
+   devices out, disconnecting an app, deleting the account. The service
+   answers its refusal with the ordered CHAIN this account must walk — the
+   password first, then a code emailed to the sign-in address, then the
+   authenticator when "require 2FA for sensitive actions" is switched on —
+   and the sheet works down the list one step at a time. Whatever is typed
+   is folded into a single proof and handed back at the end; the action runs
+   once, with all of it.
 
-   What appears here is decided by the service, not by the page: a refusal
-   arrives carrying the doors *this* account can open, and only those are
-   offered. Closing the dialog changes nothing on the account — the action
-   simply never ran.
+   Closing the dialog changes nothing on the account — the action simply
+   never ran. A refused proof restarts the walk from the top: the emailed
+   code was spent either way, so nothing below the refusal could be reused.
    ═══════════════════════════════════════════════════════════════════ */
 
 const LABEL: Record<ReauthMethod, string> = {
@@ -52,10 +54,13 @@ const PROMPT: Record<ReauthMethod, string> = {
 };
 
 /** A reply that means "that proof didn't work", so the dialog can say so in
-    place instead of dumping the person back on the page they came from. */
+    place instead of dumping the person back on the page they came from.
+    `SECOND_FACTOR_REQUIRED` is the account's "require 2FA" policy speaking:
+    everything before the authenticator was right, and the code is what's
+    still owed. */
 function proofRejection(err: unknown): string | null {
   if (!(err instanceof ApiError)) return null;
-  if (!["INVALID_CODE", "INVALID_PASSWORD", "REAUTH_RATE_LIMITED"].includes(err.code || "")) return null;
+  if (!["INVALID_CODE", "INVALID_PASSWORD", "REAUTH_RATE_LIMITED", "SECOND_FACTOR_REQUIRED"].includes(err.code || "")) return null;
   return err.message;
 }
 
@@ -64,16 +69,22 @@ const CODE_SECONDS = 30;
 export function ReauthSheet({
   methods,
   error,
+  busy,
   onProof,
   onCancel,
 }: {
+  /** The ordered chain the service demanded — every step is required. */
   methods: ReauthMethod[];
   /** Seeded when a previous proof was refused; cleared as soon as they type. */
   error: string | null;
+  /** The proof was given and the account is spending it — the dialog stays
+      up saying "Checking…" rather than vanishing into a silent few seconds. */
+  busy: boolean;
   onProof: (proof: ReauthProof) => void;
   onCancel: () => void;
 }) {
-  const [method, setMethod] = useState<ReauthMethod>(methods[0]);
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState<ReauthProof>({});
   const [password, setPassword] = useState("");
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [sentTo, setSentTo] = useState("");
@@ -81,9 +92,11 @@ export function ReauthSheet({
   const [againIn, setAgainIn] = useState(0);
   const [notice, setNotice] = useState(error);
 
+  const method = methods[Math.min(step, methods.length - 1)];
   const code = digits.join("");
   const full = code.length === 6;
   const ready = method === "password" ? password.length > 0 : full;
+  const last = step >= methods.length - 1;
 
   useEffect(() => {
     if (againIn <= 0) return;
@@ -91,26 +104,30 @@ export function ReauthSheet({
     return () => window.clearTimeout(timer);
   }, [againIn]);
 
-  function choose(next: ReauthMethod) {
-    setMethod(next);
-    setNotice(null);
-    setDigits(["", "", "", "", "", ""]);
-    setPassword("");
-  }
-
-  function submit() {
-    if (!ready) return;
+  /** Answer this step, then either walk to the next or hand the whole
+      collected proof back. The emailed code and the authenticator code are
+      different proofs to the service, and it reads them from different
+      fields — a mix-up here would spend the wrong one. */
+  function advance() {
+    if (!ready || busy) return;
+    const answer: ReauthProof =
+      method === "password" ? { password } : method === "code" ? { reauthCode: code } : { code };
+    const merged = { ...answers, ...answer };
+    if (!last) {
+      setAnswers(merged);
+      setStep(step + 1);
+      setDigits(["", "", "", "", "", ""]);
+      setNotice(null);
+      haptic("light");
+      return;
+    }
     haptic("medium");
-    // Which door was answered — never the answer itself.
+    // Which steps were walked — never the answers themselves.
     trackEvent("auth.2fa_submit", {
-      detail: method === "password" ? "password_proof" : `${method}_proof`,
-      metadata: { method },
+      detail: "chain_proof",
+      metadata: { steps: methods.join(",") },
     });
-    if (method === "password") return onProof({ password });
-    // The emailed code and the authenticator code are different proofs to the
-    // service, and it reads them from different fields — a mix-up here would
-    // spend the wrong one.
-    onProof(method === "code" ? { reauthCode: code } : { code });
+    onProof(merged);
   }
 
   async function request() {
@@ -139,27 +156,26 @@ export function ReauthSheet({
     <Sheet
       title="Confirm it's you"
       description="This one changes your account, so a signed-in browser isn't enough. Verify your identity to continue."
-      onClose={onCancel}
+      onClose={busy ? () => {} : onCancel}
       footer={
         <SheetActions
           cancelLabel="Not now"
-          onCancel={onCancel}
-          confirmLabel="Confirm"
+          onCancel={() => { if (!busy) onCancel(); }}
+          confirmLabel={busy ? "Checking…" : last ? "Confirm" : "Continue"}
           disabled={!ready}
-          onConfirm={submit}
+          loading={busy}
+          onConfirm={advance}
         />
       }
     >
-      <div className="-mx-4 px-4 pb-2 sm:-mx-5 sm:px-5">
-        {methods.length > 1 ? (
-          <Segmented
-            label="How would you like to verify?"
-            value={method}
-            onChange={choose}
-            options={methods.map((m) => ({ value: m, label: LABEL[m] }))}
-          />
-        ) : null}
-      </div>
+      {methods.length > 1 ? (
+        <p
+          className="mb-4 text-center text-[12px] font-semibold uppercase tracking-wide text-muted"
+          style={{ animation: "ig-fade 450ms ease-out backwards" }}
+        >
+          Step {step + 1} of {methods.length} · {LABEL[method]}
+        </p>
+      ) : null}
 
       {method === "password" ? (
         <Field label="Password" error={notice} hint={PROMPT.password}>
@@ -169,7 +185,7 @@ export function ReauthSheet({
               setPassword(next);
               setNotice(null);
             }}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            onKeyDown={(e) => e.key === "Enter" && advance()}
             autoFocus
           />
         </Field>
@@ -185,6 +201,7 @@ export function ReauthSheet({
               setDigits(next);
               setNotice(null);
             }}
+            onEnter={advance}
           />
         </Field>
       )}
@@ -197,7 +214,7 @@ export function ReauthSheet({
               15 minutes.
             </p>
           ) : null}
-          <Button variant="secondary" block loading={sending} disabled={againIn > 0} onClick={request}>
+          <Button variant="secondary" block loading={sending} disabled={againIn > 0 || busy || sending} onClick={request}>
             {againIn > 0 ? `Resend in ${againIn}s` : sentTo ? "Send a new code" : "Send me a code"}
           </Button>
         </div>
@@ -209,6 +226,9 @@ export function ReauthSheet({
 /* ── The page side of it ─────────────────────────────────────────── */
 
 type Pending = {
+  /** Bumped each time the dialog is (re)opened, so a refused proof remounts
+      it — the error seeds the field and the refused answer is wiped. */
+  round: number;
   methods: ReauthMethod[];
   error: string | null;
   settle: (proof: ReauthProof | null) => void;
@@ -231,30 +251,43 @@ type Pending = {
  */
 export function useReauthGuard() {
   const [pending, setPending] = useState<Pending | null>(null);
+  /** The sheet stays open in "Checking…" between the proof being given and
+      the retried action answering — the wait is the dialog's business. */
+  const [checking, setChecking] = useState(false);
+  const round = useRef(0);
   const open = useRef<(methods: ReauthMethod[], error: string | null) => Promise<ReauthProof | null>>(
     async () => null,
   );
 
   // The dialog is state the *action* needs to see, so the promise lives here
   // and the component only reports what the person typed.
-  open.current = (methods, error) =>
-    new Promise<ReauthProof | null>((resolve) => {
+  open.current = (methods, error) => {
+    const id = ++round.current;
+    return new Promise<ReauthProof | null>((resolve) => {
+      setChecking(false);
       setPending({
+        round: id,
         methods,
         error,
         settle: (proof) => {
-          setPending(null);
+          // Settling hands the proof to the guard but keeps the sheet up,
+          // busy, until the retried action says what happened.
           resolve(proof);
+          setChecking(proof !== null);
         },
       });
     });
+  };
 
   const guard = useCallback(async <T,>(action: (proof: ReauthProof) => Promise<T>): Promise<T> => {
     let proof: ReauthProof = {};
     let ask: { methods: ReauthMethod[]; error: string | null } = { methods: ["password", "code"], error: null };
     for (;;) {
       try {
-        return await action(proof);
+        const out = await action(proof);
+        setPending(null);
+        setChecking(false);
+        return out;
       } catch (err) {
         if (needsReauth(err)) {
           // First refusal: the service itself says which proofs this account has.
@@ -263,17 +296,27 @@ export function useReauthGuard() {
           const complaint = proofRejection(err);
           // A refused proof belongs to this dialog, so it comes back to this
           // dialog. Anything else is the action's own problem.
-          if (!complaint || !Object.keys(proof).length) throw err;
+          if (!complaint || !Object.keys(proof).length) {
+            setPending(null);
+            setChecking(false);
+            throw err;
+          }
           trackEvent("auth.reauth_failed", {
             detail: "proof_refused",
             metadata: { code: err instanceof ApiError ? err.code : undefined },
           });
           ask = { ...ask, error: complaint };
+          // The account's 2FA policy refusing the authenticator link: the
+          // chain itself doesn't change, only the news that this step went
+          // wrong. The walk restarts at the top — the emailed code was spent
+          // or never reached, so nothing can be carried over.
         }
       }
       const answer = await open.current(ask.methods, ask.error);
       if (!answer) {
         // Walking away is an answer too — the action never ran.
+        setPending(null);
+        setChecking(false);
         trackEvent("auth.reauth_declined", { detail: "sheet_closed" });
         throw new ReauthDeclined();
       }
@@ -285,8 +328,10 @@ export function useReauthGuard() {
     guard,
     reauthDialog: pending ? (
       <ReauthSheet
+        key={pending.round}
         methods={pending.methods}
         error={pending.error}
+        busy={checking}
         onProof={(proof) => pending.settle(proof)}
         onCancel={() => pending.settle(null)}
       />

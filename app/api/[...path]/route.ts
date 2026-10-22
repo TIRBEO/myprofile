@@ -149,7 +149,18 @@ async function forward(
      page records that something changed and nothing about who changed it. */
   const agent = request.headers.get("user-agent");
   if (agent) headers["user-agent"] = agent;
-  const clientIp = request.headers.get("x-forwarded-for");
+  /* The visitor's address, from whichever header the front door used: Vercel's
+     edge names it in `x-forwarded-for`, a Cloudflare tunnel in
+     `cf-connecting-ip`, a plain proxy in `x-real-ip`. With none of them the
+     request reached this server over a bare socket (a dev box on a public
+     address) and the address is genuinely unknowable here — so nothing is
+     sent, and the account records no address rather than inventing this
+     machine's. */
+  const clientIp =
+    request.headers.get("x-forwarded-for") ||
+    request.headers.get("cf-connecting-ip") ||
+    request.headers.get("x-real-ip") ||
+    "";
   if (clientIp) headers["x-forwarded-for"] = clientIp;
   /* But the GeoIP headers must NOT be forwarded as `x-vercel-ip-*`: Vercel's
      edge overwrites those on every hop, so by the time the brain reads them
@@ -167,6 +178,13 @@ async function forward(
   for (const [from, to] of originFrom) {
     const value = safeHeaderOriginValue(request.headers.get(from));
     if (value) headers[to] = value;
+  }
+  /* A Cloudflare-fronted deployment names no city — only the country, in
+     `cf-ipcountry` — and that is still the browser's own fact, so it rides
+     along when Vercel's richer answer was absent. */
+  if (!headers["x-origin-country"]) {
+    const cfCountry = safeHeaderOriginValue(request.headers.get("cf-ipcountry"));
+    if (cfCountry) headers["x-origin-country"] = cfCountry;
   }
   // The client at the head of the chain — the rest of it is hops, including this one.
   const headIp = (clientIp || "").split(",")[0]?.trim();

@@ -288,14 +288,21 @@ export async function apiRequestDeletionCode(): Promise<{ message: string; email
   return { email: reply.email || "", message: reply.message || "Verification code sent" };
 }
 
-/** Step two: the code proves it is really the owner, and the account goes onto
-    the 30-day clock. A wrong or spent code throws with the brain's own words,
-    so the page can say which of the two happened. */
-export async function apiVerifyDeletion(code: string, reason: string | null): Promise<AccountState | null> {
+/** Step two: the code proves the mailbox, and a fresh identity proof —
+    password, authenticator code, emailed re-auth code or passkey, whatever
+    this account can offer — proves the person. The account also enforces its
+    "require 2FA for sensitive actions" policy here. A wrong or spent code
+    throws with the brain's own words, so the page can say which of the two
+    happened. */
+export async function apiVerifyDeletion(
+  code: string,
+  reason: string | null,
+  proof: Record<string, string> = {},
+): Promise<AccountState | null> {
   await apiSend("/api/user/delete-account", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ step: "verify", code, reason }),
+    body: JSON.stringify({ step: "verify", deleteCode: code, reason, ...proof }),
   });
   return afterWrite();
 }

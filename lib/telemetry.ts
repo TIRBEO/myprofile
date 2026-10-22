@@ -127,13 +127,14 @@ export function noteAnalyticsCookiesConsent(on: boolean): void {
       return crypto.randomUUID();
     }
   } catch {
-    /* fall through to the hand-rolled id */
+    /* fall through to the Web Crypto template */
   }
-  const rnd = () =>
-    Math.floor((1 + Math.random()) * 0x10000)
-      .toString(16)
-      .slice(1);
-  return `${rnd()}${rnd()}-${rnd()}-${rnd()}-${rnd()}-${rnd()}${rnd()}${rnd()}`;
+  // No Math.random: a de-dup key must not be guessable from the event stream.
+  // getRandomValues is the same Web Crypto source, older-API shape.
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 export type TrackOptions = {

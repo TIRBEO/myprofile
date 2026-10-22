@@ -26,7 +26,7 @@ export function supportMailto(subject: string, lines: (string | null | undefined
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-/** The quiet text-pill every blocked/status page carries. */
+/** The text-pill every blocked/status page carries. */
 export function SupportPill({
   subject,
   lines,
@@ -39,7 +39,7 @@ export function SupportPill({
   return (
     <a
       href={supportMailto(subject, lines)}
-      className="btn btn-secondary w-full sm:w-auto"
+      className="btn btn-secondary"
     >
       {label}
     </a>

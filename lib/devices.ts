@@ -68,8 +68,19 @@ export type SessionEvent = {
   label: string;
 };
 
-function newId() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+export function newId() {
+  // Crypto-backed even for a local key: support drafts echo this id back to
+  // the server, and a timestamp+Math.random twin is trivially forged.
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {
+    /* fall through */
+  }
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return `${Date.now().toString(36)}-${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /** This machine's address, matched to line up its own sign-in history. */

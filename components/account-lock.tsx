@@ -98,7 +98,7 @@ function Checking() {
     >
       <div className="flex flex-col items-center gap-3 text-muted">
         <Spinner size={26} />
-        <p className="text-[13.5px] leading-none">Checking your account…</p>
+        <p className="text-[13.5px] leading-none">Loading…</p>
       </div>
     </div>
   );
@@ -327,6 +327,7 @@ function Deactivated({ lock }: { lock: Lock }) {
           primary={<Full label={busy ? "Reactivating…" : "Reactivate now"} busy={busy} onClick={comeBack} />}
           secondary={[
             <SupportPill
+              
               subject={`Paused account — ref ${getAccountState()?.refCode ?? "none"}`}
               lines={[
                 `Event reference: ${getAccountState()?.refCode ?? "none"}`,

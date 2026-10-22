@@ -13,8 +13,8 @@
    The palette itself lives in globals.css keyed off <html data-theme>,
    so applying it is a single attribute write — no inline var churn.  */
 
-import { getStored, pushSetting } from "@/lib/remote-store";
-import { SEMANTIC_DEFAULTS, readSemanticPrefs, saveSemanticPrefs } from "@/lib/semantic-prefs";
+import { pushSetting } from "@/lib/remote-store";
+import { saveSemanticPrefs } from "@/lib/semantic-prefs";
 
 export type ThemeId = "system" | "dark" | "light";
 
@@ -29,8 +29,8 @@ export type ThemeDef = {
 };
 
 export const THEME_KEY = "tirbeo:theme";
-/** Set only by a tap on this device's Appearance screen — the flag that says
-    "this device was told", which remote writes must not overrule. */
+/** Set only by a tap on this device's Appearance screen — it holds the value
+    this device was told, and it is the only preference `readTheme` reads. */
 const CHOICE_KEY = "tirbeo:theme:local";
 
 /** The palette each tile is a picture of. These are literals on purpose: the
@@ -68,9 +68,10 @@ export const THEMES: ThemeDef[] = [
 
 /** Ids that may come back from a stored preference — not the choices offered. */
 const KNOWN_IDS: string[] = ["system", "dark", "light"];
-/** What a preference with nothing behind it should resolve to. Accounts
-    follows the OS outright; myprofile can pin a choice, so a pinned value
-    always beats this — but nobody has picked one yet, so the device wins. */
+/** Nobody has picked on this device, the device's own mode wins. A choice
+    made *here* is the only thing that outranks the OS — a value another
+    device pushed to the account never pins this one, which is why the bag
+    and the account column are writes, not reads, for the palette. */
 export const DEFAULT_THEME: ThemeId = "system";
 export function isThemeId(v: unknown): v is ThemeId {
   return typeof v === "string" && KNOWN_IDS.includes(v);
@@ -78,16 +79,9 @@ export function isThemeId(v: unknown): v is ThemeId {
 
 export function readTheme(): ThemeId {
   if (typeof window === "undefined") return DEFAULT_THEME;
-  // A palette chosen on this device is the most specific answer there is —
-  // above the account bag and above the raw slot the boot script wrote.
-  if (explicitLocalChoice()) return localChoice()!;
-  // The account bag is the truth once it has landed; the raw localStorage slot
-  // is what the first-paint boot script wrote and the offline fallback.
-  const fromBag = getStored<string | null>(THEME_KEY, null);
-  if (isThemeId(fromBag)) return fromBag;
   try {
-    const saved = window.localStorage.getItem(THEME_KEY);
-    return isThemeId(saved) ? saved : DEFAULT_THEME;
+    const chosen = window.localStorage.getItem(CHOICE_KEY);
+    return isThemeId(chosen) ? chosen : DEFAULT_THEME;
   } catch {
     return DEFAULT_THEME;
   }
@@ -96,24 +90,22 @@ export function readTheme(): ThemeId {
 export type ResolvedTheme = "dark" | "light";
 
 /** The stored preference resolves to a palette. `system` follows the device,
-    and falls back to dark where the media query is unavailable. */
+    and falls back to light where the media query is unavailable. */
 export function resolveTheme(id: ThemeId): ResolvedTheme {
   if (id === "dark") return "dark";
   if (id === "light") return "light";
-  if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: light)").matches) {
-    return "light";
+  if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+    return "dark";
   }
-  return "dark";
+  return "light";
 }
 
 /**
  * Writes the palette to <html> and persists the choice.
  *
- * `persist: false` is for the callers that are only *reflecting* a value the
- * store already holds — the settings sync. Those run inside the store's own
- * listener, and persisting there re-enters the listener through `pushSetting`
- * → `emit()` → listener → `applyTheme` → …, a synchronous loop that overflows
- * the stack on every page load.
+ * `persist: false` is for callers that only *re-paint* the already-recorded
+ * choice — an OS flip while the preference is "system". The device was never
+ * told anything new, so nothing is recorded and nothing is pushed.
  */
 export function applyTheme(id: ThemeId, { persist = true }: { persist?: boolean } = {}) {
   if (typeof document === "undefined") return;
@@ -123,64 +115,20 @@ export function applyTheme(id: ThemeId, { persist = true }: { persist?: boolean 
   root.style.colorScheme = concrete;
   try {
     window.localStorage.setItem(THEME_KEY, id);
-    // A tap is a decision made *on this device*. It records the fact so no
-    // remote write — this app's bag, or the account's theme column — gets to
-    // overrule it later on the same device. See `explicitLocalChoice`.
+    // A tap is a decision made *on this device* — the only thing that
+    // outranks the OS on this device. It is written beside the choice itself
+    // so the boot script and `readTheme` agree on where the answer lives.
     if (persist) window.localStorage.setItem(CHOICE_KEY, id);
   } catch {
     /* private mode — palette still applies for this session */
   }
   if (!persist) return;
-  // Mirror the choice onto the account too, so another device converges:
-  // the bag for this app's first paint, the typed column for every other
-  // Tirbeo surface — the theme really follows the account, not this device.
+  // Mirror the choice onto the account — the bag for the other Tirbeo
+  // surfaces' stores, the typed column for admin analytics and the account
+  // export. It records what this device chose; it never comes back as an
+  // order to this device or to any other one, whose OS is its own answer.
   pushSetting(THEME_KEY, id);
   saveSemanticPrefs({ theme: id });
-}
-
-/** The localStorage slot on its own — the bag and the account column are
-    deliberately not consulted. "Follow device" is worth less than nothing if
-    a remote value can quietly replace it, so the paths that decide *whether*
-    to honour a remote value look only here. */
-function localChoice(): ThemeId | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const saved = window.localStorage.getItem(THEME_KEY);
-    return isThemeId(saved) ? saved : null;
-  } catch {
-    return null;
-  }
-}
-
-/** True once the person has picked a palette on this device. A remote write
-    may still land (this device's choice has to travel to the account), but it
-    must not come back as an order. */
-function explicitLocalChoice(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(CHOICE_KEY) != null;
-  } catch {
-    return false;
-  }
-}
-
-/** Seed from the account's own theme column — what the other Tirbeo surfaces
-    write and read. Only a device that has never been told anything accepts
-    the seed: a "Follow device" picked here stays follower, and a pinned
-    Midnight or Daylight stays pinned. Runs once per session. */
-let accountSeeded = false;
-export async function syncThemeFromAccount(): Promise<void> {
-  if (typeof window === "undefined" || accountSeeded) return;
-  accountSeeded = true;
-  if (explicitLocalChoice()) return;
-  const prefs = await readSemanticPrefs();
-  const fromAccount = prefs?.theme;
-  if (!isThemeId(fromAccount) || fromAccount === SEMANTIC_DEFAULTS.theme) return;
-  if (fromAccount === readTheme()) return;
-  // persist:false keeps the palette out of the re-entrant listener loop
-  // (see applyTheme); pushSetting carries the account's answer into the bag.
-  applyTheme(fromAccount, { persist: false });
-  pushSetting(THEME_KEY, fromAccount);
 }
 
 /** A "system" choice tracks the device; the other two never move. */
@@ -195,5 +143,6 @@ export function onSystemThemeChange(onChange: () => void) {
 }
 
 /** Inlined in <head> so the palette is correct on the very first paint.
-    Mirrors resolveTheme without importing anything — it runs before React. */
-export const THEME_BOOT = `(function(){try{var k="${THEME_KEY}";var v=localStorage.getItem(k);var t=(v==="dark"||v==="light"||v==="system")?v:"system";var a=t==="light"||(t==="system"&&window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark";document.documentElement.setAttribute("data-theme",a);document.documentElement.style.colorScheme=a;}catch(e){}})();`;
+    Mirrors readTheme + resolveTheme without importing anything — it runs
+    before React. Only this device's own recorded choice outranks the OS. */
+export const THEME_BOOT = `(function(){try{var c=localStorage.getItem("${CHOICE_KEY}");var t=(c==="dark"||c==="light"||c==="system")?c:"system";var a=t==="dark"||(t==="system"&&window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";document.documentElement.setAttribute("data-theme",a);document.documentElement.style.colorScheme=a;}catch(e){}})();`;

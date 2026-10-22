@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sheet } from "@/components/ig-ui";
+import { Button, Sheet } from "@/components/ig-ui";
 import { changeIcon } from "@/components/activity-icons";
 import { MapCard } from "@/components/map-card";
 import {
@@ -195,72 +195,79 @@ export default function ChangeDetailPage({ id }: { id: string }) {
         </div>
       ) : null}
 
-      <div className="mt-6 flex flex-col items-center gap-1">
-        <p className="text-[12px] text-muted">
-          Event reference <code className="font-mono">{record.ref}</code>
+      {/* ── The decision ───────────────────────────────────────────
+          Same shape as the sign-in record: the question, its answers and
+          the record's paperwork in one column, no plate behind it. */}
+      <section className="mt-8">
+        <h2 className="text-[17px] leading-snug font-semibold tracking-[-0.01em]">
+          {answer === "not-me"
+            ? "You said this wasn’t you"
+            : answer === "recognised"
+              ? "You confirmed this change"
+              : "Was this you?"}
+        </h2>
+        <p className="mt-1 max-w-[58ch] text-[13.5px] leading-relaxed text-muted">
+          {answer === "not-me"
+            ? `Log out to end every other session, then change your password.${record.youSaidAt ? ` You said this ${ago(record.youSaidAt)}.` : ""}`
+            : answer === "recognised"
+              ? record.youSaidAt
+                ? `Marked as yours ${ago(record.youSaidAt)}. Nothing about the change itself is undone.`
+                : "Marked as yours. Nothing about the change itself is undone."
+              : "The answer goes to the account, so it reads the same on every device."}
         </p>
-        <SupportPill
-          subject={`Question about an account change — event ${record.ref}`}
-          lines={[
-            `Event reference: ${record.ref}`,
-            `Record id: ${record.id}`,
-            `What: ${record.title}`,
-            record.fields?.length ? `Fields moved: ${record.fields.join(", ")}` : null,
-            `Device: ${record.device}`,
-            `IP: ${record.ip || "not recorded"}${record.location ? ` · Location: ${record.location}` : ""}`,
-            `When: ${formatDate(record.at)} at ${formatTime(record.at)}`,
-          ]}
-        />
-      </div>
 
-      {answer === "not-me" ? (
-        <>
-          <Helper tone="danger">
-            You said this wasn&apos;t you{record.youSaidAt ? `, ${ago(record.youSaidAt)}` : ""}. Log
-            out to end every other session, then change your password.
-          </Helper>
-          <PillStack>
-            <PillButton
-              label="Log out of Tirbeo"
-              tone="danger"
-              onClick={() => {
-                haptic("heavy");
-                setConfirmSignOut(true);
-              }}
+        <div className="mt-4 flex flex-wrap gap-2.5">
+          {answer === "not-me" ? (
+            <>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  haptic("heavy");
+                  setConfirmSignOut(true);
+                }}
+              >
+                Log out of Tirbeo
+              </Button>
+              <Button variant="ghost" disabled={sending} onClick={() => void answerThis(null)}>
+                Change my answer
+              </Button>
+            </>
+          ) : answer === "recognised" ? (
+            <Button variant="secondary" disabled={sending} onClick={() => void answerThis(null)}>
+              Change my answer
+            </Button>
+          ) : (
+            <>
+              <Button variant="primary" disabled={sending} onClick={recognise}>
+                This was me
+              </Button>
+              <Button variant="danger" onClick={notMe}>
+                That wasn’t me
+              </Button>
+            </>
+          )}
+        </div>
+
+        <div className="mt-5 border-t border-divider pt-4">
+          <p className="text-center text-[12px] text-muted">
+            Event reference <code className="font-mono">{record.ref}</code>
+          </p>
+          <div className="mt-3">
+            <SupportPill
+              subject={`Question about an account change — event ${record.ref}`}
+              lines={[
+                `Event reference: ${record.ref}`,
+                `Record id: ${record.id}`,
+                `What: ${record.title}`,
+                record.fields?.length ? `Fields moved: ${record.fields.join(", ")}` : null,
+                `Device: ${record.device}`,
+                `IP: ${record.ip || "not recorded"}${record.location ? ` · Location: ${record.location}` : ""}`,
+                `When: ${formatDate(record.at)} at ${formatTime(record.at)}`,
+              ].filter(Boolean) as string[]}
             />
-            <PillButton
-              label="Change my answer"
-              tone="outline"
-              disabled={sending}
-              onClick={() => void answerThis(null)}
-            />
-          </PillStack>
-        </>
-      ) : answer === "recognised" ? (
-        <>
-          <Helper tone="ok">
-            You confirmed this{record.youSaidAt ? `, ${ago(record.youSaidAt)}` : ""}.
-          </Helper>
-          <PillStack>
-            <PillButton
-              label="Change my answer"
-              tone="outline"
-              disabled={sending}
-              onClick={() => void answerThis(null)}
-            />
-          </PillStack>
-        </>
-      ) : (
-        <PillStack>
-          <PillButton
-            label="This was me"
-            tone="primary"
-            disabled={sending}
-            onClick={recognise}
-          />
-          <PillButton label="That wasn't me" tone="danger" onClick={notMe} />
-        </PillStack>
-      )}
+          </div>
+        </div>
+      </section>
 
       {/* The question, asked on its own surface — with the record inside it. */}
       {asked ? (

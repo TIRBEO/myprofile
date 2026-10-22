@@ -67,7 +67,11 @@ export function loadConfig(): ApiConfig {
     ).replace(/\/+$/, ""),
     internalToken,
     readCacheTtlMs: int("PROFILE_CACHE_TTL_MS", 15_000),
-    timeoutMs: int("PROFILE_TIMEOUT_MS", 10_000),
+    /* 20s, not 10: the two writes that touch SMTP — the deletion code and the
+       deletion cancel behind it — have been taking 8–10s to answer, and a
+       bridge that aborts mid-send hands the screen a 502 for a mail the
+       account actually sent. The person then never sees the code box. */
+    timeoutMs: int("PROFILE_TIMEOUT_MS", 20_000),
     redisUrl: process.env.REDIS_URL || null,
     databaseUrl: process.env.DATABASE_URL || process.env.DIRECT_DATABASE_URL || null,
   };

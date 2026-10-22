@@ -14,7 +14,7 @@ import { LANGUAGE_KEY, useLanguage } from "@/lib/language";
 import { THEME_KEY } from "@/lib/theme";
 import { englishFor, useT } from "@/lib/i18n";
 import { useProfile, displayName } from "@/lib/profile";
-import { readEmailPrefs } from "@/lib/notification-prefs";
+import { readEmailPrefs, isPaused } from "@/lib/notification-prefs";
 import { failedWrites, retryWrites, subscribePersistFailures, subscribeSettings } from "@/lib/remote-store";
 import { useTwoFactorState } from "@/lib/two-factor";
 import { haptic } from "@/lib/haptics";
@@ -106,7 +106,10 @@ export default function SettingsIndex() {
     setEmailFailed(false);
     readEmailPrefs()
       .then((prefs) => {
-        if (live) setEmailPaused(prefs.emailPaused === true);
+        // Read the pause the way the senders read it: a pause whose date is
+        // already behind us is over, and a hub that says "Paused" while the
+        // mail keeps coming is the same lie in a smaller place.
+        if (live) setEmailPaused(isPaused(prefs));
       })
       .catch((err) => {
         trackError("settings.hub.read-email-prefs", err);
@@ -196,7 +199,7 @@ export default function SettingsIndex() {
         {stuck ? (
           <div className="px-4 pt-2 sm:px-5" role="status">
             <Helper tone="danger">
-              {`${stuck.join(", ")} ${stuck.length === 1 ? "didn’t save" : "didn’t save"} — your account is holding its own answer, not what you tapped. `}
+              {`${stuck.join(", ")} didn’t save — your account is holding its own answer, not what you tapped. `}
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 font-semibold underline disabled:opacity-60"

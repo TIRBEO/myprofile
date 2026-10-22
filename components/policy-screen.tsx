@@ -49,7 +49,7 @@ export default function PolicyPage() {
         }
       >
         <Helper lead>
-          That policy isn&apos;t here. The documentation index lists the ones this build has.
+          That policy isn&apos;t here. The documentation index lists the ones this app has.
         </Helper>
         <PillStack>
           <PillButton label="Back to documentation" href="/settings/help" tone="primary" />

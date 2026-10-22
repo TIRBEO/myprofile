@@ -12,8 +12,11 @@
    The proof rides inside the action's own body, never as a separate
    hand-wave: there is nothing to expire, nothing to store on this side, and
    a stolen session still can't do any of it. Which proofs exist is the
-   service's call, not ours — it answers a refusal with the doors *this*
-   account can actually open, and the sheet offers exactly those.
+   service's call, not ours — it answers a refusal with the ordered CHAIN
+   *this* account must walk (password first, then a code emailed to the
+   sign-in address, then the authenticator when "require 2FA for sensitive
+   actions" is on), and the sheet works down exactly those steps and hands
+   back one combined proof.
 
    Deliberately not pre-verified: the code dialog could confirm the proof
    first, but a code is single-use. Spending it on a check would leave the

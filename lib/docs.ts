@@ -2,10 +2,11 @@
    The documentation
 
    One article per thing you can do, per thing that can go wrong, written
-   against what this build really does. That last part is the reason the text
-   lives in a file rather than in a CMS: there is no server here, so an
-   article that claimed a review happened, or an email was sent, or a device
-   was signed out somewhere else, would be a lie with a screenshot attached.
+   against what this app really does. That last part is the reason the text
+   lives in a file rather than in a CMS: every claim here is checkable against
+   a screen — a review the desk records, a code that is actually mailed, a
+   sign-out that ends a real session — and an article that drifted from those
+   would be a lie with a screenshot attached.
 
    The core nine carry the pictures someone chose: each step has the page it
    belongs to and what on that page the number points at, and those two fields
@@ -126,7 +127,7 @@ const CORE: DocArticle[] = [
       },
       {
         title: "Set a recovery email while you can still sign in",
-        body: "The same page holds Recovery email. It's the address a future reset would go to, so make it one you control as well as the password. Nothing is sent to it in this build — it is only stored as the address you'd want used.",
+        body: "The same page holds Recovery email. It's the address a future reset would go to, so make it one you control as well as the password — which is exactly what the setup checks: a 6-digit code is mailed there and must come back before the address is stored as verified.",
         figure: {
           route: "/settings/security",
           target: 'main button:has-text("Recovery email")',
@@ -163,7 +164,7 @@ const CORE: DocArticle[] = [
     updated: REVIEWED,
     intro: [
       "Every browser that has signed in holds a session, and this page is the list of them. The one you're using is marked as such, so it's never the thing you sign out of by accident.",
-      "Signing a device out ends that session here. There is no server in this build, so nothing reaches the other machine — treat it as the record being corrected, and change the password too if a device is genuinely not yours.",
+      "Signing a device out ends that session on the account: the machine is cut off at its next request and disappears from the list on every screen. If the device is genuinely not yours, change the password too — ending today's session doesn't stop someone who knows your password from starting tomorrow's.",
     ],
     steps: [
       {
@@ -205,7 +206,7 @@ const CORE: DocArticle[] = [
       },
       {
         q: "Does signing out here stop a device that isn't mine?",
-        a: "Not by itself. This build has no server to carry the instruction, so the honest move is to change your password as well, which stops the next sign-in even if it can't stop the one already running.",
+        a: "Yes — the session ends on the account, and that browser is turned away the next time it asks for anything, on every screen's list alike. What the sign-out cannot do is stop a person who knows your password from signing in again, so the full move is sign-out plus a password change: one ends the session now, the other closes the door behind it.",
       },
     ],
     related: [
@@ -282,7 +283,7 @@ const CORE: DocArticle[] = [
     steps: [
       {
         title: "Start with the one switch",
-        body: "Pause all non-essential emails covers everything except the security messages. While it's on, the rows below it are dimmed and say so rather than pretending to change anything.",
+        body: "Pause all non-essential emails covers everything except the security messages. While it's on, the rows below it are held still — they keep the choices you already made, they say why when you tap them, and they are all still yours when the pause ends.",
         href: "/settings/notifications",
         hrefLabel: "Email preferences",
         figure: {
@@ -304,7 +305,7 @@ const CORE: DocArticle[] = [
     notes: [
       {
         q: "Will I get these emails?",
-        a: "Not from this build — it has no server to send from, so what's stored here is your choice, waiting for the day something can act on it. That's also why nothing here asks you to confirm by clicking a link in your inbox.",
+        a: "The choice is kept on your account, and the senders read it from there. While the pause holds, only sign-in codes and critical security alerts arrive; when it ends, the mail you had switched on starts again.",
       },
     ],
     related: [
@@ -477,7 +478,7 @@ const CORE: DocArticle[] = [
     notes: [
       {
         q: "Is every label translated?",
-        a: "No, and it's better to say so than to imply it. Dates, times and numbers follow the language you choose; the words in the interface itself are still English in this build.",
+        a: "Partly, and it's better to say so than to imply it. Dates, times and numbers follow the language you choose; the common controls — Save, Back, Cancel and friends — are hand-translated into the languages Tirbeo ships with, and the rest of the page is machine-translated into it when your language asks for that. A machine's wording is a machine's wording: if a translation reads wrong, say so under Write to support.",
       },
       {
         q: "Can I set the time zone by hand?",
@@ -535,7 +536,7 @@ const CORE: DocArticle[] = [
     ],
     notes: [
       {
-        q: "Is a deletion in this build real?",
+        q: "Is a deletion here real?",
         a: "Yes. The request goes to the account and comes back as its state, so the countdown is the same on a device you've never signed in on before and clearing this browser's site data does not cancel it. Cancelling is a thing you have to do on purpose, from the screen that says it.",
       },
       {

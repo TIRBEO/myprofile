@@ -58,6 +58,9 @@ export default function TwoFactorPage() {
   const [uri, setUri] = useState<string | null>(null);
   const [offSheet, setOffSheet] = useState(false);
   const [codes, setCodes] = useState<RevealedCodes | null>(null);
+  /* One write in flight at a time: a second optimistic flip while the first
+     persist is still on the wire races the account's answer. */
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
   const { guard, reauthDialog } = useReauthGuard();
 
@@ -84,6 +87,7 @@ export default function TwoFactorPage() {
 
   // Tapping anywhere on the row lands here — the switch is a visual.
   function toggleAuthenticator(next: boolean) {
+    if (busy) return;
     if (next) void beginSetup();
     else setOffSheet(true);
   }
@@ -91,6 +95,7 @@ export default function TwoFactorPage() {
   /** Proof first, secret second: a pending setup that nobody authorised would
       sit on the account row as a half-installed authenticator. */
   async function beginSetup() {
+    setBusy(true);
     try {
       setUri(await guard((proof) => startSetup(proof)));
       trackEvent("settings.2fa_setup_started");
@@ -99,6 +104,8 @@ export default function TwoFactorPage() {
       trackError("two-factor.start-setup", err);
       haptic("error");
       toast.error(withRef(err instanceof Error ? err.message : "Couldn’t reach the account service", err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -109,7 +116,9 @@ export default function TwoFactorPage() {
       the policy column — the brain still refuses it without an enrolled
       factor, and the row can't move until the authenticator is on. */
   async function savePref(next: Partial<Pick<TwoFactorState, "requireForActions" | "alertSuspicious">>) {
+    if (busy) return;
     const prev = state!;
+    setBusy(true);
     set({ ...prev, ...next });
     try {
       for (const [field, value] of Object.entries(next) as [keyof typeof PREF_KEYS, boolean][]) {
@@ -122,6 +131,8 @@ export default function TwoFactorPage() {
       set(prev);
       trackError("two-factor.save-pref", err);
       toast.error(withRef(err instanceof Error ? err.message : "Couldn’t save that change", err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -139,6 +150,7 @@ export default function TwoFactorPage() {
           on={on}
           onChange={toggleAuthenticator}
           label="Authenticator app"
+          busy={busy}
         />
         <LinkRow
           title="Backup codes"
@@ -177,6 +189,7 @@ export default function TwoFactorPage() {
           onChange={(v) => savePref({ requireForActions: v })}
           label="Require 2FA for sensitive actions"
           disabled={!on}
+          busy={busy}
           blockedHint={() => toast.error("Turn on the authenticator app first")}
         />
         <ToggleRow
@@ -185,6 +198,7 @@ export default function TwoFactorPage() {
           on={state.alertSuspicious}
           onChange={(v) => savePref({ alertSuspicious: v })}
           label="Alert on suspicious sign-in"
+          busy={busy}
         />
       </Group>
 
@@ -351,7 +365,7 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
                 className="font-mono tracking-[0.15em]"
               />
             ) : (
-              <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} />
+              <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} onEnter={confirm} />
             )}
           </div>
           {error ? <p className="text-[13px] leading-relaxed text-danger-text">{error}</p> : null}
@@ -465,7 +479,7 @@ function AuthenticatorSheet({
         </div>
       ) : (
         <div className="-mx-4 px-5 pb-2 pt-1 sm:-mx-5">
-          <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} />
+          <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} onEnter={confirm} />
           <p
             className={cn(
               "mt-4 text-center text-[13px] leading-relaxed",

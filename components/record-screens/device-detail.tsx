@@ -52,6 +52,7 @@ export default function DeviceDetailPage({ id }: { id: string }) {
      facts, and the first one shouldn't be printed when the second happened. */
   const [failed, setFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
   const { guard, reauthDialog } = useReauthGuard();
 
   const load = () => {
@@ -100,8 +101,14 @@ export default function DeviceDetailPage({ id }: { id: string }) {
   const coords: [number, number] | null = device.coords ?? placeFor(device.location)?.coords ?? null;
 
   async function eject() {
+    if (busy) return;
+    setBusy(true);
     try {
       await guard((proof) => signOut(machine.id, proof));
+      trackEvent("settings.device_revoked", { detail: machine.kind });
+      haptic("success");
+      toast.success(`${machine.name} signed out`);
+      router.push("/settings/devices");
     } catch (err) {
       // Backing out of the check leaves the session exactly where it was.
       if (wasDeclined(err)) return;
@@ -113,13 +120,9 @@ export default function DeviceDetailPage({ id }: { id: string }) {
           err,
         ),
       );
-      return;
+    } finally {
+      setBusy(false);
     }
-    // One named machine lost its session — the kind the settings audit wants.
-    trackEvent("settings.device_revoked", { detail: machine.kind });
-    haptic("success");
-    toast.success(`${machine.name} signed out`);
-    router.push("/settings/devices");
   }
 
   return (
@@ -236,13 +239,18 @@ export default function DeviceDetailPage({ id }: { id: string }) {
         <Sheet
           title="Log out of this device?"
           description="That device will need your password, and a fresh two-factor code, to sign back in."
-          onClose={() => setConfirming(false)}
+          onClose={() => {
+            if (!busy) setConfirming(false);
+          }}
           footer={
             <SheetActions
               cancelLabel="Cancel"
-              onCancel={() => setConfirming(false)}
-              confirmLabel="Log out"
+              onCancel={() => {
+                if (!busy) setConfirming(false);
+              }}
+              confirmLabel={busy ? "Logging out…" : "Log out"}
               confirmVariant="danger"
+              loading={busy}
               onConfirm={eject}
             />
           }

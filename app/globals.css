@@ -621,35 +621,31 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────
-   Ported verbatim from the landing site (apps/landing/app/globals.css,
-   "Buttons" block) so the two apps are one language: the pill the account
-   surfaces use, with the fill carrying the meaning. `--accent-solid` rather
-   than `--accent` for the primary — systemBlue under white text is 3.65:1,
-   which fails AA. The secondary is filled grey with an accent label, never
-   an outline. `.btn-danger` is this app's addition in the same family —
-   Apple draws destructive fills in systemRed, and delete-account and
-   deactivate need one. Unlayered on purpose, so it wins over stray
-   utilities and a button cannot accidentally re-shape itself at a call
-   site — which also makes leftover `px-*`/`text-*`/`h-*` on a `btn`
-   element dead code; strip them at the call site rather than "fixing"
-   them here.
+   One language across the app: filled plates that stretch the width of
+   their container — primary in accent blue with white ink, secondary on
+   the grey fill, danger in systemRed. `.btn-quiet` stays the borderless
+   way-out. Unlayered on purpose, so it wins over stray utilities and a
+   button cannot accidentally re-shape itself at a call site — which also
+   makes leftover `px-*`/`text-*`/`h-*` on a `btn` element dead code; strip
+   them at the call site rather than "fixing" them here.
    ───────────────────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 42px;
-  padding: 0 20px;
-  border: 0;
+  min-height: 38px;
+  padding: 0 18px;
+  border: 1px solid transparent;
   border-radius: 999px;
   font: inherit;
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+  background: transparent;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
 .btn:active {
@@ -658,19 +654,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .btn:disabled {
   cursor: not-allowed;
-}
-
-/* A disabled fill is not an enabled one seen through glass — iOS mutes the
-   plate and the label. Half-transparent blue reads as "loading", not "off". */
-.btn-primary:disabled {
-  background: var(--btn-disabled-bg);
-  color: var(--btn-disabled-fg);
-}
-
-.btn-secondary:disabled,
-.btn-quiet:disabled,
-.btn-danger:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .btn:focus-visible {
@@ -680,6 +664,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .btn-primary {
   background: var(--accent-solid);
+  border-color: transparent;
   color: var(--accent-fg);
 }
 
@@ -689,6 +674,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .btn-secondary {
   background: var(--fill);
+  border-color: transparent;
   color: var(--accent-text);
 }
 
@@ -698,6 +684,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .btn-danger {
   background: var(--danger);
+  border-color: transparent;
   color: #ffffff;
 }
 
@@ -705,9 +692,8 @@ input[type="number"]::-webkit-outer-spin-button {
   background: var(--danger-hover);
 }
 
-/* Nav and dismiss affordances: no fill until you hover. */
+/* Nav and dismiss affordances: no border, no fill until you hover. */
 .btn-quiet {
-  background: transparent;
   color: var(--muted);
 }
 

@@ -577,9 +577,11 @@ export default function PersonalDetailsPage() {
             <SheetActions
               cancelLabel="Cancel"
               onCancel={() => setRemovingSkill(null)}
-              confirmLabel="Remove"
+              confirmLabel={saving ? "Removing…" : "Remove"}
               confirmVariant="danger"
+              loading={saving}
               onConfirm={() => {
+                if (saving || !removingSkill) return;
                 const skill = removingSkill;
                 void removeSkill(skill).then((ok) => {
                   if (ok) setRemovingSkill(null);

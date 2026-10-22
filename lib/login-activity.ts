@@ -10,14 +10,16 @@
    read that fails is said out loud — an empty list only ever means the
    account answered and had nothing to show.
 
-   Your answer to "was this you" goes to the account when the account has a
-   place for it. A change row (`security.events` hands back the ledger's own
-   id) is answered with `POST /api/user/changes/:id/answer`, which writes a
-   record of its own, dated by the server; the row is only marked answered
-   once that call has accepted it. A sign-in row is not a change — the
-   sign-in ledger (`user_logins`) has no review field and the brain refuses
-   an answer addressed at one — so on those rows the mark is kept on this
-   device, and the page says which of the two you are looking at.
+   Your answer to "was this you" goes to the account, which dates it and keeps
+   it on every device you sign in from. A change row (`security.events` hands
+   back the ledger's own id) and a sign-in row (`security.login-history` hands
+   back the sign-in ledger's own id) are both answered with
+   `POST /api/user/changes/:id/answer`, which writes a record of its own; the
+   row is only marked answered once that call has accepted it. A sign-in row
+   used to be the exception — the sign-in ledger has no review column, so the
+   answer was kept on the phone that gave it and went nowhere else. The answer
+   store is keyed by the row it is about, so the ledger reads the answer back
+   and the sign-in ledger's missing column no longer decides anything.
    ═══════════════════════════════════════════════════════════════════ */
 
 import { appLocale } from "@/lib/language";
@@ -52,8 +54,9 @@ export type ActivityEvent = {
   /** The sign-in this page is being read from. */
   current: boolean;
   /** Whether the account can hold an answer on this row at all. True for a
-      change (the ledger's own id, and `user/changes/:id/answer` takes it);
-      false for a sign-in, which the ledger keeps without a review field. */
+      change (the ledger's own id, and `user/changes/:id/answer` takes it) and
+      for a sign-in (the sign-in ledger's own id — the answer store is keyed by
+      the row it is about, so the missing review column decides nothing). */
   answerable: boolean;
   /** Your answer to "was this you". Absent means never answered, which is
       what the log's "Review" marker is for. */
@@ -88,6 +91,10 @@ type LoginRow = {
   success: boolean;
   method: string;
   createdAt: string;
+  /** The owner's answer to "was this you", when the account holds one about
+      this sign-in. The sign-in ledger has no review column of its own — the
+      answer lives in the account's answer store and comes back with the row. */
+  said?: { answer: string; at: string } | null;
 };
 
 type SecurityEventRow = {
@@ -139,8 +146,9 @@ function cap(s: string) {
 
 /* ── Your answers ─────────────────────────────────────────────────── */
 
-/** A device-side copy of an answer: what the account holds for a change row,
-    and the whole record for a sign-in row (which has nowhere else to be). */
+/** A device-side copy of an answer: a cache of what the account already holds
+    (and, for the answers given before the account could hold one, the only
+    copy there is — those say so). */
 type CachedAnswer = { review: Review; at: number; kept: "account" | "device" };
 
 type Overlay = { answers: Record<string, CachedAnswer> };
@@ -243,6 +251,22 @@ export async function readEvents(): Promise<ActivityEvent[]> {
   const currentIp = sessions.find((s) => s.isCurrent)?.ipAddress || null;
   const cached = readOverlay().answers;
 
+  /* Every answer the account holds, in one map: the ones about change rows
+     (read from the changes feed) and the ones about sign-in rows (read with
+     the sign-in ledger, which has no review column of its own). The account
+     wins over the device copy below — it is dated by the server and the same
+     on every device. */
+  const accountAnswers = new Map<string, { review: Review; at: number }>();
+  for (const row of history.logs) {
+    const said = row.said;
+    if (!said) continue;
+    const review: Review | null = said.answer === "not-me" ? "not-me" : said.answer === "recognised" ? "me" : null;
+    if (!review) continue;
+    const at = Date.parse(said.at || "");
+    accountAnswers.set(row.id, { review, at: Number.isNaN(at) ? Date.now() : at });
+  }
+  for (const [id, answer] of answered) accountAnswers.set(id, answer);
+
   const signinEvents: ActivityEvent[] = history.logs.map((row) => ({
     id: row.id,
     ref: row.ref ?? null,
@@ -254,9 +278,10 @@ export async function readEvents(): Promise<ActivityEvent[]> {
     coords: coordsOf(row.coords),
     method: methodLabel(row.method),
     current: false,
-    // The sign-in ledger has no review column, and the brain refuses an
-    // answer addressed at one — so an answer here is a device mark.
-    answerable: false,
+    // A sign-in row is answered on the account now: the answer store is keyed
+    // by the row it is about, so the sign-in ledger's missing review column
+    // no longer means the answer has nowhere to go.
+    answerable: true,
   }));
 
   // Only the newest sign-in that arrived on this machine's address is "here".
@@ -288,7 +313,7 @@ export async function readEvents(): Promise<ActivityEvent[]> {
     .slice(0, MAX_EVENTS)
     .map((event) => {
       // The account wins: it is dated by the server and the same on any device.
-      const server = answered.get(event.id);
+      const server = accountAnswers.get(event.id);
       if (server) return { ...event, review: server.review, reviewedAt: server.at, reviewKept: "account" as const };
       const local = cached[event.id];
       if (local) return { ...event, review: local.review, reviewedAt: local.at, reviewKept: local.kept };

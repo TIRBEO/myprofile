@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sheet, useAction } from "@/components/ig-ui";
+import Link from "next/link";
+import { Button, Sheet, useAction } from "@/components/ig-ui";
 import { EVENT_ICONS } from "@/components/event-icons";
 import { MapCard } from "@/components/map-card";
 import {
@@ -37,6 +38,7 @@ import { ago, formatDate, formatTime } from "@/lib/dates";
 import { SupportPill } from "@/lib/support";
 import { haptic } from "@/lib/haptics";
 import { useToast } from "@/lib/use-toast";
+import { trackError, withRef } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
 import { LoadFailed } from "@/components/page-loading";
 
@@ -46,8 +48,9 @@ import { LoadFailed } from "@/components/page-loading";
    The record behind a row in the log: what happened, on which machine,
    from where, when — one short line per fact — then the one decision that
    matters: was this you. The map shows itself when the record has coords.
-   Answering is local; the log-out is a call to the account, gated by proof
-   it's you. All behaviour is unchanged from the long-form version.
+   Answering is a call to the account, which keeps the answer on the
+   account and tells the team when it isn't you; the log-out is gated by
+   proof it's you.
    ═══════════════════════════════════════════════════════════════════ */
 
 export default function LoginEventDetailPage({ id }: { id: string }) {
@@ -116,27 +119,60 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
 
   /** Say it was you. The record stops asking, here and in the log. */
   async function thatWasMe() {
-    const [next] = (await answerEvent(record.id, "me")).filter((e) => e.id === record.id);
-    setEvent(next);
-    setConfirmNotMe(false);
-    haptic("success");
-    toast.success("Marked as reviewed");
+    try {
+      const [next] = (await answerEvent(record.id, "me")).filter((e) => e.id === record.id);
+      setEvent(next);
+      setConfirmNotMe(false);
+      haptic("success");
+      toast.success("Marked as reviewed");
+    } catch (err) {
+      haptic("error");
+      trackError("login-event.answer-me", err);
+      toast.error(
+        withRef(
+          err instanceof Error && err.message ? err.message : "Couldn’t record your answer — nothing was saved.",
+          err,
+        ),
+      );
+    }
   }
 
   /** Say it wasn't you. The mark lands on the record and lifts the log to red. */
   async function notMeConfirmed() {
-    const [next] = (await answerEvent(record.id, "not-me")).filter((e) => e.id === record.id);
-    setEvent(next);
-    setConfirmNotMe(false);
-    haptic("error");
-    toast.error("Flagged — now log out the sessions you don't recognise");
+    try {
+      const [next] = (await answerEvent(record.id, "not-me")).filter((e) => e.id === record.id);
+      setEvent(next);
+      setConfirmNotMe(false);
+      haptic("error");
+      toast.error("Flagged — now log out the sessions you don't recognise");
+    } catch (err) {
+      haptic("error");
+      trackError("login-event.answer-not-me", err);
+      toast.error(
+        withRef(
+          err instanceof Error && err.message ? err.message : "Couldn’t flag this sign-in — nothing was saved.",
+          err,
+        ),
+      );
+    }
   }
 
   /** Take the answer back, so the record goes into the log as unreviewed. */
   async function changeAnswer() {
-    const [next] = (await clearAnswer(record.id)).filter((e) => e.id === record.id);
-    setEvent(next);
-    haptic("light");
+    try {
+      const [next] = (await clearAnswer(record.id)).filter((e) => e.id === record.id);
+      setEvent(next);
+      haptic("light");
+    } catch (err) {
+      haptic("error");
+      trackError("login-event.clear-answer", err);
+      toast.error(
+        withRef(
+          err instanceof Error && err.message ? err.message : "Couldn’t clear your answer.",
+          err,
+        ),
+      );
+    }
   }
 
   /** End every session but this one, here. */
@@ -191,9 +227,20 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
 
         <StatementSection label="Where and when">
           <Prose>
-            It came from the network address <Value>{record.ip}</Value>, which traces to{" "}
-            <Value>{record.location}</Value>. A location read from an address names a city, not an
-            exact place.
+            {place ? (
+              <>
+                It came from the network address <Value>{record.ip || "not recorded"}</Value>, which
+                traces to <Value>{record.location}</Value>. A location read from an address names a
+                city, not an exact place.
+              </>
+            ) : (
+              <>
+                It came from the network address{" "}
+                <Value>{record.ip || "not recorded"}</Value>. The account never saw a place behind
+                that address, so this record honestly has none — the request reached the service
+                without an address a front door had resolved.
+              </>
+            )}
           </Prose>
           <Prose>
             It happened on <Value>{formatDate(record.at)}</Value> at{" "}
@@ -208,85 +255,100 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
         </div>
       ) : null}
 
-      <div className="mt-6 flex flex-col items-center gap-1">
-        <p className="text-[12px] text-muted">
-          Event reference <code className="font-mono">{record.ref ?? record.id}</code>
+      {/* ── The decision ───────────────────────────────────────────
+          No plate behind it — the question, its answers and the
+          record's paperwork read fine on the page itself; a card here
+          just boxes the eye in. */}
+      <section className="mt-8">
+        <h2 className="text-[17px] leading-snug font-semibold tracking-[-0.01em]">
+          {answer === null ? "Was this you?" : confirmed ? "You confirmed this sign-in" : "You said this wasn’t you"}
+        </h2>
+        <p className="mt-1 max-w-[58ch] text-[13.5px] leading-relaxed text-muted">
+          {answer === null
+            ? "Your answer goes to the account, which keeps it and dates it. Say it wasn’t you and the team is told."
+            : confirmed
+              ? record.reviewedAt
+                ? `Marked as reviewed ${ago(record.reviewedAt)}. The session itself was left alone.`
+                : "Marked as reviewed. The session itself was left alone."
+              : signedOutAll
+                ? `Signed out of ${signedOutAll} other ${signedOutAll === 1 ? "session" : "sessions"}. Changing your password is the step that finishes it.`
+                : `Log out of every other session, then change your password.${record.reviewedAt ? ` You said this ${ago(record.reviewedAt)}.` : ""}`}
         </p>
-        <SupportPill
-          subject={`Question about a sign-in — event ${record.ref ?? record.id}`}
-          lines={[
-            `Event reference: ${record.ref ?? record.id}`,
-            `Record id: ${record.id}`,
-            `What: ${whatHappened}`,
-            `Device: ${record.device}`,
-            `Method: ${record.method}`,
-            `IP: ${record.ip} · Location: ${record.location}`,
-            `When: ${formatDate(record.at)} at ${formatTime(record.at)}`,
-          ]}
-        />
-      </div>
 
-      {answer === null ? (
-        <PillStack>
-          <PillButton
-            label="This was me"
-            tone="primary"
-            loading={confirmMe.pending}
-            onClick={() => confirmMe.run(thatWasMe)}
-          />
-          <PillButton label="That wasn't me" tone="danger" onClick={askWasThisYou} />
-        </PillStack>
-      ) : confirmed ? (
-        <>
-          <Helper tone="ok">
-            You confirmed this{record.reviewedAt ? `, ${ago(record.reviewedAt)}` : ""}.
-          </Helper>
-          <PillStack>
-            <PillButton
-              label="Change my answer"
-              tone="outline"
+        <div className="mt-4 flex flex-wrap gap-2.5">
+          {answer === null ? (
+            <>
+              <Button
+                variant="primary"
+                loading={confirmMe.pending}
+                onClick={() => confirmMe.run(thatWasMe)}
+              >
+                This was me
+              </Button>
+              <Button variant="danger" onClick={askWasThisYou}>
+                That wasn’t me
+              </Button>
+            </>
+          ) : confirmed ? (
+            <Button
+              variant="secondary"
               loading={undoAnswer.pending}
               onClick={() => undoAnswer.run(changeAnswer)}
+            >
+              Change my answer
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="danger"
+                disabled={signedOutAll > 0}
+                loading={endSessions.pending}
+                onClick={() => endSessions.run(signOutAll)}
+              >
+                {signedOutAll ? "Logged out everywhere" : "Log out of all sessions"}
+              </Button>
+              {signedOutAll ? (
+                <Link href="/settings/security" className="btn btn-primary">
+                  Change your password
+                </Link>
+              ) : null}
+              <Button
+                variant="ghost"
+                loading={undoAnswer.pending}
+                onClick={() => undoAnswer.run(changeAnswer)}
+              >
+                Change my answer
+              </Button>
+            </>
+          )}
+        </div>
+
+        <div className="mt-5 border-t border-divider pt-4">
+          <p className="text-center text-[12px] text-muted">
+            Event reference <code className="font-mono">{record.ref ?? record.id}</code>
+          </p>
+          <div className="mt-3">
+            <SupportPill
+              subject={`Question about a sign-in — event ${record.ref ?? record.id}`}
+              lines={[
+                `Event reference: ${record.ref ?? record.id}`,
+                `Record id: ${record.id}`,
+                `What: ${whatHappened}`,
+                `Device: ${record.device}`,
+                `Method: ${record.method}`,
+                `IP: ${record.ip} · Location: ${record.location}`,
+                `When: ${formatDate(record.at)} at ${formatTime(record.at)}`,
+              ]}
             />
-          </PillStack>
-        </>
-      ) : (
-        <>
-          <Helper tone="danger">
-            {signedOutAll
-              ? `Signed out of ${signedOutAll} other ${
-                  signedOutAll === 1 ? "session" : "sessions"
-                }. Change your password next.`
-              : `You said this wasn't you${
-                  record.reviewedAt ? `, ${ago(record.reviewedAt)}` : ""
-                }. Log out of every other session, then change your password.`}
-          </Helper>
-          <PillStack>
-            <PillButton
-              label={signedOutAll ? "Logged out everywhere" : "Log out of all sessions"}
-              tone="danger"
-              disabled={signedOutAll > 0}
-              loading={endSessions.pending}
-              onClick={() => endSessions.run(signOutAll)}
-            />
-            {signedOutAll ? (
-              <PillButton label="Change your password" tone="primary" href="/settings/security" />
-            ) : null}
-            <PillButton
-              label="Change my answer"
-              tone="outline"
-              loading={undoAnswer.pending}
-              onClick={() => undoAnswer.run(changeAnswer)}
-            />
-          </PillStack>
-        </>
-      )}
+          </div>
+        </div>
+      </section>
 
       {/* The question, asked on its own surface — with the record inside it. */}
       {confirmNotMe ? (
         <Sheet
           title="Was this you?"
-          description="The answer is kept on this device — nothing is sent anywhere."
+          description="Your answer goes to the account, which keeps it and dates it. Say it wasn't you and the team is told."
           onClose={() => setConfirmNotMe(false)}
           footer={
             <div className="flex flex-col gap-2">
@@ -297,9 +359,9 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
                 loading={confirmMe.pending}
                 onClick={() => confirmMe.run(thatWasMe)}
               />
-              <PillButton
+               <PillButton
                 label="No, that wasn’t me"
-                sub="Marks it in red and puts the log-out on the page beside this record."
+                sub="Marks it in red, tells the team, and puts the log-out on the page beside this record."
                 tone="danger"
                 loading={confirmNot.pending}
                 onClick={() => confirmNot.run(notMeConfirmed)}

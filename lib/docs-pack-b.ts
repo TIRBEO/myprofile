@@ -3,10 +3,12 @@ import type { DocArticle } from "@/lib/docs";
 /* ═══════════════════════════════════════════════════════════════════
    docs-pack-b — Your data, Privacy, Profile, Getting around.
 
-   Written against what this build really does. There is no server, no
-   database, no email: every store is localStorage in this browser, and a
-   password is never written anywhere. Where that limit matters it is
-   stated once, plainly, and never dressed up.
+   Written against what this build really does. Behind these pages is
+   the account service: your profile, your choices, your archive and your
+   requests live on the account, mail is sent from it, and a signed-out
+   browser can read them back. Where a limit still is the answer — a
+   deleted item that cannot be un-deleted, a file Tirbeo does not keep a
+   copy of — it is stated once, plainly, and never dressed up.
 
    Sign-ins, passwords, two-factor, passkeys, backup codes, devices and
    sessions live in docs-pack-a and are deliberately absent here.
@@ -18,13 +20,13 @@ export const PACK_B: DocArticle[] = [
   {
     slug: "archive-request",
     title: "Asking for a copy of your data",
-    sub: "How to build an archive of what this browser holds, and how to read one that's still coming together.",
+    sub: "How the account builds an archive of everything it holds, and how to read the requests behind it.",
     category: "Your data",
     keywords: "archive export download my data copy gdpr request json html progress building file",
     updated: REVIEWED,
     intro: [
-      "An archive is everything this browser keeps about you: your details, the choices you've saved, and the dated records the settings pages write. You ask for it, it is assembled here, and a file is handed to you. Nothing is emailed and nothing is uploaded, because there is no server to email from.",
-      "The one you file gets its own page, which counts the build up, names the file and lists what went into it. The steps below are all on those two pages.",
+      "An archive is everything the account holds about you: your details, the choices you've saved, and the dated records the settings pages write. You ask for it, the account assembles it and your browser saves the file. Tirbeo keeps no copy of the file itself — only a ledger row saying what was requested, in which format, and how big it came out.",
+      "The one you file gets its own page, which names the file, its size and what went into it. The steps below are all on those two pages.",
     ],
     steps: [
       {
@@ -39,21 +41,21 @@ export const PACK_B: DocArticle[] = [
       },
       {
         title: "Watch it assemble",
-        body: "The request page shows a percentage and a line that says Building, with roughly twelve seconds left. It turns itself to Ready on its own; you don't reload or wait for a message. Underneath, the seconds tick down so you can see it is genuinely working.",
+        body: "The account writes the file the moment you press the button, and your browser saves it. There's no progress bar to watch and no message to wait for: the button reports the file name and its size when the download lands, and the request's own page shows the same thing.",
       },
       {
         title: "Save the file when it's ready",
-        body: "Once it reads Ready, press Download archive. The file is written from this device through your browser's normal save. The page tells you the file name and its size, and the section list says how many records went into each part.",
+        body: "Once it reads Ready, press Download archive. The file is written by the account and handed to your browser's normal save. The page tells you the file name and its size, and the section list says how many records went into each part.",
       },
     ],
     notes: [
       {
         q: "Does the archive hold my password?",
-        a: "No. A password is never stored here, so there is nothing to put in the file. The same goes for the codes your authenticator produces.",
+        a: "No. A password is kept only as a hash, and there is nothing to put in the file. The same goes for your authenticator secret, your backup codes and your passkeys.",
       },
       {
         q: "Is a copy kept somewhere I can ask for later?",
-        a: "No. It is built on the spot from this browser's storage and handed to you. If you didn't save the file, you request another one.",
+        a: "No. The file is built when you ask for it and handed to you; Tirbeo keeps the ledger row, not the file. If you didn't save the file, you request another one.",
       },
       {
         q: "Should I pick JSON or HTML?",
@@ -67,39 +69,35 @@ export const PACK_B: DocArticle[] = [
   },
   {
     slug: "archive-limit",
-    title: "Why there's a limit on archive requests",
-    sub: "You can file three copies a day, and the wait until the next one is counted down rather than hidden.",
+    title: "How many copies of your data you can ask for",
+    sub: "There is no daily cap on archive requests — what the account does instead is write each one down.",
     category: "Your data",
     keywords: "limit daily requests cooldown wait rate three a day download data blocked timer",
     updated: REVIEWED,
     intro: [
-      "Building an archive means reading every store this app writes to, on your device, in one pass. It's real work even when the file is never saved, so the page caps it at three requests in a rolling day and keeps the six most recent on the list.",
-      "The limit is not a punishment and not a queue. When you've filed three, the button says so and counts down the wait; when the oldest request falls out of the day, you can file again.",
+      "There used to be a cap of three archives a day on this page, counted in the browser and lost with it. There isn't one now: the account writes the request down and builds the file, and every request in the app is subject to the same ordinary per-minute limit as any other call.",
+      "What replaces the cap is the ledger. Each request is recorded with its format, its date and how the file came out, and the page reads that record back — so you can see what you have already asked for without building it again.",
     ],
     steps: [
       {
         title: "Read what the button is telling you",
-        body: "Once you've hit three, Download all my data greys out and its line changes to Try again in ... with the time left. The request still works the moment the window opens; nothing about your data has changed.",
+        body: "Download all my data is pressed once per archive. If the account can't answer — because it's unreachable, or because the per-minute limit is being hit — the page says so and nothing is half-written: the request either exists in the ledger or it doesn't.",
         href: "/settings/download-data",
         hrefLabel: "Download your data",
       },
       {
-        title: "Know it also applies from the request page",
-        body: "A finished request's own page carries the same clock on its second button, labelled Another in ... and disabled until the wait is over. So you can't sneak an extra build through the detail page either.",
-      },
-      {
         title: "Use the requests you already have",
-        body: "The last six requests stay listed, each with its format and date, and each can be downloaded again without filing a new one. If your aim is just to get a file you already built, open it rather than requesting.",
+        body: "The recent requests stay listed, each with its format and date, and each can be downloaded again without filing a new one. If your aim is just to get a file you already built, open it rather than requesting.",
       },
     ],
     notes: [
       {
-        q: "Can I raise the limit?",
-        a: "No. The cap is three archives a day and there is no way to lift it in this build — nothing here trades for a setting, because there's no server that could honour the trade.",
+        q: "Can I raise a limit that isn't there?",
+        a: "There's nothing to raise: there is no cap on archive requests. The account's own rules about how many requests any one person may make in a minute apply here as they do everywhere else in the app.",
       },
       {
-        q: "Does clearing my browser reset the counter?",
-        a: "Yes, because the count lives in this browser's storage like everything else. That's also why a fresh browser can start you at three again, and why the limit is about not thrashing one device, not about fairness across an account.",
+        q: "Does clearing my browser reset anything?",
+        a: "It doesn't need to: the count that used to live in the browser's storage isn't there any more. The ledger of your requests lives on the account, so a fresh browser sees the same list you saw before.",
       },
     ],
     related: [
@@ -121,7 +119,7 @@ export const PACK_B: DocArticle[] = [
     steps: [
       {
         title: "Take a copy before anything goes",
-        body: "An archive of the whole record, requested from the app and built on the spot. It's the only version of your data you can hold on to, because nothing inside Tirbeo keeps a second copy of an individual thing.",
+        body: "An archive of the whole record, requested from the app and written by the account. It's the only version of your data you can hold on to, because nothing inside Tirbeo keeps a second copy of an individual thing.",
         href: "/settings/download-data",
         hrefLabel: "Download your data",
       },
@@ -133,7 +131,7 @@ export const PACK_B: DocArticle[] = [
       },
       {
         title: "Closing an account does have a countdown",
-        body: "Filing a deletion starts a thirty-day window, and it is the one place in this app where something deleted can genuinely be taken back. Cancel from the same screen that filed it and the account is untouched; let the window run out and the record is gone — support cannot recover it either.",
+        body: "Filing a deletion sends a code to the address you sign in with, and the code schedules a thirty-day window. Cancel from the same screen that filed it and the account is untouched; let the window run out and the record is gone — support cannot recover it either.",
         href: "/settings/delete-account",
         hrefLabel: "Delete account",
       },
@@ -161,12 +159,12 @@ export const PACK_B: DocArticle[] = [
   {
     slug: "change-name",
     title: "Changing the name on your profile",
-    sub: "The display name people see is edited in the profile sheet, and it saves straight to this browser.",
+    sub: "The display name people see is edited in the profile sheet, and it saves straight to your account.",
     category: "Your data",
     keywords: "change display name full name profile rename edit name field save personal details",
     updated: REVIEWED,
     intro: [
-      "Your display name is the large line at the top of your profile, separate from the @handle underneath it. You change it in the Edit profile sheet on the account settings, and it writes straight to this browser's storage.",
+      "Your display name is the large line at the top of your profile, separate from the @handle underneath it. You change it in the Edit profile sheet on the account settings, and it writes to your account.",
       "The name is free text up to forty characters and it can hold spaces and capitals. It isn't the thing that makes your link, so renaming doesn't move your address.",
     ],
     steps: [
@@ -182,7 +180,7 @@ export const PACK_B: DocArticle[] = [
       },
       {
         title: "Save it",
-        body: "Press Save. The preview on the page updates to the new name and the change is written to this browser's storage. A toast reads Profile saved; nothing is sent anywhere.",
+        body: "Press Save. The preview on the page updates to the new name and the change is written to the account. A toast reads Profile saved, and the change is recorded in the activity log with the device and address it came from.",
       },
     ],
     notes: [
@@ -192,7 +190,7 @@ export const PACK_B: DocArticle[] = [
       },
       {
         q: "Will the change show in another browser?",
-        a: "No. The record lives in this browser's storage, so a different device opens on whatever it holds, not on what you just typed here.",
+        a: "Yes. The name belongs to the account, not to the browser you typed it on, so a second device signed in to the same account shows it too.",
       },
     ],
     related: [
@@ -209,7 +207,7 @@ export const PACK_B: DocArticle[] = [
     keywords: "photo rejected upload failed too large not image type error avatar profile picture five mb size limit",
     updated: REVIEWED,
     intro: [
-      "The file pickers here only accept a picture, and only one up to five megabytes. Every rejection is one of those two rules, and the message tells you which. The photo is read into the browser and kept as the image itself; nothing is uploaded, because there's nowhere to upload to.",
+      "The file pickers here only accept a picture, and only one up to five megabytes. Every rejection is one of those two rules, and the message tells you which. The photo is read into the browser, adjusted if you want it adjusted, and then sent to the account with the rest of your profile.",
       "Both pictures are chosen inside the Edit profile sheet — the face and the banner each have their own tile there — and the same two rules apply to both.",
     ],
     steps: [
@@ -231,7 +229,7 @@ export const PACK_B: DocArticle[] = [
     notes: [
       {
         q: "Why five megabytes?",
-        a: "The photo is stored whole inside this browser, as text, alongside the rest of your profile. A very large image would bloat that record for no benefit, so the cap keeps a stored photo reasonable.",
+        a: "Because the picture travels whole, as part of the profile record, and a very large image would bloat that record for no benefit. The cap keeps a stored photo reasonable.",
       },
       {
         q: "Can I remove the photo instead?",
@@ -252,7 +250,7 @@ export const PACK_B: DocArticle[] = [
     updated: REVIEWED,
     intro: [
       "Data and permissions is one page of rows about what may be collected about you. Two of them cover how you're shown things, and three cover cookies. They read on their own, but they depend on each other, so it's worth knowing which row actually controls which.",
-      "One thing to state up front: this build loads no analytics and no advertising code. Moving these rows is you recording what you'd allow a fuller version to do — which is still worth doing now, so the choice is already yours before there's something to consent to.",
+      "One thing to state up front: the choices are saved on your account, so they follow you to every device you sign in from. What the rows do to the app depends on the team behind it — and the one rule the account enforces itself is that marketing can't be on while analytics is off.",
     ],
     steps: [
       {
@@ -285,11 +283,11 @@ export const PACK_B: DocArticle[] = [
       },
       {
         q: "Where does any of it go?",
-        a: "Nowhere. Each row is a choice written to this browser's storage. Clearing the site's data deletes the choices, and no one can retrieve them afterwards, including you.",
+        a: "The choices themselves go to the account, so they follow you between devices. What they allow is the other half: analytics cookies tell the team which features get used and where people get stuck, and marketing cookies measure campaigns against that data.",
       },
       {
         q: "Is sharing with partners the same as turning analytics on?",
-        a: "No, and it's its own row for that reason. Analytics lets Tirbeo measure usage; Share anonymous usage data with partners would let someone else see those counts too — with no name, profile or content attached. It's off by default and stays off until you switch it, and nothing is sent to any partner in this build.",
+        a: "No, and it's its own row for that reason. Analytics lets Tirbeo measure usage; Share anonymous usage data with partners would let someone else see those counts too — with no name, profile or content attached. It's off by default and stays off until you switch it, and the account won't let you turn marketing on while analytics is off, because marketing counts results from that data.",
       },
     ],
     related: [
@@ -336,7 +334,7 @@ export const PACK_B: DocArticle[] = [
       },
       {
         q: "Does the app notice I disconnected?",
-        a: "Not on its own. This build has no server to carry the revocation, so the honest move, if an app genuinely shouldn't reach you, is also to remove the connection on that app's side.",
+        a: "Only when it tries. The grant is revoked on your account, so the next time that app asks to act as you the request comes back refused. If you'd rather it stopped asking at all, remove the connection on that app's own side as well — that's the one half the account can't reach.",
       },
     ],
     related: [
@@ -353,12 +351,12 @@ export const PACK_B: DocArticle[] = [
     updated: REVIEWED,
     intro: [
       "Email preferences split by what a message is for, not by how often it goes. Two controls carry most of the weight: a master switch that pauses everything non-essential at once, and a cadence that bundles the rest. Account and security mail ignores both and keeps arriving.",
-      "As with everything here, nothing is actually sent: this build has no mail server, so what you're saving is your preference, kept until something can act on it.",
+      "Every answer on this page is the account's: it is read from and written to the account service, so it follows you to every device you sign in from.",
     ],
     steps: [
       {
         title: "Reach for the one switch first",
-        body: "Pause all non-essential emails sits on its own at the top. Turn it on and a sheet asks how long — a day, a week, a month, a year, or until you turn it back on. While it's on, the rows below it dim rather than pretending to change.",
+        body: "Pause all non-essential emails sits on its own at the top. Turn it on and a sheet asks how long — a day, a week, a month, a year, or until you turn it back on. While it's on, the rows below it are held still: they keep the choices you already made, they say why when you tap them, and they are all still yours when the pause ends.",
         href: "/settings/notifications",
         hrefLabel: "Email preferences",
       },
@@ -368,11 +366,11 @@ export const PACK_B: DocArticle[] = [
       },
       {
         title: "Then pick the digest you'll actually read",
-        body: "Under Summaries and digests, Weekly summary rolls your highlights into one email a week, and Monthly recap is a once-a-month look back. They cover similar ground at different speeds, so choose the one you'd open rather than both.",
+        body: "Under Summaries and digests, Once a week rolls your highlights into one email a week, and Once a month is a once-a-month look back. They cover similar ground at different speeds, so choose the one you'd open rather than both.",
       },
       {
         title: "Set the pace for the rest",
-        body: "How often you receive them offers Instant, Once a day and Up to once a week. Everything except account and security mail is held to that pace, whether that's one email the moment it happens or one bundle a week.",
+        body: "The same row offers Once a day. Everything except account and security mail is held to that pace, whether that's one email the moment it happens or one bundle a day.",
       },
     ],
     notes: [
@@ -382,7 +380,7 @@ export const PACK_B: DocArticle[] = [
       },
       {
         q: "Will I get any of these?",
-        a: "Not from this build — there's nothing to send from. What's stored is your choice, waiting, and nothing here asks you to confirm by clicking a link in an inbox.",
+        a: "Yes — the choices are the account's, and the account sends the mail. Turning a row off stops that kind of message reaching you; it doesn't unsubscribe you from the account or change anything else about it.",
       },
     ],
     related: [
@@ -420,7 +418,7 @@ export const PACK_B: DocArticle[] = [
     notes: [
       {
         q: "Is the whole interface translated?",
-        a: "No, and it's better said than implied. Dates, times and numbers follow your language; the words in the interface itself stay English in this build.",
+        a: "The parts that repeat are: every page name, heading and control is written out for each language, and the body copy on the longer screens is translated on the fly and cached on the device. What isn't translated is anything a human being wrote for you to read — a message from the team, or a document you uploaded.",
       },
       {
         q: "Can I set the time zone by hand?",
@@ -473,13 +471,13 @@ export const PACK_B: DocArticle[] = [
   {
     slug: "time-spent",
     title: "Time on the app and what it counts",
-    sub: "The minutes Your activity draws are this device's own record — nothing is measured on a server.",
+    sub: "The minutes Your activity draws are counted from the account's own records.",
     category: "Your data",
     keywords: "time spent activity minutes per day weekly trend chart how long usage today screen dashboard",
     updated: REVIEWED,
     intro: [
       "Your activity answers how much time this account has spent here: a total for this week, a bar for each of the last seven days, and a curve over the last thirty. A dashed line marks your average day, and the busiest day is named in the summary under the big number.",
-      "The honest part is where the numbers come from. They're drawn from this browser's own stored record of the account — no measurement is sent to or aggregated on a server, and there's no dashboard anyone else reads.",
+      "The honest part is where the numbers come from. They're counted on the account from the rows it has written — the changes you made and the times someone got in — grouped by day in your own time zone. Nothing is estimated and nothing is extrapolated: a day with no rows is a day the account has no record of.",
     ],
     steps: [
       {
@@ -500,15 +498,15 @@ export const PACK_B: DocArticle[] = [
     notes: [
       {
         q: "Does this tell my real screen time?",
-        a: "It reflects the time this app recorded for the account on this device. It's not a system-wide screen-time report and it can't see what you do in other apps.",
+        a: "It reflects what the account recorded for you. It's not a system-wide screen-time report and it can't see what you do in other apps.",
       },
       {
         q: "Can I export these figures?",
-        a: "As part of the whole record, yes. Request an archive from Download your data; the activity numbers ride along with the rest of what this browser holds.",
+        a: "As part of the whole record, yes. Request an archive from Download your data; the activity numbers ride along with the rest of what the account holds.",
       },
       {
         q: "Why are they different on another machine?",
-        a: "Because they belong to this browser's storage, not to an account on a server. Nothing carries them across.",
+        a: "They shouldn't be: the numbers are counted on the account, so a second device signed in to the same account sees the same days. A day may still read differently if one device was in use and the other wasn't — the count is of the account's records, not of a clock running in a browser.",
       },
     ],
     related: [
@@ -556,8 +554,8 @@ export const PACK_B: DocArticle[] = [
         a: "No. Nothing about deactivation begins a countdown — that only happens if you file a deletion from the Delete account page.",
       },
       {
-        q: "Is a deactivation real in this build?",
-        a: "It's local, like everything here. The record of going and coming back is written to this browser because there's no server holding an account to hide.",
+        q: "Is a deactivation real?",
+        a: "Yes. The account goes into its own deactivated state on the account service: the profile stops loading for everyone else, the other sessions are ended, and the record of going and coming back is written down where it can be read back.",
       },
     ],
     related: [
@@ -590,7 +588,7 @@ export const PACK_B: DocArticle[] = [
       },
       {
         title: "Understand what happens after the window",
-        body: "If the date passes without a cancel, the account is set to close and there is nothing left on that page to undo it — the message then points to signing in again or talking to support. This build is local, so it's the point where the file, if you wanted one, should already be saved elsewhere.",
+        body: "If the date passes without a cancel, the account is set to close and there is nothing left on that page to undo it — the message then points to signing in again or talking to support. That is the point at which the file, if you wanted one, should already be saved somewhere else.",
         href: "/settings/delete-account",
         hrefLabel: "Delete account",
       },
@@ -598,11 +596,11 @@ export const PACK_B: DocArticle[] = [
     notes: [
       {
         q: "Does signing in itself stop a deletion?",
-        a: "On this build, use the cancel button rather than assuming. Reaching the Delete account page while the plan is pending gives you the countdown and the cancel in one place.",
+        a: "Use the cancel button rather than assuming. Reaching the Delete account page while the plan is pending gives you the countdown and the cancel in one place.",
       },
       {
         q: "Is there a shorter window?",
-        a: "The window the page applies is thirty days. A reward is described as widening it, but until a server honours a redemption the window the delete page counts is still thirty.",
+        a: "The window the page applies is thirty days. A reward is described as widening it, but until the account honours a redemption the window the delete page counts is still thirty.",
       },
       {
         q: "Will my data still be there if I cancel?",
@@ -618,13 +616,13 @@ export const PACK_B: DocArticle[] = [
   {
     slug: "contact-support",
     title: "Writing to support, and what happens to the message",
-    sub: "Where to describe a problem and the honest answer to where your message goes in this build.",
+    sub: "Where to describe a problem and the honest answer to where your message goes.",
     category: "Getting around",
     keywords: "support contact message help request broken report reply inbox save device ticket ask",
     updated: REVIEWED,
     intro: [
       "Write to support is a full page rather than a popup, because a message you actually mean is worth the whole screen. You choose what it's about, describe what happened, and save it.",
-      "Where it goes is the honest part: this build has no message server, so saving writes the request to this browser, into the same list the documentation index reads back. Nothing is sent to anyone, and no one replies — which is stated on the page instead of pretending a person will answer.",
+      "Where it goes is the honest part: saving files the request on the support desk, with your words and the date attached. The request is read back on the same page and on every device you sign in from, and it is a real ticket — one a person can answer.",
     ],
     steps: [
       {
@@ -639,7 +637,7 @@ export const PACK_B: DocArticle[] = [
       },
       {
         title: "Save it and read it back",
-        body: "Press Save request. The page confirms Saved on this device and shows what you filed, with options to write another or go back. Your full list of requests sits at the bottom of the documentation index.",
+        body: "Press Save request. The page confirms that it was filed and shows what you sent, with options to write another or go back. Your full list of requests sits at the bottom of the documentation index.",
         href: "/settings/help",
         hrefLabel: "Documentation",
       },
@@ -647,11 +645,11 @@ export const PACK_B: DocArticle[] = [
     notes: [
       {
         q: "Will anyone read this?",
-        a: "Not from this build. The request is stored in your browser and listed back to you, but there's no support queue on the other end — it's the right place to describe a problem, and not a way to reach a person.",
+        a: "Yes. It's a ticket on the support desk, filed with your words and the date, and the account keeps the reference so you can quote it. What comes back depends on the people behind the desk, not on the app.",
       },
       {
         q: "Does saving the message send it anywhere?",
-        a: "No. Nothing leaves the device. If you need the message to reach someone, copy its text out and send it yourself; the record here is a draft you keep, not a ticket filed.",
+        a: "It files it. The request goes to the support desk with your account attached, so nobody has to guess which Tirbeo it came from, and it stays listed for you to come back to.",
       },
     ],
     related: [

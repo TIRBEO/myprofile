@@ -627,7 +627,9 @@ export function ActionRow({
   );
 }
 
-/** A choice made right here in the list — tapping moves the dot, nothing opens. */
+/** A choice made right here in the list — tapping moves the dot, nothing opens.
+    A row that cannot move right now says why instead of moving: a switch that
+    answers while its answer is not being used is a switch that lies. */
 export function OptionRow({
   icon,
   title,
@@ -635,6 +637,8 @@ export function OptionRow({
   selected,
   onSelect,
   label,
+  disabled,
+  blockedHint,
 }: {
   icon?: ReactNode;
   title: string;
@@ -643,6 +647,10 @@ export function OptionRow({
   onSelect: () => void;
   /** Screen-reader name when the visible title isn't the whole answer. */
   label?: string;
+  /** Held still: tapping says why rather than choosing. */
+  disabled?: boolean;
+  /** Shows why a held row can't move. */
+  blockedHint?: () => void;
 }) {
   return (
     <button
@@ -650,11 +658,16 @@ export function OptionRow({
       role="radio"
       aria-checked={selected}
       aria-label={label ?? title}
+      aria-disabled={disabled || undefined}
       onClick={() => {
+        if (disabled) {
+          blockedHint?.();
+          return;
+        }
         haptic("selection");
         onSelect();
       }}
-      className={cn(ROW, LIVE)}
+      className={cn(ROW, disabled ? "cursor-not-allowed opacity-55" : LIVE)}
     >
       {icon ? (
         <span className={cn(CHIP, selected && "text-accent-text")}>{icon}</span>

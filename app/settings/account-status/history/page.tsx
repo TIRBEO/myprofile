@@ -29,6 +29,7 @@ import {
 } from "@/lib/account-status";
 import { readSkips } from "@/lib/account-state";
 import { ago, formatStamp } from "@/lib/dates";
+import { apiJson } from "@/lib/api";
 
 /* ═══════════════════════════════════════════════════════════════════
    Requests and history
@@ -57,10 +58,63 @@ const APPEAL_TONE = {
   ok: "text-success-text",
 };
 
+/* ── The full request ledger ───────────────────────────────────────
+   Everything the account has been asked to do, read from the brain: the
+   activity rows the actions write (codes mailed, pauses, closings, appeals)
+   and the export table beside them, merged newest-first by
+   `GET /api/user/requests`. The rows above say what is in force *now*;
+   this says what was ever asked for. */
+
+type RequestRow = {
+  id: string;
+  kind: string;
+  title: string;
+  detail: string | null;
+  status: string | null;
+  at: string;
+};
+
+const REQUEST_WORDS: Record<string, string> = {
+  "account.deactivated": "Deactivation",
+  "account.reactivated": "Reactivation",
+  "account.delete-code": "Deletion code requested",
+  "account.delete-request": "Account deletion",
+  "account.deletion-cancelled": "Deletion cancelled",
+  "security.deletion_scheduled": "Deletion scheduled",
+  "security.deletion_cancelled": "Deletion called off",
+  "appeal.filed": "Appeal filed",
+  "account.merge": "Accounts merged",
+  "data.download": "Data download",
+};
+
+const REQUEST_STATUS: Record<string, { word: string; cls: string }> = {
+  pending: { word: "Building…", cls: "text-warn-text" },
+  ready: { word: "Ready", cls: "text-success-text" },
+  failed: { word: "Failed", cls: "text-danger-text" },
+};
+
+function requestWords(row: RequestRow): { title: string; sub: string; right: string | null } {
+  const at = Date.parse(row.at);
+  const when = `${formatStamp(at)} · ${ago(at)}`;
+  const title = REQUEST_WORDS[row.kind] ?? row.title;
+  if (row.kind === "data.download") {
+    const st = row.status ? REQUEST_STATUS[row.status] : null;
+    return {
+      title,
+      sub: [row.detail || (row.status === "pending" ? "Being prepared" : "Archive"), when]
+        .filter(Boolean)
+        .join(" — "),
+      right: st?.word ?? null,
+    };
+  }
+  return { title, sub: row.detail ? `${row.detail} — ${when}` : when, right: null };
+}
+
 export default function AccountHistoryPage() {
   const { state, loading } = useAccountState();
   const [waiting, setWaiting] = useState<Pending[] | null>(null);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
+  const [requests, setRequests] = useState<RequestRow[] | null>(null);
 
   const look = useCallback(() => {
     setWaiting(decisionsAwaitingAnswer());
@@ -73,6 +127,9 @@ export default function AccountHistoryPage() {
     Promise.all([loadAccountChecks(), loadAppeals().catch(() => [] as Appeal[])])
       .then(look)
       .catch(look);
+    apiJson<{ requests?: RequestRow[] }>("/api/user/requests?limit=50")
+      .then((r) => setRequests(Array.isArray(r.requests) ? r.requests : []))
+      .catch(() => setRequests([]));
     window.addEventListener(ACCOUNT_EVENT, look);
     return () => window.removeEventListener(ACCOUNT_EVENT, look);
   }, [look]);
@@ -109,6 +166,29 @@ export default function AccountHistoryPage() {
           {state
             ? "Nothing is paused and no deletion is scheduled — either one puts a row here the moment you ask for it."
             : "The account hasn’t answered, so nothing here can claim to be in force."}
+        </p>
+      )}
+
+      <SectionTitle>Every request on record</SectionTitle>
+      {requests && requests.length ? (
+        <Group>
+          {requests.map((row) => {
+            const w = requestWords(row);
+            return (
+              <StaticRow
+                key={`${row.kind}-${row.id}`}
+                title={w.title}
+                sub={w.sub}
+                right={w.right ? <span className={REQUEST_STATUS[row.status ?? ""]?.cls ?? "text-muted"}>{w.right}</span> : undefined}
+              />
+            );
+          })}
+        </Group>
+      ) : (
+        <p className="max-w-[58ch] text-[14px] leading-relaxed text-muted">
+          {requests
+            ? "You haven’t asked the account for anything yet — downloads, pauses, codes and appeals all leave a row here."
+            : "The account is still answering, so the ledger cannot promise what it hasn’t heard."}
         </p>
       )}
 

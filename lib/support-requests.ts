@@ -24,6 +24,7 @@
 
 import { apiJson } from "@/lib/api";
 import { adoptLegacy, getStored, setStored } from "@/lib/remote-store";
+import { newId } from "@/lib/devices";
 import { loadAccountChecks, sections, type StatusItem } from "@/lib/account-status";
 
 const STORE = "tirbeo:support-requests";
@@ -250,7 +251,7 @@ export async function submitRequest(
   origin?: RequestOrigin,
 ): Promise<{ row: SupportRequest; sent: boolean; error?: string }> {
   const draft: SupportRequest = {
-    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    id: newId(),
     at: Date.now(),
     topic,
     message: message.trim(),

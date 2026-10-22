@@ -11,10 +11,13 @@ export function OtpInput({
   value,
   onChange,
   length = 6,
+  onEnter,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   length?: number;
+  /** Enter submits once every box is full — the keyboard's "Continue". */
+  onEnter?: () => void;
 }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
 
@@ -28,6 +31,7 @@ export function OtpInput({
 
   function onKeyDown(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Backspace" && !value[i] && i > 0) refs.current[i - 1]?.focus();
+    if (e.key === "Enter") onEnter?.();
   }
 
   function onPaste(e: React.ClipboardEvent<HTMLDivElement>) {

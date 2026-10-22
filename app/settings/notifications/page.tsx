@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Sheet, SheetOption } from "@/components/ig-ui";
 import { LoadFailed, TogglePageSkeleton } from "@/components/page-loading";
 import {
+  ActionRow,
   Group,
   Helper,
   OptionRow,
@@ -16,6 +17,9 @@ import { ApiError } from "@/lib/api";
 import {
   EmailPrefs,
   SummaryFrequency,
+  clearingLapsed,
+  isPaused,
+  pauseLabel,
   readEmailPrefs,
   saveEmailPrefs,
 } from "@/lib/notification-prefs";
@@ -28,11 +32,12 @@ import { usePageRefresh } from "@/lib/page-refresh";
    Every answer here is the account's, read from and written to the brain
    over /api/notifications/prefs — no localStorage, no laptop-specific copy.
    "Pause all" is the master switch (`emailPaused` + `emailPausedUntil`),
-   and pausing dims the choices below rather than switching them off —
-   resume and they are as they were. The duration is read back as the time
-   actually left, and the page says out loud that only sign-in codes and
-   critical security alerts still arrive while the pause holds, because
-   that is exactly what the senders do.
+   and while it holds the choices below are held still: they are kept in the
+   account exactly as they were, they cannot be changed while nothing is
+   being sent, and they come back as they were when the pause ends. The
+   duration is read back as the time actually left, and the page says out
+   loud that only sign-in codes and critical security alerts still arrive
+   while the pause holds, because that is exactly what the senders do.
    ═══════════════════════════════════════════════════════════════════ */
 
 const PAUSE_DURATIONS: { label: string; ms: number }[] = [
@@ -49,6 +54,18 @@ const FREQUENCIES: { value: SummaryFrequency; label: string; sub: string }[] = [
   { value: "monthly", label: "Once a month", sub: "A monthly look back at your activity and milestones." },
 ];
 
+/* Quiet hours are chosen a whole hour at a time — the window is there to
+   protect sleep, not to shave minutes off it. The stored value is "HH:MM"
+   exactly as the sender's clock math reads it. */
+const HOURS: { value: string; label: string }[] = Array.from({ length: 24 }, (_, h) => ({
+  value: `${String(h).padStart(2, "0")}:00`,
+  label: new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" }),
+}));
+
+function hourLabel(value: string): string {
+  return HOURS.find((h) => h.value === value)?.label ?? value;
+}
+
 export default function EmailPreferencesPage() {
   /* null = the account's answer hasn't been read yet. The switches wait for
      it rather than painting defaults and correcting themselves. A failed
@@ -57,6 +74,7 @@ export default function EmailPreferencesPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [pauseSheet, setPauseSheet] = useState(false);
+  const [quietSheet, setQuietSheet] = useState<null | "start" | "end">(null);
   const [now, setNow] = useState(() => Date.now());
   const toast = useToast();
 
@@ -97,10 +115,18 @@ export default function EmailPreferencesPage() {
   async function save(patch: Partial<EmailPrefs>): Promise<boolean> {
     const before = prefs;
     if (!before || pending) return false;
+
+    /* A pause that ran out on its own leaves the account still saying
+       "paused" until something writes. Any write now clears it, so the
+       account and the page agree about whether mail is flowing — unless the
+       write is about the pause itself, which then decides. */
+    const payload: Partial<EmailPrefs> =
+      "emailPaused" in patch ? patch : { ...patch, ...clearingLapsed(before, now) };
+
     setPending(true);
-    setPrefs({ ...before, ...patch });
+    setPrefs({ ...before, ...payload });
     try {
-      setPrefs(await saveEmailPrefs(patch));
+      setPrefs(await saveEmailPrefs(payload));
       return true;
     } catch (err) {
       setPrefs(before);
@@ -122,9 +148,7 @@ export default function EmailPreferencesPage() {
 
   if (!prefs) return <TogglePageSkeleton title="Email preferences" count={4} />;
 
-  const paused =
-    prefs.emailPaused === true &&
-    (typeof prefs.emailPausedUntil !== "number" || prefs.emailPausedUntil > now);
+  const paused = isPaused(prefs, now);
 
   const indefinite = paused && prefs.emailPausedUntil === null;
 
@@ -155,18 +179,38 @@ export default function EmailPreferencesPage() {
 
   async function resume() {
     const landed = await save({ emailPaused: false, emailPausedUntil: null });
-    if (landed) toast.success("Emails resumed");
+    if (landed)
+      toast.success("Emails resumed — the choices below are back as you left them");
   }
 
-  const held = indefinite
-    ? "until you turn it back on"
-    : `until ${new Date(prefs.emailPausedUntil as number).toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
-      })}`;
+  async function pickQuiet(which: "start" | "end", value: string) {
+    const landed = await save(
+      which === "start" ? { quietHoursStart: value } : { quietHoursEnd: value },
+    );
+    if (landed) setQuietSheet(null);
+  }
+
+  const held = pauseLabel(prefs, now);
 
   function busyHint() {
     toast.info("One change at a time — the account is still saving this one");
+  }
+
+  /* While the pause holds, the rows below are kept in the account exactly as
+     they were and cannot be moved: a switch that answers while its answer is
+     not being used is a switch that lies. Tapping one says why. */
+  function pausedHint() {
+    toast.info(
+      `Emails are paused ${held} — your choices below are kept as they are, and come back when the pause ends`,
+    );
+  }
+
+  /** A row below the master switch: held still while the pause holds, and
+      never able to answer twice at once. */
+  function rowBlocked() {
+    if (paused) return pausedHint;
+    if (pending) return busyHint;
+    return undefined;
   }
 
   return (
@@ -179,7 +223,7 @@ export default function EmailPreferencesPage() {
           title="Pause all non-essential emails"
           sub={
             paused
-              ? `Paused ${held.replace(/^until /, "")} — tap to resume now.`
+              ? `Paused ${held} — the choices below are held as they are. Tap to resume now.`
               : "Pick how long. They resume on their own when the time is up."
           }
           on={paused}
@@ -192,13 +236,15 @@ export default function EmailPreferencesPage() {
       </Group>
       {paused ? (
         <Helper tone="warn">
-          While paused, only sign-in codes and critical security alerts still arrive.
+          While paused, only sign-in codes and critical security alerts still arrive. The choices
+          below are kept in your account exactly as they are — they cannot change while nothing is
+          being sent, and they are all still yours when the pause ends.
         </Helper>
       ) : null}
 
       {/* ── Emails from Tirbeo ── */}
       <SectionTitle>Emails from Tirbeo</SectionTitle>
-      <Group dimmed={paused}>
+      <Group>
         <ToggleRow
           title="Account and security emails"
           sub="Sign-in alerts, password changes and other account activity. These can't be turned off."
@@ -213,9 +259,9 @@ export default function EmailPreferencesPage() {
           title="Product updates"
           sub="New features, improvements and tips to get the most out of Tirbeo."
           on={prefs.productEmail}
-          disabled={pending}
+          disabled={pending || paused}
           busy={pending}
-          blockedHint={pending ? busyHint : undefined}
+          blockedHint={rowBlocked()}
           onChange={async (next) => {
             if (await save({ productEmail: next }))
               toast.toggled(next ? "Product updates on" : "Product updates off", next);
@@ -226,9 +272,9 @@ export default function EmailPreferencesPage() {
           title="Offers and promotions"
           sub="Deals, campaigns and special offers from Tirbeo."
           on={prefs.offersEmail}
-          disabled={pending}
+          disabled={pending || paused}
           busy={pending}
-          blockedHint={pending ? busyHint : undefined}
+          blockedHint={rowBlocked()}
           onChange={async (next) => {
             if (await save({ offersEmail: next }))
               toast.toggled(next ? "Offers and promotions on" : "Offers and promotions off", next);
@@ -239,9 +285,9 @@ export default function EmailPreferencesPage() {
           title="Tips and inspiration"
           sub="Short guides on settings, privacy and getting around Tirbeo."
           on={prefs.tipsEmail}
-          disabled={pending}
+          disabled={pending || paused}
           busy={pending}
-          blockedHint={pending ? busyHint : undefined}
+          blockedHint={rowBlocked()}
           onChange={async (next) => {
             if (await save({ tipsEmail: next }))
               toast.toggled(next ? "Tips and inspiration on" : "Tips and inspiration off", next);
@@ -250,22 +296,68 @@ export default function EmailPreferencesPage() {
         />
       </Group>
 
+      {/* ── Quiet hours ── the window the sender reads before non-essential
+          mail, on the account's own clock. Honest wording: mail inside the
+          window is not sent at all, not held and delivered later. */}
+      <SectionTitle desc={prefs.timezone ? `Non-essential emails are not sent inside this window — timed on your profile's time zone (${prefs.timezone}).` : "Non-essential emails are not sent inside this window — timed on the sender's clock, since your profile carries no time zone."}>
+        Quiet hours
+      </SectionTitle>
+      <Group>
+        <ToggleRow
+          title="Quiet hours"
+          sub={
+            prefs.quietHoursEnabled
+              ? `No non-essential email between ${hourLabel(prefs.quietHoursStart)} and ${hourLabel(prefs.quietHoursEnd)} — pick the hours below.`
+              : "Off — non-essential email can arrive at any hour."
+          }
+          on={prefs.quietHoursEnabled}
+          disabled={pending}
+          busy={pending}
+          blockedHint={pending ? busyHint : undefined}
+          onChange={async (next) => {
+            if (await save({ quietHoursEnabled: next }))
+              toast.toggled(next ? "Quiet hours on" : "Quiet hours off", next);
+          }}
+          label="Quiet hours"
+        />
+        {prefs.quietHoursEnabled ? (
+          <>
+            <ActionRow
+              title="Quiet starts"
+              sub={hourLabel(prefs.quietHoursStart)}
+              disabled={pending}
+              blockedHint={busyHint}
+              onClick={() => setQuietSheet("start")}
+            />
+            <ActionRow
+              title="Quiet ends"
+              sub={hourLabel(prefs.quietHoursEnd)}
+              disabled={pending}
+              blockedHint={busyHint}
+              onClick={() => setQuietSheet("end")}
+            />
+          </>
+        ) : null}
+      </Group>
+
       {/* ── The account recap: one recurring mail, one switch ── */}
       <SectionTitle desc="One recurring email with your highlights — the weekly summary and the monthly recap are the same letter at two different paces, so there is one switch for it.">
         Account recap
       </SectionTitle>
-      <Group dimmed={paused}>
+      <Group>
         <ToggleRow
           title="Account recap email"
           sub={
-            prefs.summaryEnabled
-              ? `Arrives ${findFrequency(prefs.summaryFrequency).label.toLowerCase()} — pick the pace below.`
-              : "Off — no recurring recap email is sent."
+            paused
+              ? "Kept as it is — no recap is sent while the pause holds."
+              : prefs.summaryEnabled
+                ? `Arrives ${findFrequency(prefs.summaryFrequency).label.toLowerCase()} — pick the pace below.`
+                : "Off — no recurring recap email is sent."
           }
           on={prefs.summaryEnabled}
-          disabled={pending}
+          disabled={pending || paused}
           busy={pending}
-          blockedHint={pending ? busyHint : undefined}
+          blockedHint={rowBlocked()}
           onChange={async (next) => {
             if (await save({ summaryEnabled: next }))
               toast.toggled(next ? "Account recap on" : "Account recap off", next);
@@ -274,25 +366,33 @@ export default function EmailPreferencesPage() {
         />
       </Group>
 
-      {/* ── How often ── */}
-      <SectionTitle desc="The pace at which your account recap arrives. Account and security mail ignores all of it and is sent the moment it happens.">
-        How often you receive them
-      </SectionTitle>
-      <Group dimmed={paused}>
-        {FREQUENCIES.map((f) => (
-          <OptionRow
-            key={f.value}
-            title={f.label}
-            sub={f.sub}
-            selected={prefs.summaryFrequency === f.value}
-            onSelect={async () => {
-              if (prefs.summaryFrequency === f.value || pending) return;
-              if (await save({ summaryFrequency: f.value }))
-                toast.info(`Account recap ${f.label.toLowerCase()}`);
-            }}
-          />
-        ))}
-      </Group>
+      {/* ── How often ── only while the recap itself is on and the pause is not
+          holding: a pace for a letter that is never sent is a choice nobody
+          can make, and a choice nobody can make is not a choice. */}
+      {prefs.summaryEnabled && !paused ? (
+        <>
+          <SectionTitle desc="The pace at which your account recap arrives. Account and security mail ignores all of it and is sent the moment it happens.">
+            How often you receive them
+          </SectionTitle>
+          <Group>
+            {FREQUENCIES.map((f) => (
+              <OptionRow
+                key={f.value}
+                title={f.label}
+                sub={f.sub}
+                selected={prefs.summaryFrequency === f.value}
+                disabled={pending}
+                blockedHint={busyHint}
+                onSelect={async () => {
+                  if (prefs.summaryFrequency === f.value || pending) return;
+                  if (await save({ summaryFrequency: f.value }))
+                    toast.info(`Account recap ${f.label.toLowerCase()}`);
+                }}
+              />
+            ))}
+          </Group>
+        </>
+      ) : null}
       <Helper className="mt-10">
         Essential emails about your account, security and compliance are always sent — even when
         everything above is off, and even while everything above is paused.
@@ -316,6 +416,30 @@ export default function EmailPreferencesPage() {
                 onClick={() => void pauseFor(d.ms, d.label)}
               >
                 {d.label}
+              </SheetOption>
+            ))}
+          </div>
+        </Sheet>
+      ) : null}
+
+      {quietSheet ? (
+        <Sheet
+          title={quietSheet === "start" ? "Quiet hours start" : "Quiet hours end"}
+          description="An hour on your account's clock. A window that wraps past midnight is fine — 22:00 to 07:00 means ten quiet hours tonight."
+          onClose={() => setQuietSheet(null)}
+        >
+          <div
+            className="-mx-4 max-h-[60vh] overflow-y-auto list-divide sm:-mx-5"
+            role="radiogroup"
+            aria-label={quietSheet === "start" ? "Quiet hours start" : "Quiet hours end"}
+          >
+            {HOURS.map((h) => (
+              <SheetOption
+                key={h.value}
+                selected={(quietSheet === "start" ? prefs.quietHoursStart : prefs.quietHoursEnd) === h.value}
+                onClick={() => void pickQuiet(quietSheet, h.value)}
+              >
+                {h.label}
               </SheetOption>
             ))}
           </div>

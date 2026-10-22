@@ -33,6 +33,7 @@ export default function SignOutDevicesPage() {
   const [failed, setFailed] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
   const { guard, reauthDialog } = useReauthGuard();
 
   const load = () => {
@@ -70,10 +71,12 @@ export default function SignOutDevicesPage() {
   }
 
   async function eject() {
+    if (busy) return;
     /* The count only gets claimed once the account has actually ended the
        sessions — a failed write must not read as a sign-out that happened.
        One guarded call for the whole batch: the emailed code that pays for it
        works once, so it can't fund three separate deletes. */
+    setBusy(true);
     try {
       const n = await guard((proof) => signOutMany(picked, proof));
       trackEvent("settings.session_revoked", {
@@ -91,6 +94,8 @@ export default function SignOutDevicesPage() {
       haptic("error");
       trackError("devices.sign-out-many", err);
       toast.error(withRef(err?.message || "The sessions couldn't be ended. Nothing was signed out.", err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -161,13 +166,20 @@ export default function SignOutDevicesPage() {
         <Sheet
           title={`End ${picked.length} ${picked.length === 1 ? "session" : "sessions"} now?`}
           description="People using those machines are signed out immediately. Nothing is deleted — only the session."
-          onClose={() => setConfirming(false)}
+          /* Closing mid-flight would abandon the write while the code may
+             already be spent — the sheet stays shut until the call answers. */
+          onClose={() => {
+            if (!busy) setConfirming(false);
+          }}
           footer={
             <SheetActions
               cancelLabel="Cancel"
-              onCancel={() => setConfirming(false)}
-              confirmLabel={`Log out of ${picked.length} ${picked.length === 1 ? "device" : "devices"}`}
+              onCancel={() => {
+                if (!busy) setConfirming(false);
+              }}
+              confirmLabel={busy ? "Signing out…" : `Log out of ${picked.length} ${picked.length === 1 ? "device" : "devices"}`}
               confirmVariant="danger"
+              loading={busy}
               onConfirm={eject}
             />
           }

@@ -60,10 +60,11 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
   const t = useT();
   const title = t(titleFor(pathname));
 
-  /* With no server to ask, "refresh" means build the page again: the key on
-     `main` changes, the subtree comes down, and every number and list is read
-     off this device a second time. The remembered offset goes with it, so the
-     rebuild starts at the top rather than dropping you back into the middle. */
+  /* "Refresh" means build the page again: the key on `main` changes, the
+     subtree comes down, and every screen's own read runs a second time —
+     against the account, not a cached copy. The remembered offset goes with
+     it, so the rebuild starts at the top rather than dropping you back into
+     the middle. */
   const refresh = useCallback(() => {
     scrollSpots.set(pathname, 0);
     window.scrollTo(0, 0);
@@ -568,7 +569,7 @@ function NavGroups({ query, onNavigate }: { query: string; onNavigate?: () => vo
                   )}
                 >
                   <Icon
-                    className={cn("size-5 shrink-0", active ? "text-accent-text" : "text-text-4")}
+                    className={cn("size-5 shrink-0", active ? "text-fg" : "text-text-4")}
                     strokeWidth={active ? 2.2 : 1.8}
                   />
                   <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>

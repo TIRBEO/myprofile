@@ -8,6 +8,8 @@ import { Button, Sheet, SheetActions } from "@/components/ig-ui";
 import { Group, Helper, PageSkeleton, PillButton, PillStack, SettingsPage, SheetGroup, StaticRow } from "@/components/settings-shell";
 import { GRACE_DAYS, countdownLabel } from "@/lib/delete-account";
 import { apiCancelDeletion, apiRequestDeletionCode, apiVerifyDeletion, useAccountState } from "@/lib/account-lifecycle";
+import { useReauthGuard } from "@/components/reauth-sheet";
+import { wasDeclined } from "@/lib/reauth";
 import { formatDate } from "@/lib/dates";
 import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
@@ -53,6 +55,7 @@ export default function DeleteAccountPage() {
   if (loading) return <PageSkeleton title="Delete account" sections={2} />;
 
   async function doCancel() {
+    if (busy) return;
     setBusy(true);
     try {
       await apiCancelDeletion();
@@ -61,7 +64,14 @@ export default function DeleteAccountPage() {
       toast.info("Deletion cancelled — your account stays open");
     } catch (err) {
       trackError("delete-account.cancel", err);
-      toast.error("Couldn't cancel the deletion — please try again");
+      toast.error(
+        withRef(
+          err instanceof Error && err.message
+            ? err.message
+            : "Couldn't cancel the deletion — please try again",
+          err,
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -84,7 +94,7 @@ export default function DeleteAccountPage() {
         {!over ? (
           <PillStack>
             <PillButton
-              label="Cancel deletion and keep my account"
+              label={busy ? "Cancelling…" : "Cancel deletion and keep my account"}
               onClick={doCancel}
               disabled={busy}
             />
@@ -119,7 +129,7 @@ export default function DeleteAccountPage() {
         <PillButton
           tone="danger"
           label="Delete my account"
-          sub={`Starts the ${GRACE_DAYS}-day window. The last step is a code to your sign-in email.`}
+          sub={`Starts the ${GRACE_DAYS}-day window. The last steps are a code to your sign-in email and a confirmation it's you.`}
           onClick={() => {
             haptic("heavy");
             setDeletionOpen(true);
@@ -156,6 +166,7 @@ export default function DeleteAccountPage() {
 function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
+  const { guard, reauthDialog } = useReauthGuard();
   const [stage, setStage] = useState<"warn" | "proof">("warn");
   const [code, setCode] = useState<string[]>(BLANK_CODE);
   const [againIn, setAgainIn] = useState(0);
@@ -168,9 +179,16 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
   /** The account's own words for why nothing happened: no address to mail,
       a code asked for too soon, a code that isn't right. */
   const [error, setError] = useState<string | null>(null);
-  /** Kept so the timers a sheet unmounts mid-countdown can't fire into it. */
+  /** Kept so the timers a sheet unmounts mid-countdown can't fire into it.
+      Re-armed on every mount: Strict Mode runs mount → cleanup → mount on the
+      same instance, and a cleanup-only effect would leave this false forever
+      — every awaited reply then looked like a dead sheet and was dropped,
+      which is how a 200 "code sent" left the button spinning in "Sending…". */
   const live = useRef(true);
-  useEffect(() => () => { live.current = false; }, []);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!againIn) return;
@@ -214,14 +232,17 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
   }
 
   /** Hand the code to the account. Only a code it recognises schedules
-      anything; anything else leaves the account exactly as it is, with the
-      reason on the sheet. */
+      anything — and the code alone isn't the whole answer: the account also
+      wants a fresh proof it's really the person (password, authenticator or
+      emailed code), which `guard` collects in its own dialog when the first
+      attempt comes back refused. Anything else leaves the account exactly as
+      it is, with the reason on the sheet. */
   async function verify() {
     if (!codeFull || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await apiVerifyDeletion(code.join(""), null);
+      await guard((proof) => apiVerifyDeletion(code.join(""), null, proof));
       if (!live.current) return;
       trackEvent("settings.account_deletion_requested");
       haptic("heavy");
@@ -231,6 +252,12 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
       router.replace("/settings");
     } catch (err) {
       if (!live.current) return;
+      // Walking away from the proof changes nothing — the sheet stays open
+      // with the code typed, ready to try again.
+      if (wasDeclined(err)) {
+        setBusy(false);
+        return;
+      }
       haptic("error");
       trackError("delete-account.verify", err);
       setCode(BLANK_CODE);
@@ -307,7 +334,7 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
             {/* Six fixed boxes are wider than a phone sheet, so they share the
                 room evenly and stop at their full size once there is space. */}
             <div className="w-full [&>div]:w-full [&_input]:min-w-0 [&_input]:max-w-12 [&_input]:flex-1">
-              <OtpInput value={code} onChange={setCode} />
+              <OtpInput value={code} onChange={setCode} onEnter={verify} />
             </div>
             <Button
               variant="link"
@@ -337,6 +364,10 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
       )}
 
       {error ? <Helper tone="danger">{error}</Helper> : null}
+
+      {/* The proof the account asked for, on its own sheet above this one —
+          only the doors this account can actually open. */}
+      {reauthDialog}
     </Sheet>
   );
 }

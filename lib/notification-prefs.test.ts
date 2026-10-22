@@ -114,3 +114,59 @@ describe("saveEmailPrefs", () => {
     );
   });
 });
+
+/* The pause, read the way the senders read it. A switch that says "paused"
+   while the mail keeps coming is worse than no switch at all, so the rule
+   that a date already behind us means "not paused" is pinned here — on both
+   sides: the screen and the account. */
+describe("the pause", () => {
+  const NOW = 1_800_000_000_000;
+
+  it("holds while the date is still ahead of us", async () => {
+    const { isPaused, pauseLabel } = await load();
+    const prefs = { emailPaused: true, emailPausedUntil: NOW + 60_000 };
+
+    expect(isPaused(prefs, NOW)).toBe(true);
+    expect(pauseLabel(prefs, NOW)).toMatch(/^until /);
+  });
+
+  it("holds for good when there is no end date", async () => {
+    const { isPaused, pauseLabel } = await load();
+    const prefs = { emailPaused: true, emailPausedUntil: null };
+
+    expect(isPaused(prefs, NOW)).toBe(true);
+    expect(pauseLabel(prefs, NOW)).toBe("until you turn it back on");
+  });
+
+  it("is over once its date is behind us, with nobody running a job", async () => {
+    const { isPaused, pauseLabel, hasLapsed } = await load();
+    const prefs = { emailPaused: true, emailPausedUntil: NOW - 1 };
+
+    expect(isPaused(prefs, NOW)).toBe(false);
+    expect(hasLapsed(prefs, NOW)).toBe(true);
+    expect(pauseLabel(prefs, NOW)).toBe("");
+  });
+
+  it("is not a pause at all when the switch was never thrown", async () => {
+    const { isPaused, hasLapsed, clearingLapsed } = await load();
+    const prefs = { emailPaused: false, emailPausedUntil: null };
+
+    expect(isPaused(prefs, NOW)).toBe(false);
+    expect(hasLapsed(prefs, NOW)).toBe(false);
+    expect(clearingLapsed(prefs, NOW)).toEqual({});
+  });
+
+  it("clears a pause that ran out, so the account stops saying 'paused'", async () => {
+    const { clearingLapsed } = await load();
+    const lapsed = { emailPaused: true, emailPausedUntil: NOW - 1 };
+
+    expect(clearingLapsed(lapsed, NOW)).toEqual({ emailPaused: false, emailPausedUntil: null });
+  });
+
+  it("leaves a live pause alone — a lapsed clear would end it early", async () => {
+    const { clearingLapsed } = await load();
+    const live = { emailPaused: true, emailPausedUntil: NOW + 60_000 };
+
+    expect(clearingLapsed(live, NOW)).toEqual({});
+  });
+});

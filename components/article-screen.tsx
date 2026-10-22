@@ -202,7 +202,7 @@ export default function ArticlePage() {
         crumb={<Breadcrumb items={[{ label: t("Documentation"), href: "/settings/help" }]} />}
       >
         <Helper lead tone="warn">
-          That article isn&apos;t here. The documentation lists every article this build has.
+          That article isn&apos;t here. The documentation lists every article this app has.
         </Helper>
         <PillStack>
           <PillButton label={t("Back to documentation")} href="/settings/help" tone="primary" />
@@ -497,8 +497,9 @@ export default function ArticlePage() {
       </PillStack>
 
       <Helper className="mt-8">
-        This text describes this build, which has no server. If a step here doesn&apos;t match what
-        you&apos;re seeing, that&apos;s a bug in the writing — say so under Write to support.
+        This text describes this app as it runs today, against your Tirbeo account. If a step
+        here doesn&apos;t match what you&apos;re seeing, that&apos;s a bug in the writing — say so
+        under Write to support and it goes to a person, with a reference you can quote.
       </Helper>
 
       {/* While it is reading, the controls leave the text and float at the

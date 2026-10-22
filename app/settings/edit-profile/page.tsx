@@ -56,7 +56,7 @@ import {
    with every field and both uploads. Pronouns, gender and the date
    of birth open their own sub-popup on top — picking something
    drops you back into the edit popup with the new value. Save
-   writes it all at once. Nothing leaves the browser.
+   writes it all at once, to the account.
    ═══════════════════════════════════════════════════════════════════ */
 
 const PHOTO_LIMIT = 5 * 1024 * 1024;
@@ -279,8 +279,8 @@ export default function EditProfilePage() {
     openEdit();
   }
 
-  /* Every starred field is compulsory — the popup won't close until
-     they're all filled, however the user tries to leave. */
+  /* Every starred field is compulsory to save — but nothing is forced while
+     the sheet is merely open: the warnings appear on a save attempt only. */
   const missing = REQUIRED.filter((k) => {
     const v = draft[k] ?? "";
     return k === "username" ? !slugOf(v) : !v.trim();
@@ -297,10 +297,10 @@ export default function EditProfilePage() {
   }
 
   function tryClose() {
-    if (missing.length) {
-      blockClose();
-      return;
-    }
+    /* Cancelling is always allowed — the person leaves whenever they want.
+       The "still needed" warnings belong to the save attempt only, and are
+       cleared on close so the next time the sheet opens it starts clean. */
+    setAttempted(false);
     setEditing(false);
   }
 
@@ -606,10 +606,8 @@ export default function EditProfilePage() {
 
               <div className="px-4 py-3 sm:px-5 sm:py-4">
                 <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                  <span className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
-                    Bio
-                  </span>
-                  <span className="text-[12px] tabular-nums text-muted">
+                  <FieldLabel text="Bio" />
+                  <span className="-mt-1.5 text-[12px] tabular-nums text-muted">
                     {(draft.bio ?? "").length}/{BIO_MAX}
                   </span>
                 </div>
@@ -1223,25 +1221,31 @@ function PickerRow({
   return (
     <div className="px-4 py-3 sm:px-5 sm:py-4">
       <FieldLabel text={label} />
-      <Button
-        variant="ghost"
+      {/* Same plate, height and edge as a typed field — a picker is a field
+          too, and two skins of the same control is what makes a form look
+          assembled from two apps. */}
+      <button
+        type="button"
         onClick={onClick}
         aria-describedby={invalid ? noteId : undefined}
         className={cn(
-          "h-12 w-full gap-3 bg-surface-2 text-left",
-          invalid ? "border border-danger/70 hover:border-danger" : "border border-transparent hover:bg-surface-3",
+          "flex h-11 w-full items-center gap-3 rounded-lg border bg-field px-4 text-left",
+          "transition-[border-color,box-shadow,background-color] duration-150",
+          "hover:border-border-strong hover:bg-field-hover focus-visible:border-ig-hover",
+          "focus-visible:shadow-[0_0_0_3px_var(--accent-soft-ring)] focus-visible:outline-none",
+          invalid ? "border-danger/70 hover:border-danger" : "border-border",
         )}
       >
         <span
           className={cn(
-            "min-w-0 flex-1 break-words whitespace-normal text-[15px]",
-            value ? "text-fg" : "text-muted/70 italic",
+            "min-w-0 flex-1 truncate text-[16px]",
+            value ? "text-fg" : "text-placeholder",
           )}
         >
           {value || placeholder}
         </span>
         {icon}
-      </Button>
+      </button>
       <ReqNote show={!!invalid} id={noteId} />
     </div>
   );

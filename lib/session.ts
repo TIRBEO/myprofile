@@ -22,7 +22,7 @@
 
 import { fetchProfile } from "@/lib/api-client";
 import { clearAccountTraces } from "@/lib/account-cache";
-import { getStored, persistNow, setStored } from "@/lib/remote-store";
+import { getStored, persistNow, setStoredLocal } from "@/lib/remote-store";
 
 const PREF_KEY = "tirbeo:security";
 const LAST_ACTIVE_KEY = "tirbeo:last-active";
@@ -250,7 +250,11 @@ export async function setStaySignedIn(on: boolean): Promise<void> {
     /* private mode — the server cookie still reflects the account's choice */
   }
   if (!on) window.localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
-  setStored("saveLoginInfo", on);
+  // Local mirror only — the awaited `persistNow` below is the one write to the
+  // account. `setStored` would fire a second, un-awaited PATCH for the same key
+  // (its own rollback/failure path racing the one `toggleSavedLogin` already
+  // handles), so a refused toggle could double-report and waste a round trip.
+  setStoredLocal("saveLoginInfo", on);
   await persistNow("saveLoginInfo", on);
 }
 

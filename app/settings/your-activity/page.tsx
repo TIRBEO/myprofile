@@ -106,6 +106,17 @@ export default function YourActivityPage() {
     isLast ? todayWord() : formatShortDate(day.at);
   const curve = toPoints(summary.days, counts, TREND_DAYS, dayLabel);
 
+  /* A day says what it actually holds: "4 sign-ins", "No sign-ins" — never
+     "4 things" when the colour above the chart already names the unit. */
+  const unit = group ? group.label.toLowerCase() : "thing";
+  const sayDay = (point: ChartPoint) =>
+    point.value === 0
+      ? group
+        ? `No ${unit}`
+        : "Nothing recorded"
+      : `${point.value} ${point.value === 1 ? unit.replace(/s$/, "") : unit}`;
+  const sayAll = (value: number) => (value === 0 ? "Nothing recorded" : formatCount(value));
+
   /* Every group on one set of axes, so a busy day in one line and a quiet
      one in another don't look the same size. */
   const allSeries: ChartSeries[] = GROUPS.map((row) => ({
@@ -185,18 +196,16 @@ export default function YourActivityPage() {
             key={filter}
             points={curve}
             color={color}
-            say={(point) => sayCount(point.value)}
+            say={sayDay}
           />
         ) : (
-          <TrendAll series={allSeries} say={sayCount} />
+          <TrendAll series={allSeries} say={sayAll} />
         )}
       </div>
       <Helper>
         {group
-          ? `Drawn in the colour of ${group.label.toLowerCase()} — that line is the ${formatCount(
-              groupTotal(summary, group.key),
-            )} your ${TREND_DAYS} days left behind.`
-          : `Stacked, so the height of the picture is that day and each colour is the part it was. Slide a finger along it, or pick a colour above for one group.`}
+          ? `One point per day, counted in ${unit} — ${total} ${total === 1 ? unit.replace(/s$/, "") : unit} across the last ${TREND_DAYS} days. Press the line, or slide along it, to read a day.`
+          : `Stacked: the height of the picture is that day's total, and each colour is the part it was. Press or slide to read a day, or pick a colour above for one group.`}
       </Helper>
 
       <SectionTitle>Your records</SectionTitle>

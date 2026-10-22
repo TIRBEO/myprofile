@@ -5,9 +5,9 @@
 
    The answer is kept on this device against the article's slug, so the
    page can remember it and change the question into a confirmation with-
-   out a round trip. There is no server to send it to in this build, and
-   the row on the article says that plainly rather than implying someone
-   is reading the tally.
+   out a round trip, and it rides the settings bag up to the account on
+   the next persist — stored, but not tallied anywhere: the row on the
+   article says "Noted", which is exactly what it is.
 
    A "no" is the one answer that leads somewhere: it offers the support
    form with this article already attached to the request.

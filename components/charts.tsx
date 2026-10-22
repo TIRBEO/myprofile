@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/components/ig-ui";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -120,10 +120,13 @@ export function Bars({
   };
 
   /** Dragging across the row is the gesture people reach for, so the whole
-      box tracks the pointer instead of only the bar under it. */
+      box tracks the pointer instead of only the bar under it. A mouse that
+      is only passing over — nothing pressed, nothing picked yet — leaves the
+      peak alone; a resting cursor is looking, not asking. */
   const onMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const rect = box.current?.getBoundingClientRect();
-    if (!rect?.width || event.pointerType === "mouse" && event.buttons === 0 && !touched) return;
+    const idleMouse = event.pointerType === "mouse" && event.buttons === 0 && !touched;
+    if (!rect?.width || idleMouse) return;
     const column = rect.width / Math.max(1, points.length);
     choose(Math.min(points.length - 1, Math.max(0, Math.floor((event.clientX - rect.left) / column))));
   };
@@ -158,7 +161,9 @@ export function Bars({
             <button
               key={p.label}
               type="button"
-              onPointerEnter={() => choose(i)}
+              onPointerEnter={(event) => {
+                if (event.pointerType !== "mouse" || event.buttons > 0 || touched) choose(i);
+              }}
               onFocus={() => choose(i)}
               onClick={() => choose(i)}
               aria-label={`${p.label}: ${say(p)}`}
@@ -199,7 +204,11 @@ export function Bars({
 
 /** A 30-day curve. The line is drawn in a stretched viewBox so it fills any
     width; the stroke keeps its weight because it doesn't scale with it.
-    `color` lets a filtered chart carry the colour of what it's showing. */
+    `color` lets a filtered chart carry the colour of what it's showing.
+
+    The marker answers to a deliberate gesture, never to a resting cursor:
+    touch and mouse-drag slide it, a click places it, and a pointer that is
+    only passing by leaves the busiest day selected. */
 export function Trend({
   points,
   height = 150,
@@ -209,6 +218,7 @@ export function Trend({
   const W = 300;
   const H = 100;
   const PAD = 8;
+  const fillId = useId();
   const max = Math.max(...points.map((p) => p.value), 1);
   const spot = points.map((p, i) => {
     const x = PAD + (i / Math.max(1, points.length - 1)) * (W - PAD * 2);
@@ -229,13 +239,27 @@ export function Trend({
     setTouched(true);
     setPicked(Math.min(points.length - 1, Math.max(0, i)));
   };
-  const choose = (clientX: number, fallback: number) => {
+  /** One mapping for every gesture, undoing both the viewBox stretch and the
+      padding the plot itself starts at — a click and a drag over the same day
+      must select the same day. */
+  const pickAt = (clientX: number) => {
     const rect = box.current?.getBoundingClientRect();
-    if (!rect?.width) return setPick(fallback);
-    setPick(Math.round(((clientX - rect.left) / rect.width) * (points.length - 1)));
+    if (!rect?.width) return;
+    const ratio = (clientX - rect.left) / rect.width;
+    const inner = (ratio * W - PAD) / (W - PAD * 2);
+    setPick(Math.round(inner * (points.length - 1)));
   };
+  /** A mouse moving with nothing pressed is looking, not asking. */
+  const follows = (event: React.PointerEvent) =>
+    event.pointerType !== "mouse" || event.buttons > 0;
 
   if (!first || !last || !sel) return null;
+
+  /* A tick a week, plus today — thirty date labels would be a wall of ink,
+     and two is a guess about everything in between. */
+  const ticks = spot.filter(
+    (_, i) => i % 7 === 0 || i === spot.length - 1,
+  );
 
   return (
     <div>
@@ -245,7 +269,14 @@ export function Trend({
         ref={box}
         className="relative touch-pan-y"
         style={{ height }}
-        onPointerMove={(event) => choose(event.clientX, picked)}
+        onPointerDown={(event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+          pickAt(event.clientX);
+        }}
+        onPointerMove={(event) => {
+          if (follows(event)) pickAt(event.clientX);
+        }}
       >
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -254,14 +285,26 @@ export function Trend({
           aria-hidden
         >
           <defs>
-            <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity="0.26" />
               <stop offset="100%" stopColor={color} stopOpacity="0" />
             </linearGradient>
           </defs>
+          {[0.25, 0.5, 0.75].map((f) => (
+            <line
+              key={f}
+              x1={PAD}
+              x2={W - PAD}
+              y1={H - PAD - f * (H - PAD * 2)}
+              y2={H - PAD - f * (H - PAD * 2)}
+              stroke="currentColor"
+              strokeOpacity="0.09"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
           <path
             d={`${line} L${last.x.toFixed(1)} ${H} L${first.x.toFixed(1)} ${H} Z`}
-            fill="url(#trend-fill)"
+            fill={`url(#${fillId})`}
             style={{ animation: "ig-fade 700ms ease-out 260ms backwards" }}
           />
           {/* pathLength=1 normalises the dash to the whole line, so the same
@@ -279,6 +322,19 @@ export function Trend({
             style={{ animation: "ig-line-draw 900ms cubic-bezier(0.65, 0, 0.35, 1) backwards" }}
           />
         </svg>
+
+        {/* The latest day wears a small dot even before anything is picked,
+            so the picture has an end and not just a shape. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute size-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-bg"
+          style={{
+            left: `${(last.x / W) * 100}%`,
+            top: `${(last.y / H) * 100}%`,
+            background: color,
+            animation: "ig-fade 400ms ease-out 900ms backwards",
+          }}
+        />
 
         {/* Guide and dot live in unscaled space, so the stretched viewBox
             can't squash either of them. */}
@@ -304,7 +360,7 @@ export function Trend({
         <div
           className="absolute inset-0 flex"
           role="group"
-          aria-label="Daily minutes. Use the arrow keys to move between days."
+          aria-label="Daily counts. Use the arrow keys to move between days."
           tabIndex={0}
           onKeyDown={(event) => {
             const at = touched ? picked : peakAt;
@@ -323,34 +379,26 @@ export function Trend({
             }
           }}
         >
-          {points.map((p, i) => (
-            <button
-              key={p.label}
-              type="button"
-              tabIndex={-1}
-              onClick={(event) => {
-                const rect = box.current?.getBoundingClientRect();
-                if (rect) {
-                  const ratio = (event.clientX - rect.left) / rect.width;
-                  const step = (W - PAD * 2) / Math.max(1, points.length - 1);
-                  const j = Math.round((PAD + ratio * (W - PAD * 2) - PAD) / step);
-                  setPicked(Math.min(points.length - 1, Math.max(0, j)));
-                } else {
-                  setPicked(i);
-                }
-                setTouched(true);
-              }}
-              aria-label={`${p.label}: ${say(p)}`}
-              aria-pressed={i === (touched ? picked : peakAt)}
-              className="h-full min-w-0 flex-1 cursor-pointer outline-none"
-            />
+          {points.map((p) => (
+            <span key={p.label} aria-hidden className="h-full min-w-0 flex-1" />
           ))}
         </div>
       </div>
 
-      <div className="mt-2 flex justify-between text-[11px] text-muted">
-        <span>{first.p.label}</span>
-        <span>{last.p.label}</span>
+      <div className="relative mt-2 h-4 text-[11px] text-muted">
+        {ticks.map((s, i) => (
+          <span
+            key={s.p.label}
+            className={cn(
+              "absolute -translate-x-1/2 whitespace-nowrap tabular-nums",
+              i === 0 && "translate-x-0",
+              i === ticks.length - 1 && "-translate-x-full",
+            )}
+            style={{ left: `${(s.x / W) * 100}%` }}
+          >
+            {s.p.label}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -404,15 +452,22 @@ export function TrendAll({
     setTouched(true);
     setPicked(Math.min(days - 1, Math.max(0, i)));
   };
-  const choose = (clientX: number) => {
+  /** Same single mapping as the single-line chart: a click and a drag over
+      one day must select the same day. */
+  const pickAt = (clientX: number) => {
     const rect = box.current?.getBoundingClientRect();
     if (!rect?.width) return;
-    setPick(Math.round(((clientX - rect.left) / rect.width) * (days - 1)));
+    const ratio = (clientX - rect.left) / rect.width;
+    const inner = (ratio * W - PAD) / (W - PAD * 2);
+    setPick(Math.round(inner * (days - 1)));
   };
 
   if (!days) return null;
 
   const day = series[0].points[sel];
+  const ticks = Array.from({ length: days }, (_, i) => i).filter(
+    (i) => i % 7 === 0 || i === days - 1,
+  );
 
   return (
     <div>
@@ -422,7 +477,15 @@ export function TrendAll({
         ref={box}
         className="relative touch-pan-y"
         style={{ height }}
-        onPointerMove={(event) => choose(event.clientX)}
+        onPointerDown={(event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+          pickAt(event.clientX);
+        }}
+        onPointerMove={(event) => {
+          // A mouse moving with nothing pressed is looking, not asking.
+          if (event.pointerType !== "mouse" || event.buttons > 0) pickAt(event.clientX);
+        }}
       >
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -445,7 +508,7 @@ export function TrendAll({
         <div
           className="absolute inset-0 flex"
           role="group"
-          aria-label="Daily minutes, by activity. Use the arrow keys to move between days."
+          aria-label="Daily counts, by activity. Use the arrow keys to move between days."
           tabIndex={0}
           onKeyDown={(event) => {
             if (event.key === "ArrowLeft") {
@@ -463,25 +526,29 @@ export function TrendAll({
             }
           }}
         >
-          {series[0].points.map((p, i) => (
-            <button
-              key={p.label}
-              type="button"
-              tabIndex={-1}
-              onClick={() => setPick(i)}
-              aria-label={`${p.readout ?? p.label}: ${series
-                .map((s) => `${s.label} ${say(s.points[i]?.value ?? 0)}`)
-                .join(", ")}`}
-              aria-pressed={i === sel}
-              className="h-full min-w-0 flex-1 cursor-pointer outline-none"
-            />
+          {series[0].points.map((p) => (
+            <span key={p.label} aria-hidden className="h-full min-w-0 flex-1" />
           ))}
         </div>
       </div>
 
-      <div className="mt-2 flex justify-between text-[11px] text-muted">
-        <span>{series[0].points[0]?.label}</span>
-        <span>{series[0].points[days - 1]?.label}</span>
+      <div className="relative mt-2 h-4 text-[11px] text-muted">
+        {ticks.map((i, n) => {
+          const p = series[0].points[i];
+          return (
+            <span
+              key={p.label}
+              className={cn(
+                "absolute -translate-x-1/2 whitespace-nowrap tabular-nums",
+                n === 0 && "translate-x-0",
+                n === ticks.length - 1 && "-translate-x-full",
+              )}
+              style={{ left: `${(xAt(i) / W) * 100}%` }}
+            >
+              {p.label}
+            </span>
+          );
+        })}
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-x-5 gap-y-1.5">

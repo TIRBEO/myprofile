@@ -17,7 +17,7 @@ import {
 } from "@/components/settings-shell";
 import { GRACE_DAYS } from "@/lib/delete-account";
 import { formatStamp } from "@/lib/dates";
-import { trackError, trackEvent } from "@/lib/telemetry";
+import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { apiDeactivate, apiReactivate, useAccountState } from "@/lib/account-lifecycle";
@@ -89,16 +89,23 @@ export default function DeactivatePage() {
   }
 
   async function doDeactivate() {
-    setConfirm(false);
     setBusy(true);
     try {
       await apiDeactivate(given() || null);
+      setConfirm(false);
       trackEvent("settings.account_deactivated");
       haptic("heavy");
-      toast.error("Your profile is now hidden");
+      toast.success("Your profile is now hidden");
     } catch (err) {
       trackError("deactivate.submit", err);
-      toast.error("Couldn't deactivate the account — please try again");
+      toast.error(
+        withRef(
+          err instanceof Error && err.message
+            ? err.message
+            : "Couldn't deactivate the account — nothing was changed.",
+          err,
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -113,7 +120,14 @@ export default function DeactivatePage() {
       toast.success("Welcome back — your profile is visible again");
     } catch (err) {
       trackError("deactivate.reactivate", err);
-      toast.error("Couldn't reactivate the account — please try again");
+      toast.error(
+        withRef(
+          err instanceof Error && err.message
+            ? err.message
+            : "Couldn't reactivate the account — nothing was changed.",
+          err,
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -140,7 +154,7 @@ export default function DeactivatePage() {
         </Group>
 
         <PillStack>
-          <PillButton label="Reactivate now" disabled={busy} onClick={doReactivate} />
+          <PillButton label={busy ? "Reactivating…" : "Reactivate now"} disabled={busy} onClick={doReactivate} />
         </PillStack>
         <Helper>
           Reactivating reopens the account here. Any other device was signed out when the profile
@@ -236,14 +250,16 @@ export default function DeactivatePage() {
         <Sheet
           title="Deactivate account?"
           description="Your profile stops loading for everyone and every device is signed out, including this one."
-          onClose={() => setConfirm(false)}
+          onClose={() => { if (!busy) setConfirm(false); }}
           footer={
             <SheetActions
               cancelLabel="Not now"
               onCancel={() => setConfirm(false)}
-              confirmLabel="Deactivate account"
+              confirmLabel={busy ? "Deactivating…" : "Deactivate account"}
               confirmVariant="danger"
               onConfirm={doDeactivate}
+              disabled={busy}
+              loading={busy}
             />
           }
         >

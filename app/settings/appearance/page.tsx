@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/components/ig-ui";
 import { SectionTitle, SettingsPage } from "@/components/settings-shell";
 import { trackEvent } from "@/lib/telemetry";
-import { THEMES, ThemeDef, ThemeId, applyTheme, readTheme, syncThemeFromAccount } from "@/lib/theme";
+import { THEMES, ThemeDef, ThemeId, applyTheme, readTheme } from "@/lib/theme";
 
 /* ═══════════════════════════════════════════════════════════════════
    Appearance — three choices, and picking one applies it immediately.
@@ -15,7 +15,7 @@ import { THEMES, ThemeDef, ThemeId, applyTheme, readTheme, syncThemeFromAccount 
    "Follow device" selected, <html data-theme> says light or dark, and
    matching on that would tick the wrong tile. A MutationObserver on
    data-theme re-reads the preference so the tick stays honest when the
-   account sync or another device changes it.
+   device's own mode flips while the page is open.
 
    Both palettes are ink-first: the contrast lives in the foreground
    (white text on black, near-black on white) and one royal blue marks
@@ -35,10 +35,6 @@ export default function AppearancePage() {
       refresh();
     };
     onScheme();
-    // The account's own theme column outranks this device's bag: seed from it
-    // so a choice made on another Tirbeo surface shows up here, then re-read
-    // the tick — it must follow even when the palette already matched.
-    void syncThemeFromAccount().then(refresh);
     mq.addEventListener("change", onScheme);
     const watch = new MutationObserver(refresh);
     watch.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
@@ -52,7 +48,7 @@ export default function AppearancePage() {
 
   return (
     <SettingsPage title="Appearance">
-      <SectionTitle desc="Pick a palette. It applies to this device at once and follows your account everywhere else you sign in.">
+      <SectionTitle desc="Pick a palette. It applies to this device at once; the choice is saved to your account, but every device keeps its own pick — a new machine starts from its own setting, not from the account's.">
         Theme
       </SectionTitle>
       <div className="grid max-w-[620px] grid-cols-3 gap-3">

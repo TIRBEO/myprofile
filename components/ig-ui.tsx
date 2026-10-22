@@ -53,11 +53,12 @@ export function cn(...parts: (string | false | null | undefined)[]) {
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
 type ButtonSize = "sm" | "md" | "lg";
 
-/* The fills, written once. They name the unlayered `.btn-*` classes in
-   globals.css (ported from the landing app) rather than spelling the shape
-   out as utilities — the recipe lives in one place, and a stray `px-*` at a
-   call site cannot re-shape a button. `Button` names them by variant and the
-   page-ending action pills name them by tone, but they are the same skins. */
+/* The skins, written once. They name the unlayered `.btn-*` classes in
+   globals.css rather than spelling the shape out as utilities — the recipe
+   lives in one place, and a stray `px-*` at a call site cannot re-shape a
+   button. Buttons are filled plates spanning their container. `Button`
+   names them by variant and the page-ending action pills name them by tone,
+   but they are the same skins. */
 const FILL = {
   primary: "btn-primary",
   secondary: "btn-secondary",
@@ -75,18 +76,16 @@ const BUTTON_VARIANT: Record<ButtonVariant, string> = {
 };
 
 /** Every action button in settings is built from these two, so a "Save" and a
-    "Delete" can't drift apart in size, only in fill. Compact by design: the
-    pill hugs its label on wide screens and only stretches to the column on a
-    phone, the way iOS draws a confirmation action. */
-export const PILL_BASE = "btn w-full max-w-full sm:w-auto";
+    "Delete" can't drift apart in size, only in fill. They stretch the full
+    width of their container — a pill lost in the middle of a wide column
+    reads cheap. */
+export const PILL_BASE = "btn w-full max-w-full";
 
 export const PILL_FILL = {
   primary: FILL.primary,
   danger: FILL.danger,
   /** The quiet action beside a loud one. `outline` is the name 60 call sites
-      use for "the not-primary button"; it is no longer an outline, because
-      Apple draws that one filled with `systemFill` and labelled in the accent
-      colour — the blue words are what stop it reading as a disabled control. */
+      use for it — the plain-bordered pill, one step back from the accent. */
   outline: FILL.secondary,
 } as const;
 
@@ -656,25 +655,11 @@ export function Sheet({
 
   // A sheet with more in it than fits opens at full height, so nothing
   // worth editing is ever parked below the fold waiting for a drag.
-  // `moreBelow` drives the fade at the bottom edge: a clipped field looks
-  // exactly like a finished form, so the page has to say there is more.
-  const [moreBelow, setMoreBelow] = useState(false);
-  const checkScroll = useRef(() => {});
-  useEffect(() => {
-    const body = bodyRef.current;
-    if (!body) return;
-    checkScroll.current = () => setMoreBelow(body.scrollHeight - body.scrollTop - body.clientHeight > 12);
-    checkScroll.current();
-    body.addEventListener("scroll", checkScroll.current, { passive: true });
-    return () => body.removeEventListener("scroll", checkScroll.current);
-  }, [children]);
-
   useEffect(() => {
     const body = bodyRef.current;
     if (!body || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => {
       setTall(body.scrollHeight - body.clientHeight > 4);
-      checkScroll.current();
     });
     ro.observe(body);
     return () => ro.disconnect();
@@ -885,13 +870,6 @@ export function Sheet({
                 className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pb-2 sm:px-5"
               >
                 {children}
-                <div
-                  aria-hidden
-                  className={cn(
-                    "pointer-events-none sticky bottom-0 -mt-14 h-14 bg-gradient-to-t from-surface via-surface/80 to-transparent transition-opacity duration-200",
-                    moreBelow ? "opacity-100" : "opacity-0",
-                  )}
-                />
               </div>
             ) : null}
 

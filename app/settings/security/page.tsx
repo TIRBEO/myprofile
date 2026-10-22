@@ -48,6 +48,7 @@ import { Download, Eye, EyeOff } from "lucide-react";
 
 export default function SecurityPage() {
   const [savedLogin, setSavedLogin] = useState(true);
+  const [savingLogin, setSavingLogin] = useState(false);
   const [passkeys, setPasskeys] = useState(0);
   const [ready, setReady] = useState(false);
   const { state: twoFactor } = useTwoFactorState();
@@ -107,7 +108,9 @@ export default function SecurityPage() {
   usePageRefresh(load);
 
   async function toggleSavedLogin(on: boolean) {
+    if (savingLogin) return;
     const previous = savedLogin;
+    setSavingLogin(true);
     setSavedLogin(on);
     try {
       // Awaited, so the toast below is a promise the account has accepted.
@@ -129,6 +132,8 @@ export default function SecurityPage() {
           err,
         ),
       );
+    } finally {
+      setSavingLogin(false);
     }
   }
 
@@ -170,6 +175,7 @@ export default function SecurityPage() {
           }
           on={savedLogin}
           onChange={toggleSavedLogin}
+          busy={savingLogin}
         />
       </Group>
 
@@ -531,6 +537,7 @@ function ChangePasswordSheet({
                   setError(null);
                   setCode(next);
                 }}
+                onEnter={submit}
               />
             )}
             <p className="mt-3 text-[12.5px] leading-relaxed text-muted">
@@ -711,6 +718,7 @@ function RecoverySheet({
               setError(null);
               setCode(next);
             }}
+            onEnter={confirm}
           />
           {error ? (
             <p className="mt-4 text-[13px] leading-relaxed text-danger-text">{error}</p>

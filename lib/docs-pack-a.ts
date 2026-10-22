@@ -3,12 +3,13 @@ import type { DocArticle } from "@/lib/docs";
 /* ═══════════════════════════════════════════════════════════════════
    Pack A — signing in, devices, sessions and security
 
-   Twenty articles, each one against what these pages actually do. The
-   same rule as the rest of the documentation: this build has no server,
-   so a password is never stored, nothing is emailed, a sign-out can't
-   reach another machine and a review request has nobody reading it. Where
-   that limit is the answer to the question, the article says so once and
-   moves on rather than dressing it up.
+   Twenty articles, each one against what these pages actually do.
+   The account service behind these pages has a server and a database:
+   passwords are stored as hashes, mail is sent, a sign-out reaches
+   another machine and a review request has a reviewer. Where a limit
+   still is the answer to the question — a code that can't be checked
+   locally, a passkey that only its device can delete — the article
+   says so once and moves on rather than dressing it up.
    ═══════════════════════════════════════════════════════════════════ */
 
 /** The day this text was last read against the app, not a rolling "today". */
@@ -23,8 +24,8 @@ export const PACK_A: DocArticle[] = [
     keywords: "change password update new strength meter minimum length re enter confirm",
     updated: REVIEWED,
     intro: [
-      "The password sits on the Password and security page, in the first row under Sign-in. Tapping Change password opens a sheet with three boxes: the one you use now, the one you want, and the one you want again.",
-      "While you type, the sheet keeps three rules: the current box isn't empty, the new password is at least 8 characters, and the last two boxes agree. It cannot keep a fourth rule, because nothing here stores a password to compare the first box against.",
+      "The password sits on the Password and security page, in the first row under Sign-in. Tapping Change password opens a sheet with three boxes: the one you use now, the one you want, and the one you want again. An account that joined through a provider has no password to replace, so its sheet asks for two boxes instead.",
+      "While you type, the sheet keeps three rules: the current box isn't empty, the new password is at least 8 characters, and the last two boxes agree. A fourth question comes from the account itself, later: if you've asked for a code from your authenticator before sensitive actions, the first attempt is refused and a six-box field appears in the sheet.",
     ],
     steps: [
       {
@@ -43,11 +44,11 @@ export const PACK_A: DocArticle[] = [
       },
       {
         title: "Press Update password",
-        body: "The button stays shut while any of the three rules fails, and the failure is written under the box that caused it — “Use at least 8 characters” or “Passwords don't match”. When it goes through, the sheet closes and the page says Password updated.",
+        body: "The button stays shut while any of the three rules fails, and the failure is written under the box that caused it — “Use at least 8 characters” or “Passwords don't match”. Once it goes through, the account has compared your current password against its own record, checked the new one against the list of passwords that have leaked, and signed every other session out. The sheet closes and the page says Password updated.",
       },
       {
         title: "Then deal with the machines that had the old one",
-        body: "A new password stops the next sign-in, not the one already running. Devices and sessions is the list of what's running, and the last row on it ends several at once.",
+        body: "A new password stops the next sign-in, not the one already running — so the change signs the other sessions out itself, and the mail that arrives says which device and address it came from. Devices and sessions is the list of what's still running, and the last row on it ends several at once.",
         href: "/settings/devices",
         hrefLabel: "Devices and sessions",
       },
@@ -55,15 +56,15 @@ export const PACK_A: DocArticle[] = [
     notes: [
       {
         q: "Is the password I just typed stored?",
-        a: "No. The sheet holds the three boxes in memory while it's open and forgets them when it closes, and the archive of your data has no password field to export because there was never a value kept.",
+        a: "Yes, and never in the clear. The account keeps a one-way hash of it — argon2id — so the original characters can't be read back, not by you and not by anyone reading the database. The archive of your data has no password field to export, because there is no password value to export.",
       },
       {
-        q: "Why score a password nothing checks?",
-        a: "Because the strength bar is about the new password you're writing, which is the half you can still get right. The rule it's defending against is the one that matters on any service that does check: a password reused somewhere else is only as good as the weakest place it was sent.",
+        q: "Why score a password the account only half-checks?",
+        a: "The bar is about the new password you're writing, which is the half you can still get right. The account checks two things of its own: the length, and whether the password turns up in known breaches — if it does, the change is refused and you're asked for another. A password reused somewhere else is only as good as the weakest place it was sent.",
       },
       {
         q: "Is there one password or one per device?",
-        a: "One for the account, and this is the only page that changes it. What you save here is saved in this browser, so a second machine doesn't see the change — which is why the device list, not this row, is where you look to see who's in.",
+        a: "One for the account. Saving it here changes it everywhere: the other sessions are signed out, and a mail arrives saying the password was changed, with the device and the address it came from. Which machines are still signed in is a question for the device list, not for this row.",
       },
     ],
     related: [
@@ -80,7 +81,7 @@ export const PACK_A: DocArticle[] = [
     keywords: "wrong current password forgotten can't remember update disabled greyed out reset",
     updated: REVIEWED,
     intro: [
-      "“Your current password is incorrect” is not a message this app can produce. It has nowhere to look one up: nothing in this build stores a password, so the Current password box is only checked for having something in it.",
+      "“Your current password is incorrect” is a message this app does produce: the account keeps a hash of your password and compares what you type against it. What it can't do is tell you which character was wrong — the comparison is all-or-nothing.",
       "That makes the failures you can get quite specific, and it makes a forgotten password a different problem from the one it looks like. Telling the two apart is most of this page.",
     ],
     steps: [
@@ -91,16 +92,16 @@ export const PACK_A: DocArticle[] = [
         hrefLabel: "Password and security",
       },
       {
-        title: "Know the only two errors",
-        body: "“Use at least 8 characters” and “Passwords don't match” are the whole set of complaints this sheet makes, written under the box that failed. There is no third message, and the missing one isn't being hidden from you.",
+        title: "Know the two kinds of complaint",
+        body: "The sheet's own are “Use at least 8 characters” and “Passwords don't match”, written under the box that failed. The account adds its own once it has checked what you typed: “Current password is incorrect”, and — if the new password turns up in a list of passwords that have leaked — that it has been found in known breaches and you should choose another.",
       },
       {
-        title: "Understand why it can't be checked",
-        body: "A password kept anywhere is a password that can be read, so this build keeps none at all. The trade is even: the form can't stop someone who already has this browser, and it also can't be the thing that turns you away.",
+        title: "Know what happens to the old one",
+        body: "The password is kept as a one-way hash, so the account can check a guess against it without being able to read the original. No page anywhere shows your password, and the archive has no password field to export.",
       },
       {
         title: "If you've forgotten it",
-        body: "The sign-in screen opens the settings on whatever you type, so being locked out of this demo isn't something that happens here. The Forgot password button on that screen does nothing in this build — there's no mail server to send from and no stored password to replace.",
+        body: "Signing in lives in the accounts app — /login here sends you there and brings you back afterwards — and Forgot password is on that screen. The account posts a code or a link to the address you sign in with; if you've set and confirmed a recovery email, that address is used instead, because a code sent to an unverified mailbox is a reset handed to whoever reads that inbox.",
         href: "/login",
         hrefLabel: "Sign in",
       },
@@ -114,15 +115,15 @@ export const PACK_A: DocArticle[] = [
     notes: [
       {
         q: "So is my password safe here?",
-        a: "It isn't stored, which is the strongest thing that can be said of it. It also means the pages asking for one aren't checking it — don't carry the habit across and expect the same behaviour somewhere that does.",
+        a: "It's stored as a hash and never in the clear, and the account checks what you type against it. Two habits are worth keeping anyway: the sheet asks for your current password before it changes it, and a change signs every other session out.",
       },
       {
         q: "Can I find out what my password was?",
-        a: "No, and not from an archive either. Download your data has no password field, because there's no value anywhere to put in it.",
+        a: "No, and not from an archive either. Download your data has no password field, because the only thing kept is a hash, and a hash is not a password you could type.",
       },
       {
         q: "Does the recovery email rescue a forgotten password?",
-        a: "On a real service, that's what it's for. Here it's only a stored line — setting it doesn't unlock anything, and no link arrives to click. See the recovery email article for what the sheet does and doesn't do.",
+        a: "Yes — that's what it's for, once you've confirmed it. The reset code goes to that address rather than to the one you sign in with, which is the point of having a second address. See the recovery email article for how the confirmation works.",
       },
     ],
     related: [
@@ -139,7 +140,7 @@ export const PACK_A: DocArticle[] = [
     keywords: "two factor 2fa authenticator app setup scan qr type key second step",
     updated: REVIEWED,
     intro: [
-      "Two-factor is the row called Authenticator app at the top of its own page, under Methods. It starts switched on in this build, so if you're turning it on you either had it off or you're setting it up again — the sheet is the same either way.",
+      "Two-factor is the row called Authenticator app at the top of its own page, under Methods. It starts switched off, so turning it on is the ordinary case — and turning it off and on again later is the same sheet.",
       "The setup is one secret shown two ways: a QR to scan and a key to type. What you hand back is the six digits your app is producing at that moment, and the page checks them against that secret before the switch flips.",
     ],
     steps: [
@@ -163,17 +164,17 @@ export const PACK_A: DocArticle[] = [
       },
       {
         title: "Decide the two extra rows",
-        body: "Under Extra security, Require 2FA for sensitive actions covers changing the password, the email and payouts, and Alert on suspicious sign-in is the notice you'd want about a stranger. Both are stored as settings beside the switch; nothing in this build prompts for the code they describe.",
+        body: "Under Extra security, Require 2FA for sensitive actions asks for a code from your app as well as your password before the things that matter — changing your password, removing a passkey, signing out everywhere. It stays inert until the authenticator is on, because a rule you can't satisfy is a lock, not a safety. Account deletion uses its own emailed code (Delete account in Security), not the 'require 2FA for sensitive actions' prompt; turning that switch on does not add a 2FA step to deletion. Alert on suspicious sign-in is the mail you'd want about a stranger: it goes out when a sign-in comes from a device the account hasn't seen before, and a new address on a device it knows stays quiet.",
       },
     ],
     notes: [
       {
         q: "Will the sign-in screen start asking for a code?",
-        a: "Not in this build — the login page takes whatever is in the password box. What you're doing is putting the app and the codes in place, and recording the rule you want enforced, before there's a second step that can stop you at the door.",
+        a: "Yes. With the authenticator on, signing in takes the password first and then the six digits, on the same screen as the rest of the sign-in. Email codes stay as the way in if the phone isn't to hand.",
       },
       {
         q: "Where does the secret live?",
-        a: "In this browser, and nowhere else. Your phone gets its copy when you scan or type the key, which is why the two halves have to be set up in one sitting — nothing sends the secret to you afterwards.",
+        a: "On your account, so the code can be checked from any device you sign in from — the same secret your phone holds, kept on the service's side as well. The key is never sent to you afterwards, which is why the two halves have to be set up in one sitting.",
       },
       {
         q: "Why won't the Email codes row move?",
@@ -277,7 +278,7 @@ export const PACK_A: DocArticle[] = [
     notes: [
       {
         q: "Do failed attempts count against me?",
-        a: "No. There's no counter, no lockout and no record of the tries. Six wrong codes and then a right one look exactly like one right code, which is a weakness and a convenience at the same time in a build with no server watching.",
+        a: "They count for as long as it takes to type them: the account allows ten attempts a minute on this check, and after that it asks you to wait rather than trying again. What you type isn't kept, and a wrong code never records anything against the account beyond that count — six wrong codes and then a right one leave no mark of their own.",
       },
       {
         q: "Why 30 seconds and six digits?",
@@ -302,19 +303,19 @@ export const PACK_A: DocArticle[] = [
     keywords: "lost phone stolen authenticator backup code new phone move locked out",
     updated: REVIEWED,
     intro: [
-      "A phone in this setup holds two things: the copy of the secret your authenticator app turns into codes, and possibly a passkey. Neither one is the account. The other half of the secret is in the browser you're reading this in, which is why losing the handset isn't losing the account.",
+      "A phone in this setup holds two things: the copy of the secret your authenticator app turns into codes, and possibly a passkey. Neither one is the account. The account holds its own copy of the secret, which is why losing the handset isn't losing the account — and why codes from a new phone work the moment the new phone has them.",
       "What to do depends on whether the phone is gone for the night or gone for good. Both routes start on a device that still opens the settings, and neither of them can reach the phone itself.",
     ],
     steps: [
       {
         title: "Work from a browser that still has the account",
-        body: "The sign-in screen here opens the settings on whatever you type, because there's nothing stored to check against. On a service that does check, this is the moment a backup code is for — which is the argument for having generated a set while things were calm.",
+        body: "Sign-in lives in the accounts app, and it checks what you type. If the password is gone too, that's what the backup codes are for — eight of them, each one a single-use way in — which is the argument for having generated a set while things were calm.",
         href: "/login",
         hrefLabel: "Sign in",
       },
       {
         title: "Move the authenticator to the new phone",
-        body: "The setup key lives in this browser, and the page only shows it through the setup sheet, which won't open while the switch reads on. Turn Authenticator app off — the confirmation warns that your current backup codes stop working — then turn it on again and enter the new key on the new phone.",
+        body: "The setup key is shown once, through the setup sheet, and the sheet won't open while the switch reads on. Turn Authenticator app off — the confirmation warns that your current backup codes stop working — then turn it on again and enter the new key on the new phone. The account's copy of the secret is replaced in the same moment.",
         href: "/settings/two-factor",
         hrefLabel: "Two-factor authentication",
       },
@@ -342,11 +343,11 @@ export const PACK_A: DocArticle[] = [
       },
       {
         q: "Is there any way to revoke the phone itself?",
-        a: "No. There's no server here to carry a revocation to anything; every action on these pages edits this browser's record of the account. That's the honest limit of this whole section, and it's why the password matters more than the list.",
+        a: "No. Removing a passkey stops it being trusted here, and changing the password and signing the sessions out stops the account being used from it — but neither can reach into a handset you no longer have and delete what is stored on it. That's the honest limit of this section, and it's why the password matters more than the list.",
       },
       {
         q: "Do I have to redo this in every browser?",
-        a: "Worse and better: each browser holds its own copy of these settings, including its own secret, so a second machine signed in to this account has its own switch and generates different codes. Fixing one device doesn't fix the other, and the two-factor page on each is where you'd see it.",
+        a: "No. The secret, the switch and the backup codes belong to the account, not to a browser: sign in on a second machine and the same code from the same app works there. Fixing one device doesn't fix the other, so the two-factor page is where you'd look to see what state it's in.",
       },
     ],
     related: [
@@ -455,8 +456,8 @@ export const PACK_A: DocArticle[] = [
     ],
     notes: [
       {
-        q: "Does anything in this build check a code?",
-        a: "No. There's no screen here that asks for a backup code, so “already used” is a message you'd get from a real service. The four causes above are the same on either build, which is why they're on this page.",
+        q: "Does anything check a code?",
+        a: "Yes. A backup code is a real way in: the sign-in screen offers it when the app isn't to hand, and the sensitive-action checks accept one too. A code already spent is refused as spent — the account knows which of the eight it has used — and the set is replaced the moment you generate a new one.",
       },
       {
         q: "Can I get an old set back?",
@@ -517,7 +518,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         q: "Does removing a row revoke the key?",
-        a: "It edits this list. The key lives on a device or in a manager this build can't reach, so removal is how you stop trusting the entry here, not how you take it off the handset. If the machine is gone, change the password as well.",
+        a: "It edits this list. The key lives on a device or in a password manager the account can't reach, so removal is how you stop trusting the entry here, not how you take it off the handset. If the machine is gone, change the password as well.",
       },
       {
         q: "Do hardware keys count?",
@@ -563,8 +564,8 @@ export const PACK_A: DocArticle[] = [
         body: "At five, Add passkey is shut and says Limit reached — remove one to add another. The right move is dropping a row for a device you no longer own, not adding one you can't test. Remove, then add, then sign out and back in on the new machine before you call it done.",
       },
       {
-        title: "Know what this build's Add actually did",
-        body: "It wrote a row: the name, the device guessed from your browser, today's date. There's no challenge for the device to sign, so a passkey that “won't finish” on this demo isn't failing — nothing asked it to. Treat the list as a record of intentions until you've used a passkey somewhere that checks one.",
+        title: "Know what Add actually did",
+        body: "It asked the device to create a real key: a challenge the device signs with what it has — your fingerprint, your face, your PIN — and the account keeps the public half, the name you gave it, the device it guessed from your browser and today's date. A passkey that “won't finish” is the device saying no, and the sheet says which part it refused.",
       },
     ],
     notes: [
@@ -590,7 +591,7 @@ export const PACK_A: DocArticle[] = [
   {
     slug: "recovery-email",
     title: "Setting a recovery email",
-    sub: "The address a reset would go to, the six boxes that confirm it, and what this build cannot send.",
+    sub: "The address a reset would go to, the six boxes that confirm it, and what it takes to prove you can receive there.",
     category: "Signing in",
     keywords: "recovery email verify address confirmation code six digit not receiving resend",
     updated: REVIEWED,
@@ -607,11 +608,11 @@ export const PACK_A: DocArticle[] = [
       },
       {
         title: "Type the new address",
-        body: "The sheet checks only the shape of it — something, an at sign, a domain with a dot in it. Anything that fits lets Verify through, and the second step repeats the address back, so read it there before you go on.",
+        body: "The sheet checks the shape of it — something, an at sign, a domain with a dot in it — and the account refuses the one address you sign in with, because a second address that isn't a second address is no recovery at all. The second step repeats the address back, so read it there before you go on.",
       },
       {
         title: "Enter the six digits",
-        body: "Step two is a code sent to that address, in six boxes, with Didn't get it? Resend code underneath. Nothing arrives in this build and no code is checked: filling the six boxes and pressing Confirm is what writes the address, and the page says Recovery email verified afterwards.",
+        body: "Step two is a code sent to that address, in six boxes, with Didn't get it? Resend code underneath. The code arrives by mail, is bound to the address it was sent to, and is checked against what the account stored — a wrong or expired code is refused, and the address is only written down once the six digits match.",
       },
       {
         title: "Check the row afterwards",
@@ -624,8 +625,8 @@ export const PACK_A: DocArticle[] = [
     ],
     notes: [
       {
-        q: "Why have a step that can't check anything?",
-        a: "Because it's the shape of the real thing: address, then a code to that address, then a stored confirmation. On a build that could send, the same sheet would stop you at the second step. The muscle memory transfers even if the code doesn't.",
+        q: "Why make me confirm an address I just typed?",
+        a: "Because the step proves you can receive at the mailbox, not that you can spell it. The code is sent there, checked against the one the account kept, and the confirmation is recorded as having been done by code — which is also what makes the address usable for a password reset later.",
       },
       {
         q: "Does it have to be different from my login email?",
@@ -633,7 +634,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         q: "Can I clear it and leave the field empty?",
-        a: "No — the sheet won't accept an address that isn't an address, so the line always holds something. If you've never touched it, what's showing is the address this demo started with rather than one you chose. Put yours in.",
+        a: "No — the sheet won't accept an address that isn't an address, and it won't accept the one you sign in with, so the line always holds a second address of your own. If you've never touched it, what's showing is a default rather than one you chose. Put yours in.",
       },
     ],
     related: [
@@ -700,7 +701,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         q: "Will anyone look at my review?",
-        a: "Not in this build. Filing one writes your note and the date to this browser and marks the decision as under review, and the answer is supposed to appear on the same page. There's no reviewer, and nothing is emailed about it.",
+        a: "Yes. Filing one opens a request on the support desk with your note and the date attached, and the account marks the decision as under review. The request is read back on the same page and on every device you sign in from, and the answer lands there when it comes.",
       },
     ],
     related: [
@@ -753,15 +754,15 @@ export const PACK_A: DocArticle[] = [
     notes: [
       {
         q: "Does signing a device out reach that device?",
-        a: "No, and this is the honest limit of the page. Nothing here has a server to carry an instruction, so ending a session corrects this account's record of it. If a machine genuinely isn't yours, the password change is the part that bites.",
+        a: "Yes — the session is ended on the account's side, so the machine loses access on its next request rather than the next time you look at the list. It can't wipe anything on the handset itself, which is why changing the password is still the half that bites: that one stops the next sign-in.",
       },
       {
         q: "Why does something I've never seen say it was active forty minutes ago?",
-        a: "Because the entry says when that session last asked for anything, read against this device's clock. Times and locations on this page come from the record, not from a live look at the machine, so read the pair together with the sign-ins rather than trusting either alone.",
+        a: "Because the entry says when that session last asked for anything, read against this device's clock. Times and locations on this page come from the account's record, not from a live look at the machine, so read the pair together with the sign-ins rather than trusting either alone.",
       },
       {
         q: "Is there a machine here I've never seen at all?",
-        a: "Possibly — the list is the account's own record of sessions, kept in this browser, and there's no server behind it that has met any of them. That cuts both ways: it's still the right place to practise reading a stranger, and it's not evidence about anyone's hardware.",
+        a: "Possibly — the list is the account's own record of sessions, and every row is a session the account has actually issued. That cuts both ways: it's still the right place to practise reading a stranger, and it's not evidence about anyone's hardware.",
       },
     ],
     related: [
@@ -779,7 +780,7 @@ export const PACK_A: DocArticle[] = [
     updated: REVIEWED,
     intro: [
       "Every sign-in in the log asks one question on its own page: was this you. The two answers aren't symmetric. “This was me” marks the record checked and changes nothing else. “That wasn't me” turns the entry red and puts two actions on the page beside it.",
-      "Both answers are written onto the record in this browser. Nothing is sent, no one is alerted and there's no report to follow up — which is worth knowing before you treat the button as the end of the job.",
+      "Both answers are written to your account, dated by the server, so the answer follows you to every device you sign in from. “That wasn't me” is a report, not a note: it lands in your inbox and the team is told.",
     ],
     steps: [
       {
@@ -812,7 +813,7 @@ export const PACK_A: DocArticle[] = [
     notes: [
       {
         q: "Is anyone told when I say it wasn't me?",
-        a: "No. The answer sits on the record in this browser and lifts the banner at the top of the log — useful for keeping track of what you've already disputed, not a report anyone receives. If you need a person to look, that's Account status or writing to support.",
+        a: "Two someones. It arrives in your own inbox — a notification saying the report is in, with the record to look at — and the team is alerted, with the time, the place, the device and the reference code to quote. The answer itself is kept on your account either way.",
       },
       {
         q: "Does the red banner on the log mean I'm still exposed?",
@@ -879,7 +880,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         q: "Will they really be signed out?",
-        a: "Not by this. There's no server to carry the instruction, so what changes is this account's list of live sessions and the record of ending them. Treat the password change as the part that actually stops a stranger, and this as tidying the list they came off.",
+        a: "Yes. The session is ended on the account, so those machines lose access the next time they ask for something — their token no longer opens anything. Treat the password change as the part that also stops a stranger signing in afresh, and this as closing the door they left open.",
       },
     ],
     related: [
@@ -934,7 +935,7 @@ export const PACK_A: DocArticle[] = [
     notes: [
       {
         q: "Does logging out clear what I've saved here?",
-        a: "No. Everything you've set in these pages — the two-factor switch, the recovery address, your choices, the logs — lives in this browser, not in the session. Sign back in and it's all exactly as you left it.",
+        a: "No. Everything you've set in these pages — the two-factor switch, the recovery address, your choices, the logs — belongs to the account, not to the session, so signing out ends the session and nothing else. Sign back in and it's all exactly as you left it, on any device.",
       },
       {
         q: "Someone used my laptop and I logged out. Am I safe?",
@@ -942,7 +943,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         q: "What actually removes all of this?",
-        a: "Clearing the site's data in your browser. It takes the settings, the logs and the archive of your own requests with it, and there's no copy anywhere to come back from — which is the same fact as “nothing leaves this device”, seen from the other side.",
+        a: "Deleting the account, or letting a scheduled deletion run out. Clearing the site's data in your browser only empties this device's copy of the pages — the settings, the logs and the records of your own requests live on the account, and deleting the account is what takes them with it.",
       },
     ],
     related: [
@@ -995,7 +996,7 @@ export const PACK_A: DocArticle[] = [
     notes: [
       {
         q: "I closed the tab. Am I still held?",
-        a: "Yes. The stop is read from this browser every time the account shell loads, so reloading, another tab and a typed-in address all land on the same card. It clears when the decision has been answered or acknowledged, not when the tab has.",
+        a: "Yes. The stop is read from the account's decisions every time the settings shell loads, so reloading, another tab and a typed-in address all land on the same card. It clears when the decision has been answered or acknowledged, not when the tab has.",
       },
       {
         q: "Does setting a decision aside make it go away?",
@@ -1003,7 +1004,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         q: "Is anyone reading what I appeal?",
-        a: "Not in this build. The request is written to this browser with your words and the date, the decision's page changes to Under review and lists what happens next, and there is no reviewer behind it. It's a record of what you asked, which is still the useful part.",
+        a: "Yes. The request goes to the support desk attached to the decision, with your words and the date on it, and it is read back on the same page from any device you sign in from. It stays marked as pending until a reviewer has ruled, and then the page carries what they decided.",
       },
     ],
     related: [
@@ -1037,8 +1038,8 @@ export const PACK_A: DocArticle[] = [
         hrefLabel: "Personal details",
       },
       {
-        title: "Try the confirmation this build can offer",
-        body: "Setting the recovery email runs the two-step sheet — address, then six digits — and stores the address as verified. Nothing arrives at either address in this build, so this is the closest thing here to confirming something, and it's worth doing so that a later service has a live address to send to.",
+        title: "Try the confirmation the account can offer",
+        body: "Setting the recovery email runs the two-step sheet — address, then six digits — and the code arrives at the address you typed, so the stored confirmation is one you can actually stand behind. It's worth doing: a live address is what a later reset needs to reach.",
         href: "/settings/security",
         hrefLabel: "Password and security",
       },
@@ -1047,8 +1048,8 @@ export const PACK_A: DocArticle[] = [
         body: "The decision is appealable, and its own text says what a review would do: explain why the confirmation isn't reaching you and the address gets checked by hand. Write the address in question into the request, since “the email” is ambiguous and the reviewer will have two to choose between.",
       },
       {
-        title: "Know that the hold isn't enforced here",
-        body: "The edit pages still save in this build — profile, details and password all go through while the decision reads as needing action. Say that once and no further: the hold is a listed decision, and nothing on these pages is the thing that would stop you using it.",
+        title: "Know what the hold does and doesn't do",
+        body: "The decision is listed on the account, and the card keeps it in front of you until it's answered — but the edit pages still save, because the account's write paths don't refuse the change on their own. Treat it as a decision to read and answer, not as a switch that stops the form.",
         href: "/settings/edit-profile",
         hrefLabel: "Edit profile",
       },
@@ -1056,7 +1057,7 @@ export const PACK_A: DocArticle[] = [
     notes: [
       {
         q: "Will confirming the email lift the hold?",
-        a: "On a real service, that's the intent. Not here: the app has no way to send or check anything, so the decision would stay listed whichever boxes you filled. The action that fits this build is the review request, filed with your words in it.",
+        a: "Not on its own: the account has no rule that clears the decision when an address is confirmed, so it stays listed until the review answers it. The confirmation is what makes the review easy to settle, not a replacement for it.",
       },
       {
         q: "Is my account limited right now?",
@@ -1093,7 +1094,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         title: "Put a current number where the number lives",
-        body: "Personal details has a Phone row that opens one field, with the hint that it's used for login alerts and account recovery. Saving writes it to this browser. No code is sent and nothing is checked, so it doesn't produce a “confirmed today” date — but it is the field the decision is about.",
+        body: "Personal details has a Phone row that opens one field, with the hint that it's used for login alerts and account recovery. Saving writes it to the account. No code is sent to it from this page and nothing marks it confirmed, so it doesn't produce a “confirmed today” date — but it is the field the decision is about.",
         href: "/settings/personal-details",
         hrefLabel: "Personal details",
         figure: {
@@ -1109,7 +1110,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         title: "Write it down if you need it changed",
-        body: "The route for a decision with no review left is support, quoting the row's title and date so the two can be read together. The page saves what you file on this device and says so rather than promising a reply.",
+        body: "The route for a decision with no review left is support, quoting the row's title and date so the two can be read together. What you file is a request on the desk — it is read back on the same page and on every device you sign in from.",
         href: "/settings/help/support",
         hrefLabel: "Write to support",
       },
@@ -1125,7 +1126,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         q: "If I update the number, does the row clear?",
-        a: "Not in this build. The decision list isn't read against what you've saved since — there's no server comparing the two. What you get is a current number in the field and the dated record of you having set it.",
+        a: "Not by itself. The decision list isn't read against what you've saved since, so the row stays listed until someone changes it. What you get is a current number in the field and the dated record of you having set it.",
       },
     ],
     related: [
@@ -1158,7 +1159,7 @@ export const PACK_A: DocArticle[] = [
       },
       {
         title: "Say it wasn't you",
-        body: "Two buttons on the record: This was me, and That wasn't me. The second asks once more in a sheet with the entry inside it, then marks the record red and files the answer on it. The list shows the same mark afterwards, so you can see from the top which rows you've already disputed.",
+        body: "Two buttons on the record: This was me, and That wasn't me. The second asks once more in a sheet with the entry inside it, then marks the record red, files the answer on your account and tells the team. The list shows the same mark afterwards, so you can see from the top which rows you've already disputed.",
       },
       {
         title: "Then end the sessions that aren't yours",
@@ -1176,11 +1177,11 @@ export const PACK_A: DocArticle[] = [
     notes: [
       {
         q: "Is my report sent to anyone?",
-        a: "No. Your answer is written onto the record in this browser, which is what lets the list mark the same row red everywhere. It's how you keep track of a dispute, not how a dispute gets investigated.",
+        a: "Yes. The answer is written onto your account, and “that wasn't me” also lands in your inbox and puts the team on notice, with the time, the place, the device and a reference code to quote. The list still marks the same row red on every device you sign in from.",
       },
       {
         q: "Will the change I made afterwards appear here?",
-        a: "Not in this build. Nothing on the edit pages adds a row to this log — what's listed is the record the account came with, and the only thing you write into it is your answer to whether each row was yours.",
+        a: "Yes. A row is written for every field you change — the profile page's edits, the account's own writes — and it names the field, the value it took and the address it came from. Your answer is the only thing you write into it.",
       },
       {
         q: "Can I delete an entry?",

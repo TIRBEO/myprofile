@@ -43,6 +43,15 @@ export type EmailPrefs = {
   /** The one recurring account recap: whether it comes, and how often. */
   summaryEnabled: boolean;
   summaryFrequency: SummaryFrequency;
+  /** Quiet hours: non-essential mail is not sent inside this window, on the
+      account's own clock (timezone below). The sender drops what lands in the
+      window — nothing queues up for after it. */
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  /** IANA name the senders read the quiet window against, from the profile.
+      Read-only here: the appearance settings own it. */
+  timezone?: string | null;
 };
 
 /** How long an answer the brain just gave stays good enough to hand out
@@ -98,4 +107,59 @@ export function saveEmailPrefs(patch: Partial<EmailPrefs>): Promise<EmailPrefs> 
     headers: { "content-type": "application/json" },
     body: JSON.stringify(patch),
   }).then(adopt);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   The pause, read the same way the senders read it.
+
+   A pause is `emailPaused` plus `emailPausedUntil`: the epoch ms it lapses
+   at, or null for "until I turn it back on". A date already behind us is
+   over — the senders read it that way, so this screen has to as well, or
+   the switch would sit on while the mail kept coming.
+
+   These three answers are the whole rule, and they live here rather than
+   inside the page so the page and the tests are looking at one thing.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** Is the pause in effect right now? */
+export function isPaused(prefs: Pick<EmailPrefs, "emailPaused" | "emailPausedUntil">, now = Date.now()): boolean {
+  if (prefs.emailPaused !== true) return false;
+  const until = prefs.emailPausedUntil;
+  if (typeof until !== "number") return true;
+  return until > now;
+}
+
+/** Has a pause run out on its own, leaving the account still saying "paused"? */
+export function hasLapsed(
+  prefs: Pick<EmailPrefs, "emailPaused" | "emailPausedUntil">,
+  now = Date.now(),
+): boolean {
+  if (prefs.emailPaused !== true) return false;
+  return typeof prefs.emailPausedUntil === "number" && prefs.emailPausedUntil <= now;
+}
+
+/**
+ * The patch that clears a pause which has run out. The account is allowed to
+ * keep the flag — a lapsed date already reads as no pause to every sender —
+ * but the next write says plainly that mail is flowing again, so the stored
+ * answer and the screen never tell two different stories.
+ */
+export function clearingLapsed(
+  prefs: Pick<EmailPrefs, "emailPaused" | "emailPausedUntil">,
+  now = Date.now(),
+): Partial<EmailPrefs> {
+  return hasLapsed(prefs, now) ? { emailPaused: false, emailPausedUntil: null } : {};
+}
+
+/** How the pause is described on screen: "until 9:40 PM", or "until you turn
+    it back on" for the one with no end date. */
+export function pauseLabel(
+  prefs: Pick<EmailPrefs, "emailPaused" | "emailPausedUntil">,
+  now = Date.now(),
+): string {
+  if (!isPaused(prefs, now)) return "";
+  const until = prefs.emailPausedUntil;
+  if (typeof until !== "number") return "until you turn it back on";
+  const time = new Date(until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `until ${time}`;
 }

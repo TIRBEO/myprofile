@@ -15,15 +15,15 @@ import { formatDate } from "@/lib/dates";
 import { ARTICLES, DOC_CATEGORIES, searchDocs, type DocArticle } from "@/lib/docs";
 import { POLICIES } from "@/lib/help-policies";
 import { haptic } from "@/lib/haptics";
-import { MAX_REQUESTS, readRequests, type SupportRequest } from "@/lib/support-requests";
+import { MAX_REQUESTS, loadRequests, type SupportRequest } from "@/lib/support-requests";
 
 /* ═══════════════════════════════════════════════════════════════════
    The documentation
 
    One article per thing you can do, per thing that can go wrong, each one
-   ending on the page where it's actually done. They're written against
-   this build rather than against the app it will become, which is why
-   several of them say plainly that nothing leaves the device.
+   ending on the page where it's actually done. They describe this app as
+   it now runs: a real account behind it, so requests are filed, codes are
+   mailed, and signing a device out reaches the other machine.
 
    The search reads the whole article — the steps, the captions, the
    questions at the bottom — not just the titles, so "where did that code
@@ -55,7 +55,7 @@ const WHERE: Record<string, string> = {
   note: "In the questions at the bottom",
 };
 
-/** One article as a row. No date on it: every article in this build was
+/** One article as a row. No date on it: every article here was
     reviewed together, so forty identical dates say nothing a reader can use,
     and the article itself carries the one that matters. */
 function DocRow({ article }: { article: DocArticle }) {
@@ -66,10 +66,26 @@ function DocRow({ article }: { article: DocArticle }) {
 
 export default function HelpPage() {
   const [requests, setRequests] = useState<SupportRequest[] | null>(null);
+  const [requestsError, setRequestsError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
+  /* The desk's list for this account, merged with anything still waiting to
+     leave the browser — loadRequests is the one reader that knows both stores
+     and drops queue rows the desk already has. */
   useEffect(() => {
-    setRequests(readRequests());
+    let alive = true;
+    loadRequests()
+      .then(({ requests, error }) => {
+        if (!alive) return;
+        setRequests(requests);
+        setRequestsError(error);
+      })
+      .catch(() => {
+        if (alive) setRequests([]);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   if (!requests) return <PageSkeleton title="Help and documentation" sections={3} />;
@@ -82,7 +98,7 @@ export default function HelpPage() {
     <SettingsPage title="Help and documentation" wide>
       <p className="max-w-[62ch] text-[14px] leading-relaxed text-muted">
         {ARTICLES.length} articles about what these settings do, and the pages to do it from.
-        Everything here describes this build, so where something can&apos;t happen yet, the article
+        Everything here describes this app as it runs, so where something can&apos;t happen yet, the article
         says so rather than hinting.
       </p>
 
@@ -154,25 +170,43 @@ export default function HelpPage() {
 
           <Panel
             title="Your requests"
-            sub="A request is saved with its date and stays on this device — there's no message server in this build, so nothing is sent and no one is waiting on the other end."
+            sub="Filed requests live on your account with their reference — what the reviewer has done with each one shows up here too. Anything still only on this device is listed beside them."
           >
+            {requestsError ? (
+              <p className="px-4 py-3 text-[13.5px] leading-relaxed text-danger-text sm:px-5">
+                {requestsError} — what's shown here is only this device's copy.
+              </p>
+            ) : null}
             {requests.length ? (
               requests.map((request) => (
                 <StaticRow
                   key={request.id}
                   title={request.topic}
                   sub={
-                    request.origin
-                      ? `${request.message} — filed from ${request.origin.title}`
-                      : request.message
+                    [
+                      request.origin
+                        ? `${request.message} — filed from ${request.origin.title}`
+                        : request.message,
+                      request.state === "sent"
+                        ? request.status === "pending" || !request.status
+                          ? "the desk hasn't decided yet"
+                          : `the desk says: ${request.status}`
+                        : "still on this device — never filed",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
                   }
-                  right={formatDate(request.at)}
+                  right={
+                    request.reference
+                      ? `${String(request.reference).slice(0, 8)} · ${formatDate(request.at)}`
+                      : formatDate(request.at)
+                  }
                 />
               ))
             ) : (
               <p className="px-4 py-5 text-[13.5px] leading-relaxed text-muted sm:px-5">
-                Nothing has been asked yet. Anything you save appears here with its date, on this
-                device only.
+                Nothing has been asked yet. Anything you file appears here with its reference and
+                what the desk made of it.
               </p>
             )}
           </Panel>
@@ -186,7 +220,7 @@ export default function HelpPage() {
               Write to support
             </Link>
             <span className="text-[12.5px] text-muted">
-              This browser keeps the {MAX_REQUESTS} most recent.
+              This device also keeps its {MAX_REQUESTS} newest requests that never got filed.
             </span>
           </div>
         </div>
