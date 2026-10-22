@@ -566,7 +566,9 @@ function RecoverySheet({
   onClose: () => void;
   onVerified: (email: string) => void;
 }) {
-  const [step, setStep] = useState<"email" | "otp">("email");
+  // The code field joins the form once a code has actually been asked for,
+  // so the whole job happens on one surface instead of two screens.
+  const [sent, setSent] = useState(false);
   const [email, setEmail] = useState(current ?? "");
   const [code, setCode] = useState<string[]>(["", "", "", "", "", ""]);
   const [busy, setBusy] = useState(false);
@@ -601,7 +603,7 @@ function RecoverySheet({
       });
       setDelivered(ok);
       setCode(["", "", "", "", "", ""]);
-      setStep("otp");
+      setSent(true);
       return ok;
     } catch (err) {
       refused(err, "The code couldn’t be sent. Nothing has changed — try again.");
@@ -612,7 +614,7 @@ function RecoverySheet({
   }
 
   async function confirm() {
-    if (step === "email") {
+    if (!sent) {
       if (!emailValid) {
         haptic("error");
         return;
@@ -648,17 +650,20 @@ function RecoverySheet({
 
   return (
     <Sheet
-      title={step === "email" ? "Recovery email" : "Enter the code"}
-      description={
-        step === "email"
-          ? "We'll send a 6-digit code to confirm this email is really yours."
-          : delivered
-            ? `We sent a 6-digit code to ${email.trim()}.`
-            : `Tirbeo couldn’t get the code to ${email.trim()} out the door. The address is stored as unconfirmed — you can ask for the code again, or check the address.`
-      }
+      title="Recovery email"
+      description="We’ll send a 6-digit code to confirm this email is really yours."
       onClose={onClose}
       footer={
-        step === "email" ? (
+        sent ? (
+          <SheetActions
+            cancelLabel="Cancel"
+            onCancel={onClose}
+            confirmLabel="Confirm"
+            onConfirm={confirm}
+            disabled={!codeFull}
+            loading={busy}
+          />
+        ) : (
           <SheetActions
             cancelLabel="Cancel"
             onCancel={onClose}
@@ -667,51 +672,44 @@ function RecoverySheet({
             disabled={!emailValid}
             loading={busy}
           />
-        ) : (
-          <SheetActions
-            cancelLabel="Back"
-            onCancel={() => {
-              haptic("light");
-              setError(null);
-              setStep("email");
-            }}
-            confirmLabel="Confirm"
-            onConfirm={confirm}
-            disabled={!codeFull}
-            loading={busy}
-          />
         )
       }
     >
-      {step === "email" ? (
-        <div className="-mx-4 px-4 py-4 sm:-mx-5 sm:px-5">
-          <span className="mb-2 block text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
-            Email address
-          </span>
-          <Input
-            type="email"
-            inputMode="email"
-            value={email}
-            onChange={(e) => {
-              setError(null);
-              setEmail(e.target.value);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                confirm();
-              }
-            }}
-            placeholder="you@example.com"
-            autoFocus
-            autoComplete="email"
-          />
-          {error ? (
-            <p className="mt-4 text-[13px] leading-relaxed text-danger-text">{error}</p>
-          ) : null}
-        </div>
-      ) : (
-        <div className="-mx-4 px-4 pb-2 pt-1 sm:-mx-5 sm:px-5">
+      <div className="-mx-4 px-4 py-4 sm:-mx-5 sm:px-5">
+        <span className="mb-2 block text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">
+          Email address
+        </span>
+        <Input
+          type="email"
+          inputMode="email"
+          value={email}
+          readOnly={sent}
+          onChange={(e) => {
+            setError(null);
+            setEmail(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !sent) {
+              e.preventDefault();
+              confirm();
+            }
+          }}
+          placeholder="you@example.com"
+          autoFocus
+          autoComplete="email"
+        />
+        {!sent && error ? (
+          <p className="mt-4 text-[13px] leading-relaxed text-danger-text">{error}</p>
+        ) : null}
+      </div>
+
+      {sent ? (
+        <div className="-mx-4 border-t border-divider px-4 pb-2 pt-5 sm:-mx-5 sm:px-5">
+          <p className="mb-4 text-[13px] leading-relaxed text-muted">
+            {delivered
+              ? `We sent a 6-digit code to ${email.trim()}.`
+              : `Tirbeo couldn’t get the code to ${email.trim()} out the door. The address is stored as unconfirmed — ask for the code again, or check the address.`}
+          </p>
           <OtpInput
             value={code}
             onChange={(next) => {
@@ -734,7 +732,7 @@ function RecoverySheet({
             Didn't get it? Resend code
           </Button>
         </div>
-      )}
+      ) : null}
     </Sheet>
   );
 }

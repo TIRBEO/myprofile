@@ -254,14 +254,13 @@ export default function ChangeDetailPage({ id }: { id: string }) {
           </p>
           <div className="mt-3">
             <SupportPill
+              refCode={record.ref}
               subject={`Question about an account change — event ${record.ref}`}
               lines={[
-                `Event reference: ${record.ref}`,
-                `Record id: ${record.id}`,
                 `What: ${record.title}`,
                 record.fields?.length ? `Fields moved: ${record.fields.join(", ")}` : null,
                 `Device: ${record.device}`,
-                `IP: ${record.ip || "not recorded"}${record.location ? ` · Location: ${record.location}` : ""}`,
+                `Address: ${record.ip || "not recorded"}${record.location ? ` · ${record.location}` : ""}`,
                 `When: ${formatDate(record.at)} at ${formatTime(record.at)}`,
               ].filter(Boolean) as string[]}
             />

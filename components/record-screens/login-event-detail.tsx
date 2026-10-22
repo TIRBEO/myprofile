@@ -329,16 +329,17 @@ export default function LoginEventDetailPage({ id }: { id: string }) {
           </p>
           <div className="mt-3">
             <SupportPill
+              refCode={record.ref ?? record.id}
               subject={`Question about a sign-in — event ${record.ref ?? record.id}`}
               lines={[
-                `Event reference: ${record.ref ?? record.id}`,
-                `Record id: ${record.id}`,
                 `What: ${whatHappened}`,
                 `Device: ${record.device}`,
-                `Method: ${record.method}`,
-                `IP: ${record.ip} · Location: ${record.location}`,
+                record.method ? `Method: ${record.method}` : null,
+                record.ip || record.location
+                  ? `Address: ${[record.ip, record.location].filter(Boolean).join(" · ")}`
+                  : null,
                 `When: ${formatDate(record.at)} at ${formatTime(record.at)}`,
-              ]}
+              ].filter(Boolean) as string[]}
             />
           </div>
         </div>

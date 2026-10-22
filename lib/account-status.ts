@@ -218,8 +218,26 @@ function writeSnapshot(snapshot: ChecksSnapshot): void {
 
 /** Ask the brain for the account's real checks and keep the answer.
     Resolves with the fresh sections; rejects only if the brain didn't
-    answer, so a page can say so and offer the way to ask again. */
-export async function loadAccountChecks(): Promise<ChecksSnapshot> {
+    answer, so a page can say so and offer the way to ask again.
+
+    Whoever asks while a read is already in the air joins it instead of starting
+    another. The gate, the account-status page and the record screens all want
+    this list on the same navigation, and three identical reads for one fact is
+    what starves the account-state read the gate is waiting its answer on. The
+    share ends when that read answers: a Retry, or a write that just changed the
+    account, gets a real read rather than the promise that came before it. */
+let checksInFlight: Promise<ChecksSnapshot> | null = null;
+
+export function loadAccountChecks(): Promise<ChecksSnapshot> {
+  if (checksInFlight) return checksInFlight;
+  const read = readAccountChecks().finally(() => {
+    if (checksInFlight === read) checksInFlight = null;
+  });
+  checksInFlight = read;
+  return read;
+}
+
+async function readAccountChecks(): Promise<ChecksSnapshot> {
   const res = await apiJson<ServerChecks & { ok: boolean }>("/api/user/account-checks");
   const snapshot: ChecksSnapshot = {
     level: typeof res.level === "number" ? res.level : 0,
@@ -319,8 +337,22 @@ export function appealFor(id: string): Appeal | null {
   return readAppeals().find((appeal) => appeal.restrictionId === id) ?? null;
 }
 
-/** Pull the appeals from the brain and keep the answer for the gate. */
-export async function loadAppeals(): Promise<Appeal[]> {
+/** Pull the appeals from the brain and keep the answer for the gate. Shares one
+    read with whoever else asked for the same list on this navigation, and stops
+    sharing the moment that read answers — a filing that just landed must be
+    followed by a real read, not the promise that came before it. */
+let appealsInFlight: Promise<Appeal[]> | null = null;
+
+export function loadAppeals(): Promise<Appeal[]> {
+  if (appealsInFlight) return appealsInFlight;
+  const read = fetchAppeals().finally(() => {
+    if (appealsInFlight === read) appealsInFlight = null;
+  });
+  appealsInFlight = read;
+  return read;
+}
+
+async function fetchAppeals(): Promise<Appeal[]> {
   const res = await apiJson<{ ok: boolean; appeals: ServerAppeal[] }>(
     "/api/support/tickets/appeals",
   );

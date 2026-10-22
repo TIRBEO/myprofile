@@ -22,7 +22,7 @@ import {
 } from "@/lib/reauth";
 
 /* ═══════════════════════════════════════════════════════════════════
-   "Confirm it's you" — every door, in order
+   "Confirm it's you" — every door, on one sheet
 
    One dialog for every action the account service refuses until it gets a
    fresh proof — removing a passkey, regenerating backup codes, signing other
@@ -30,13 +30,13 @@ import {
    answers its refusal with the ordered CHAIN this account must walk — the
    password first, then a code emailed to the sign-in address, then the
    authenticator when "require 2FA for sensitive actions" is switched on —
-   and the sheet works down the list one step at a time. Whatever is typed
-   is folded into a single proof and handed back at the end; the action runs
-   once, with all of it.
+   and the sheet shows every door in that chain at once, in that order.
+   Whatever is typed is folded into a single proof and handed back at the end;
+   the action runs once, with all of it.
 
    Closing the dialog changes nothing on the account — the action simply
-   never ran. A refused proof restarts the walk from the top: the emailed
-   code was spent either way, so nothing below the refusal could be reused.
+   never ran. A refused proof reopens the sheet empty: the emailed code was
+   spent either way, so nothing could be reused.
    ═══════════════════════════════════════════════════════════════════ */
 
 const LABEL: Record<ReauthMethod, string> = {
@@ -83,20 +83,27 @@ export function ReauthSheet({
   onProof: (proof: ReauthProof) => void;
   onCancel: () => void;
 }) {
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState<ReauthProof>({});
   const [password, setPassword] = useState("");
-  const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
+  const [totp, setTotp] = useState<string[]>(["", "", "", "", "", ""]);
+  const [email, setEmail] = useState<string[]>(["", "", "", "", "", ""]);
+  const [sent, setSent] = useState(false);
   const [sentTo, setSentTo] = useState("");
   const [sending, setSending] = useState(false);
   const [againIn, setAgainIn] = useState(0);
   const [notice, setNotice] = useState(error);
 
-  const method = methods[Math.min(step, methods.length - 1)];
-  const code = digits.join("");
-  const full = code.length === 6;
-  const ready = method === "password" ? password.length > 0 : full;
-  const last = step >= methods.length - 1;
+  const blank = (digits: string[]) => digits.every((d) => d === "");
+  // One section per door. The service's chain is already ordered, and a door
+  // it named twice is still one thing to type.
+  const doors = [...new Set(methods)];
+  const askedFor = (method: ReauthMethod) => doors.includes(method);
+  const answered = (method: ReauthMethod) =>
+    method === "password"
+      ? password.length > 0
+      : method === "code"
+        ? sent && !blank(email)
+        : !blank(totp);
+  const ready = doors.every(answered);
 
   useEffect(() => {
     if (againIn <= 0) return;
@@ -104,30 +111,23 @@ export function ReauthSheet({
     return () => window.clearTimeout(timer);
   }, [againIn]);
 
-  /** Answer this step, then either walk to the next or hand the whole
-      collected proof back. The emailed code and the authenticator code are
-      different proofs to the service, and it reads them from different
-      fields — a mix-up here would spend the wrong one. */
-  function advance() {
+  /** Fold the doors that were answered into the one proof the service asked
+      for. The emailed code and the authenticator code are different proofs to
+      the service, and it reads them from different fields — a mix-up here
+      would spend the wrong one. */
+  function submit() {
     if (!ready || busy) return;
-    const answer: ReauthProof =
-      method === "password" ? { password } : method === "code" ? { reauthCode: code } : { code };
-    const merged = { ...answers, ...answer };
-    if (!last) {
-      setAnswers(merged);
-      setStep(step + 1);
-      setDigits(["", "", "", "", "", ""]);
-      setNotice(null);
-      haptic("light");
-      return;
-    }
+    const proof: ReauthProof = {};
+    if (askedFor("password")) proof.password = password;
+    if (askedFor("code")) proof.reauthCode = email.join("");
+    if (askedFor("totp")) proof.code = totp.join("");
     haptic("medium");
-    // Which steps were walked — never the answers themselves.
+    // Which doors were walked — never the answers themselves.
     trackEvent("auth.2fa_submit", {
       detail: "chain_proof",
-      metadata: { steps: methods.join(",") },
+      metadata: { steps: doors.join(",") },
     });
-    onProof(merged);
+    onProof(proof);
   }
 
   async function request() {
@@ -136,6 +136,7 @@ export function ReauthSheet({
     setNotice(null);
     try {
       const reply = await sendReauthCode();
+      setSent(true);
       setSentTo(reply.email);
       setAgainIn(CODE_SECONDS);
       haptic("success");
@@ -152,6 +153,8 @@ export function ReauthSheet({
     }
   }
 
+  const clearNotice = () => setNotice(null);
+
   return (
     <Sheet
       title="Confirm it's you"
@@ -161,63 +164,89 @@ export function ReauthSheet({
         <SheetActions
           cancelLabel="Not now"
           onCancel={() => { if (!busy) onCancel(); }}
-          confirmLabel={busy ? "Checking…" : last ? "Confirm" : "Continue"}
+          confirmLabel={busy ? "Checking…" : "Confirm"}
           disabled={!ready}
           loading={busy}
-          onConfirm={advance}
+          onConfirm={submit}
         />
       }
     >
-      {methods.length > 1 ? (
+      {doors.length > 1 ? (
         <p
-          className="mb-4 text-center text-[12px] font-semibold uppercase tracking-wide text-muted"
+          className="mb-4 text-[13px] leading-relaxed text-muted"
           style={{ animation: "ig-fade 450ms ease-out backwards" }}
         >
-          Step {step + 1} of {methods.length} · {LABEL[method]}
+          {`This account verifies with ${doors
+            .map((method) => LABEL[method].toLowerCase())
+            .join(", ")}. Fill in everything below and the action runs once.`}
         </p>
       ) : null}
 
-      {method === "password" ? (
-        <Field label="Password" error={notice} hint={PROMPT.password}>
-          <PasswordField
-            value={password}
-            onChange={(next) => {
-              setPassword(next);
-              setNotice(null);
-            }}
-            onKeyDown={(e) => e.key === "Enter" && advance()}
-            autoFocus
-          />
-        </Field>
-      ) : (
-        <Field
-          label={method === "code" ? "Code from your email" : "Authenticator code"}
-          error={notice}
-          hint={PROMPT[method]}
+      {doors.map((method, index) => (
+        <div
+          key={method}
+          className={
+            index > 0
+              ? "-mx-4 mt-5 border-t border-divider px-5 pb-2 pt-5 sm:-mx-5"
+              : undefined
+          }
         >
-          <OtpInput
-            value={digits}
-            onChange={(next) => {
-              setDigits(next);
-              setNotice(null);
-            }}
-            onEnter={advance}
-          />
-        </Field>
-      )}
-
-      {method === "code" ? (
-        <div className="px-4 pb-4 sm:px-5">
-          {sentTo ? (
-            <p className="mb-3 text-[13px] leading-relaxed text-muted">
-              Sent to <span className="font-semibold text-fg">{sentTo}</span>. It works once, for
-              15 minutes.
-            </p>
-          ) : null}
-          <Button variant="secondary" block loading={sending} disabled={againIn > 0 || busy || sending} onClick={request}>
-            {againIn > 0 ? `Resend in ${againIn}s` : sentTo ? "Send a new code" : "Send me a code"}
-          </Button>
+          {method === "password" ? (
+            <Field label="Password" hint={PROMPT.password}>
+              <PasswordField
+                value={password}
+                onChange={(next) => {
+                  setPassword(next);
+                  clearNotice();
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submit()}
+                autoFocus={index === 0}
+              />
+            </Field>
+          ) : method === "code" ? (
+            <>
+              <Button
+                variant="secondary"
+                block
+                loading={sending}
+                disabled={againIn > 0 || busy || sending}
+                onClick={request}
+              >
+                {againIn > 0 ? `Resend in ${againIn}s` : sent ? "Send a new code" : "Send me a code"}
+              </Button>
+              <div className="mt-4">
+                <Field
+                  label="Code from your email"
+                  hint={sentTo ? `Sent to ${sentTo}. It works once, for 15 minutes.` : PROMPT.code}
+                >
+                  <OtpInput
+                    value={email}
+                    onChange={(next) => {
+                      setEmail(next);
+                      clearNotice();
+                    }}
+                    onEnter={submit}
+                  />
+                </Field>
+              </div>
+            </>
+          ) : (
+            <Field label="Authenticator code" hint={PROMPT[method]}>
+              <OtpInput
+                value={totp}
+                onChange={(next) => {
+                  setTotp(next);
+                  clearNotice();
+                }}
+                onEnter={submit}
+              />
+            </Field>
+          )}
         </div>
+      ))}
+
+      {notice ? (
+        <p className="mt-4 text-[13px] leading-relaxed text-danger-text">{notice}</p>
       ) : null}
     </Sheet>
   );
@@ -307,9 +336,9 @@ export function useReauthGuard() {
           });
           ask = { ...ask, error: complaint };
           // The account's 2FA policy refusing the authenticator link: the
-          // chain itself doesn't change, only the news that this step went
-          // wrong. The walk restarts at the top — the emailed code was spent
-          // or never reached, so nothing can be carried over.
+          // chain itself doesn't change, only the news that this door didn't
+          // open. The sheet reopens empty — the emailed code was spent or
+          // never reached, so nothing can be carried over.
         }
       }
       const answer = await open.current(ask.methods, ask.error);

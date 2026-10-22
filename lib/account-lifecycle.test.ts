@@ -126,3 +126,53 @@ describe("the account snapshot", () => {
     expect(apiJson).toHaveBeenCalledTimes(1);
   });
 });
+
+/* A reader whose cookie was refused is not a reader whose network is down. The
+   gate used to paint the same "we couldn't read your account" for both, which
+   offered a Retry button that can only be refused again — and the person who
+   needed to sign in was told their account was unreadable. */
+describe("a refused cookie", () => {
+  it("is a sign-out when the boot read says so", async () => {
+    const bag = fakeBrowser();
+    const module = await load();
+    (window as unknown as Record<string, unknown>).__tirbeoAccountState =
+      Promise.resolve("tirbeo:signed-out");
+    await module.loadAccountState();
+    expect(module.accountStateSignedOut()).toBe(true);
+    expect(module.accountStateFailed()).toBe(false);
+    expect(bag.get(STORE_KEY)).toBeUndefined();
+  });
+
+  it("is a sign-out when the store's own read answers 401", async () => {
+    fakeBrowser();
+    (apiJson as ReturnType<typeof vi.fn>).mockRejectedValue(
+      Object.assign(new Error("Not authenticated"), { status: 401 }),
+    );
+    const module = await load();
+    await module.loadAccountState();
+    expect(module.accountStateSignedOut()).toBe(true);
+    expect(module.accountStateFailed()).toBe(false);
+  });
+
+  it("is not what a service that never answered looks like", async () => {
+    fakeBrowser();
+    (apiJson as ReturnType<typeof vi.fn>).mockRejectedValue(
+      Object.assign(new Error("Request failed (502)"), { status: 502 }),
+    );
+    const module = await load();
+    await module.loadAccountState();
+    expect(module.accountStateSignedOut()).toBe(false);
+    expect(module.accountStateFailed()).toBe(true);
+  });
+
+  it("is forgotten when this browser stops holding that account", async () => {
+    fakeBrowser();
+    (apiJson as ReturnType<typeof vi.fn>).mockRejectedValue(
+      Object.assign(new Error("Not authenticated"), { status: 401 }),
+    );
+    const module = await load();
+    await module.loadAccountState();
+    module.forgetAccountState();
+    expect(module.accountStateSignedOut()).toBe(false);
+  });
+});

@@ -27,6 +27,7 @@ import {
   ACCOUNT_EVENT,
   accountStateFailed,
   accountStateLoaded,
+  accountStateSignedOut,
   getAccountState,
   loadAccountState,
 } from "@/lib/account-lifecycle";
@@ -259,6 +260,10 @@ function keyOf(lock: Lock | null): string {
   return lock.kind === "restriction" ? `restriction:${lock.decision?.item.id}` : lock.kind;
 }
 
+/** The key the gate holds for a refused cookie. Not a `Lock`: nothing has been
+    closed, the reader simply is not signed in any more. */
+const SIGNED_OUT_KEY = "signed-out";
+
 function currentKey(): string {
   if (typeof window === "undefined") return "";
   const lock = readLock();
@@ -274,6 +279,10 @@ function currentKey(): string {
      dashboard on that guess is exactly the frame this gate exists to prevent.
      So "open" only counts once this document has actually asked. */
   if (key) return key;
+  /* A refused cookie is settled before it is a failure: the reader is signed
+     out, which the gate says with a way back in rather than with a Retry that
+     can only refuse again. */
+  if (accountStateSignedOut()) return SIGNED_OUT_KEY;
   /* No answer at all, and the read did not come back: not "open", not "unknown
      yet", but "we could not ask" — a gate that renders the dashboard here is a
      gate that fails open. */
@@ -290,7 +299,7 @@ function currentKey(): string {
     the dashboard. Every mount revalidates against the brain; what it paints
     while that is in the air is the state this browser last saw, so a returning
     reader is not made to watch a spinner for a round trip. */
-export function useAccountLock(): { lock: Lock | null; loading: boolean; failed: boolean } {
+export function useAccountLock(): { lock: Lock | null; loading: boolean; failed: boolean; signedOut: boolean } {
   /* The server has never asked, so it answers "unknown" and the gate holds.
      Every screen here is prerendered, so whatever this snapshot picks is the
      first HTML a reader sees — and a closed account reading back its own rail,
@@ -299,20 +308,27 @@ export function useAccountLock(): { lock: Lock | null; loading: boolean; failed:
   const snapshot = useSyncExternalStore(subscribe, currentKey, () => "?");
   useEffect(() => {
     void loadAccountState().then((state) => {
+      /* Nothing else is worth asking for until the account has answered *this*.
+         A refused or unreachable account-state read is followed by eight more
+         reads that refuse or hang in the same way, and on a dev pool of six
+         connections those are the requests that push the next account-state
+         read past its own deadline — the failure feeding on itself. */
+      if (!state || accountStateSignedOut() || accountStateFailed()) return;
       /* A hard closure (banned / suspended / deleted) has nothing to enumerate
          and its status gate refuses those reads — asking would only spend the
          session on a 403. The lock itself needs none of it. For every other
          state the checks and appeals are read from the account too, so the
          restriction lock reflects what the brain says — never a stale guess. */
-      if (state && (state.status === "banned" || state.status === "suspended" || state.status === "deleted")) {
+      if (state.status === "banned" || state.status === "suspended" || state.status === "deleted") {
         return;
       }
       void loadAccountChecks().catch(() => {});
       void loadAppeals().catch(() => {});
     });
   }, []);
+  const signedOut = snapshot === SIGNED_OUT_KEY;
   const failed = snapshot === "!";
-  const loading = !failed && snapshot.startsWith("?");
+  const loading = !failed && !signedOut && snapshot.startsWith("?");
   const key = loading ? snapshot.slice(1) : snapshot;
-  return { lock: key && !failed ? (CACHE.get(key) ?? null) : null, loading, failed };
+  return { lock: key && !failed && !signedOut ? (CACHE.get(key) ?? null) : null, loading, failed, signedOut };
 }

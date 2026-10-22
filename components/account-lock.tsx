@@ -45,7 +45,7 @@ import {
   getAccountState,
   loadAccountState,
 } from "@/lib/account-lifecycle";
-import { endSessionAndLeave } from "@/lib/session";
+import { endSessionAndLeave, redirectToLogin } from "@/lib/session";
 import { ago, formatDate, formatStamp } from "@/lib/dates";
 import { haptic } from "@/lib/haptics";
 import { useProfile } from "@/lib/profile";
@@ -57,7 +57,7 @@ const MIN_CHARS = 40;
 const MAX_CHARS = 900;
 
 export function AccountLockScreen() {
-  const { lock, loading, failed } = useAccountLock();
+  const { lock, loading, failed, signedOut } = useAccountLock();
   const welcome = useWelcome();
 
   return (
@@ -67,10 +67,13 @@ export function AccountLockScreen() {
           one moment where the account's state is genuinely unknown — and a
           dashboard is the wrong thing to render into an unknown. */}
       {!lock && !welcome && loading ? <Checking /> : null}
+      {/* The cookie was refused. Not an outage: this browser simply is not
+          holding a session any more, and the way on is back through sign-in. */}
+      {!lock && !welcome && signedOut ? <SignedOut /> : null}
       {/* The read did not answer and there is nothing cached to fall back on.
           Showing the dashboard here would be the gate failing open, so the
           account is held at a door that says it could not ask. */}
-      {!lock && !welcome && failed ? <CouldNotRead /> : null}
+      {!lock && !welcome && !signedOut && failed ? <CouldNotRead /> : null}
       {lock?.kind === "deactivated" ? <Deactivated lock={lock} /> : null}
       {lock?.kind === "deletion" ? <Deletion lock={lock} /> : null}
       {lock?.kind === "restriction" ? <Restricted lock={lock} /> : null}
@@ -79,7 +82,7 @@ export function AccountLockScreen() {
       ) : null}
       {/* A lock that has just been lifted is the only thing on this screen
           while the account is otherwise open. */}
-      {!lock && !failed && welcome ? <BackAgain welcome={welcome} /> : null}
+      {!lock && !failed && !signedOut && welcome ? <BackAgain welcome={welcome} /> : null}
     </div>
   );
 }
@@ -101,6 +104,43 @@ function Checking() {
         <p className="text-[13.5px] leading-none">Loading…</p>
       </div>
     </div>
+  );
+}
+
+/** The account refused this browser's cookie. The settings gate holds the door
+    for a reason — nothing here can say what the account looks like — but the
+    reason is a signed-out reader, not an outage, so the screen names that and
+    offers sign-in. "Try again" would be the wrong promise: a refused cookie is
+    refused however many times it is offered. */
+function SignedOut() {
+  return (
+    <StatementScreen
+      title="You're signed out"
+      lead="This browser no longer holds a session on your account, so there is nothing here for it to read."
+      blocks={[
+        {
+          label: "What happened",
+          body: (
+            <Prose>
+              Signing in ends a session on the other devices, an hour of inactivity ends this one,
+              and changing your password ends every session but the one you were using. None of
+              those touch anything saved to the account.
+            </Prose>
+          ),
+        },
+      ]}
+      actions={
+        <StatementActions
+          primary={<Full label="Sign in again" onClick={redirectToLogin} />}
+          secondary={[
+            /* Both of these screens exist because the account cannot be talked
+               to, so filing a request through it would be a form that can only
+               answer the way the screen already has. */
+            <SupportPill mailOnly subject="Signed out of the settings" lines={["Account state: not asked — this browser holds no session"]} />,
+          ]}
+        />
+      }
+    />
   );
 }
 
@@ -132,7 +172,10 @@ function CouldNotRead() {
             />
           }
           secondary={[
+            /* Same reason as the screen above: the door this page is standing
+               behind is the one that would have to carry the message. */
             <SupportPill
+              mailOnly
               subject="Account state could not be read"
               lines={["Account state: unknown — the account-state read failed"]}
             />,
@@ -327,10 +370,9 @@ function Deactivated({ lock }: { lock: Lock }) {
           primary={<Full label={busy ? "Reactivating…" : "Reactivate now"} busy={busy} onClick={comeBack} />}
           secondary={[
             <SupportPill
-              
+              refCode={getAccountState()?.refCode}
               subject={`Paused account — ref ${getAccountState()?.refCode ?? "none"}`}
               lines={[
-                `Event reference: ${getAccountState()?.refCode ?? "none"}`,
                 "Account state: paused (self-deactivated)",
                 record ? `Paused on: ${formatStamp(record.at)}` : null,
               ]}
@@ -362,7 +404,6 @@ function Deletion({ lock }: { lock: Lock }) {
   const left = finalAtMs != null ? remaining(finalAtMs, Date.now()) : null;
   const refCode = account?.refCode ?? null;
   const supportLines = [
-    `Event reference: ${refCode ?? "none"}`,
     "Account state: scheduled for deletion",
     `Asked for on: ${formatStamp(asked)}`,
     finalAtMs != null ? `Final on: ${formatDate(finalAtMs)}` : "Final date: missing from the account record",
@@ -386,7 +427,7 @@ function Deletion({ lock }: { lock: Lock }) {
         actions={
           <StatementActions
             primary={<Full label={busy ? "Cancelling…" : "Keep my account"} busy={busy} onClick={keepIt} />}
-            secondary={[<SupportPill subject="Scheduled deletion — no final date" lines={supportLines} />]}
+            secondary={[<SupportPill key="support" refCode={refCode} subject="Scheduled deletion — no final date" lines={supportLines} />]}
             quiet={<SignOutPill />}
           />
         }
@@ -430,7 +471,7 @@ function Deletion({ lock }: { lock: Lock }) {
       actions={
         <StatementActions
           primary={<Full label={busy ? "Cancelling…" : "Keep my account"} busy={busy} onClick={keepIt} />}
-          secondary={[<SupportPill subject={`Scheduled deletion — ref ${refCode ?? "none"}`} lines={supportLines} />]}
+          secondary={[<SupportPill key="support" refCode={refCode} subject={`Scheduled deletion — ref ${refCode ?? "none"}`} lines={supportLines} />]}
           quiet={<SignOutPill />}
         />
       }
@@ -541,11 +582,10 @@ function Restricted({ lock }: { lock: Lock }) {
                 <Full tone="outline" label="I've read this — carry on" onClick={carryOn} />
               ),
               <SupportPill
+                refCode={getAccountState()?.refCode}
                 subject={`Account decision — ref ${getAccountState()?.refCode ?? "none"}`}
                 lines={[
-                  `Event reference: ${getAccountState()?.refCode ?? "none"}`,
                   `Decision: ${item.title}`,
-                  `Decision id: ${item.id}`,
                   item.guideline ? `Rule applied: ${item.guideline}` : null,
                   item.at ? `Decided on: ${formatStamp(item.at)}` : null,
                 ]}
@@ -615,7 +655,6 @@ function Blocked({ lock }: { lock: Lock }) {
   }
 
   const supportLines = [
-    `Event reference: ${refCode ?? "none"}`,
     `Account state: ${deleted ? "deleted" : banned ? "banned" : "suspended"}`,
     reason ? `Reason: ${reason}` : null,
     untilMs ? `Ends on: ${formatDate(untilMs)}` : null,
@@ -674,7 +713,7 @@ function Blocked({ lock }: { lock: Lock }) {
               ) : null
             }
             secondary={[
-              <SupportPill subject={`Closed account — ref ${refCode ?? "none"}`} lines={supportLines} />,
+              <SupportPill key="support" refCode={refCode} subject={`Closed account — ref ${refCode ?? "none"}`} lines={supportLines} />,
             ]}
             quiet={<SignOutPill />}
           />

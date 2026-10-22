@@ -21,6 +21,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { apiJson, apiSend } from "@/lib/api";
+import { SIGNED_OUT_ANSWER } from "@/lib/account-prefetch";
 
 /** The bus every account-state change is announced on. The gate, the status
     screens and the account's request rows all repaint from it, so a change
@@ -112,6 +113,10 @@ let loadedOnce = false;
     "the brain is unreachable" as "the account is open" hands a closed account
     its dashboard — so the failure is a state of its own, not an empty cache. */
 let failed = false;
+/** The last read refused this cookie. Separate from `failed` because it is not
+    a failure: a signed-out reader who is shown "we couldn't read your account"
+    and a Retry button will press that button until their fingers hurt. */
+let signedOut = false;
 let inflight: Promise<AccountState | null> | null = null;
 
 function notify(): void {
@@ -130,6 +135,7 @@ export function forgetAccountState(): void {
   cached = null;
   loadedOnce = false;
   failed = false;
+  signedOut = false;
   inflight = null;
 }
 
@@ -160,6 +166,13 @@ export function accountStateFailed(): boolean {
   return cached === null || cached.status === "active";
 }
 
+/** The last read refused this cookie — the reader is signed out rather than
+    unreached. The gate paints a door with a way back in, not a service error
+    with a Retry that can only fail again. */
+export function accountStateSignedOut(): boolean {
+  return loadedOnce && signedOut;
+}
+
 /* ── The read, and the clock on it ────────────────────────────────
    The gate holds the whole settings shell behind this one answer, so the
    read's worst case IS the reader's worst case. Two rules follow from that:
@@ -178,10 +191,14 @@ const READ_TIMEOUT_MS = 6_000;
 /** The hand-off the boot script leaves behind: the read it already started. */
 const PREFETCH_GLOBAL = "__tirbeoAccountState";
 
-function takePrefetch(): Promise<AccountState | null> | null {
+/** What a read of the account's state can hand back: the state, nothing at all,
+    or the boot script's marker for a cookie the account refused. */
+type AccountStateAnswer = AccountState | null | typeof SIGNED_OUT_ANSWER;
+
+function takePrefetch(): Promise<AccountStateAnswer> | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as Record<string, unknown>;
-  const pending = w[PREFETCH_GLOBAL] as Promise<AccountState | null> | undefined;
+  const pending = w[PREFETCH_GLOBAL] as Promise<AccountStateAnswer> | undefined;
   if (!pending) return null;
   /* Taken once, and taken for good: a later call (after a write, or a Retry)
      has to ask again for real, not re-read the answer the page came in with. */
@@ -219,19 +236,34 @@ export function loadAccountState(): Promise<AccountState | null> {
       const state = await bounded(
         prefetched ?? apiJson<AccountState>("/api/user/account-state", { signal: readSignal() }),
       );
-      /* The boot script answers `null` for a 401, a 502 or a body it could not
-         read, and `apiJson` answers a shaped object. Neither is a fact about
-         the account, so neither may be stored as one: a gate that read an
-         empty answer here would paint the dashboard for an account it has
-         never actually heard about. Anything that is not a state is a failure,
-         and a failure is the `CouldNotRead` screen. */
-      if (!state || typeof state.status !== "string") throw new Error("Account state did not answer");
-      cached = state;
-      failed = false;
-      writeSnapshot(cached);
-    } catch {
+      /* The boot read answers with this one string for a 401 — it has no body
+         to read and no reason to make one. A refused cookie is an answer about
+         the reader, not a missing answer, so it is recorded as a sign-out and
+         the gate paints the door that says so. */
+      if (state === SIGNED_OUT_ANSWER) {
+        signedOut = true;
+        failed = false;
+      } else {
+        /* The boot script answers `null` for a 502 or a body it could not read,
+           and `apiJson` answers a shaped object. Neither is a fact about the
+           account, so neither may be stored as one: a gate that read an empty
+           answer here would paint the dashboard for an account it has never
+           actually heard about. Anything that is not a state is a failure, and
+           a failure is the `CouldNotRead` screen. */
+        if (!state || typeof state.status !== "string") throw new Error("Account state did not answer");
+        cached = state;
+        failed = false;
+        signedOut = false;
+        writeSnapshot(cached);
+      }
+    } catch (error) {
       /* Keep the last known state rather than flash the account open. */
       failed = true;
+      /* A GET of the account's own state has one reason to say 401: this cookie
+         is not a session. Read the status off the error rather than its class,
+         so the store does not depend on which wrapper threw it. */
+      signedOut = (error as { status?: number } | null)?.status === 401;
+      if (signedOut) failed = false;
     }
     loadedOnce = true;
     inflight = null;

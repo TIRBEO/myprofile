@@ -206,8 +206,22 @@ async function send(row: SupportRequest): Promise<SupportRequest> {
 /** The list as it now stands: what the desk holds, plus anything this device
     still owes. One `error` when the desk could not be reached at all, so the
     screen can say the list may be incomplete instead of showing a quiet
-    "nothing asked yet" over a network that timed out. */
-export async function loadRequests(): Promise<{ requests: SupportRequest[]; error: string | null }> {
+    "nothing asked yet" over a network that timed out.
+
+    Concurrent callers share one read. This list is asked by the tray badge, the
+    requests screen and the account gate's follow-up on every navigation, and
+    each used to start its own hop — three identical reads per click on a pool
+    that holds six, which is how the account-state read underneath them ended up
+    past its deadline. */
+let requestsInFlight: Promise<{ requests: SupportRequest[]; error: string | null }> | null = null;
+
+export function loadRequests(): Promise<{ requests: SupportRequest[]; error: string | null }> {
+  if (requestsInFlight) return requestsInFlight;
+  requestsInFlight = readRequestsFromDesk().finally(() => { requestsInFlight = null; });
+  return requestsInFlight;
+}
+
+async function readRequestsFromDesk(): Promise<{ requests: SupportRequest[]; error: string | null }> {
   const queue = readStored();
   let appeals: ServerAppeal[] | null = null;
   let failure: string | null = null;

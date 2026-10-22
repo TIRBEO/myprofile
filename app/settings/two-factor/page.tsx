@@ -250,13 +250,13 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 /* ── Turn-off confirmation: a live code ───────────────────────────
-   Losing the app also retires the backup codes, so the consequences are
-   listed before anything is asked for. The code from the app is the proof
-   the account service wanted — a stronger answer than a password, and the
-   sheet only asks once.                                 */
+   One sheet: losing the app also retires the backup codes, so the
+   consequences are listed at the top and the proof goes right under them.
+   The code from the app is the answer the account service wanted — stronger
+   than a password — and the sheet only asks once.
+   ───────────────────────────────────────────────────────────────── */
 
 function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
-  const [stage, setStage] = useState<"warn" | "proof">("warn");
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [useBackup, setUseBackup] = useState(false);
   const [backup, setBackup] = useState("");
@@ -294,40 +294,16 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
     }
   }
 
-  if (stage === "warn") {
-    return (
+  return (
+    <>
       <Sheet
         title="Turn off the authenticator app?"
+        description="Turning it off is a change an intruder would want to make, so it wants a code from the app you’re about to switch off — or one of your backup codes."
         onClose={onClose}
         footer={
           <SheetActions
             cancelLabel="Keep it on"
             onCancel={onClose}
-            confirmLabel="Turn off"
-            confirmVariant="danger"
-            onConfirm={() => setStage("proof")}
-          />
-        }
-      >
-        <ul className="-mx-4 space-y-2.5 px-5 text-[14px] leading-relaxed text-muted sm:-mx-5">
-          <li>· Sign-ins stop asking for a code from your app.</li>
-          <li>· Your current backup codes stop working.</li>
-          <li>· Email codes stay on.</li>
-        </ul>
-      </Sheet>
-    );
-  }
-
-  return (
-    <>
-      <Sheet
-        title="Confirm it’s you"
-        description="Turning the authenticator off is a change an intruder would want to make, so it wants a code from the app you’re about to switch off — or one of your backup codes."
-        onClose={onClose}
-        footer={
-          <SheetActions
-            cancelLabel="Back"
-            onCancel={() => setStage("warn")}
             confirmLabel="Turn off"
             confirmVariant="danger"
             onConfirm={confirm}
@@ -336,7 +312,13 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
           />
         }
       >
-        <div className="-mx-4 space-y-5 px-5 pb-2 pt-1 sm:-mx-5">
+        <ul className="-mx-4 space-y-2.5 px-5 text-[14px] leading-relaxed text-muted sm:-mx-5">
+          <li>· Sign-ins stop asking for a code from your app.</li>
+          <li>· Your current backup codes stop working.</li>
+          <li>· Email codes stay on.</li>
+        </ul>
+
+        <div className="-mx-4 mt-5 space-y-5 border-t border-divider px-5 pb-2 pt-5 sm:-mx-5">
           <div>
             <div className="mb-2 flex items-center justify-between">
               <FieldLabel>{useBackup ? "Backup code" : "Code from your app"}</FieldLabel>
@@ -387,7 +369,6 @@ function AuthenticatorSheet({
   onClose: () => void;
   onVerified: (codes: RevealedCodes) => void;
 }) {
-  const [step, setStep] = useState<"qr" | "otp">("qr");
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -429,32 +410,20 @@ function AuthenticatorSheet({
   return (
     <Sheet
       title="Set up authenticator app"
-      description={
-        step === "qr"
-          ? "Scan this with your app, or type the setup key in by hand."
-          : "Type the 6-digit code your app is showing right now."
-      }
+      description="Scan this with your app or type the setup key in, then send the 6-digit code it is showing right now."
       onClose={onClose}
       footer={
-        step === "qr" ? (
-          <SheetActions cancelLabel="Cancel" onCancel={onClose} confirmLabel="Next" onConfirm={() => setStep("otp")} />
-        ) : (
-          <SheetActions
-            cancelLabel="Back"
-            onCancel={() => {
-              setStep("qr");
-              setError(null);
-            }}
-            confirmLabel="Confirm"
-            onConfirm={confirm}
-            disabled={!codeFull}
-            loading={busy}
-          />
-        )
+        <SheetActions
+          cancelLabel="Cancel"
+          onCancel={onClose}
+          confirmLabel="Turn on two-factor"
+          onConfirm={confirm}
+          disabled={!codeFull}
+          loading={busy}
+        />
       }
     >
-      {step === "qr" ? (
-        <div className="-mx-4 flex flex-col items-center px-5 py-2 sm:-mx-5">
+      <div className="-mx-4 flex flex-col items-center px-5 py-2 sm:-mx-5">
           <TotpQr value={uri} />
           <p className="mt-4 text-center text-[12.5px] leading-relaxed text-muted">
             Scans into any authenticator app. The key below is the same code the QR carries.
@@ -476,9 +445,8 @@ function AuthenticatorSheet({
               </Button>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="-mx-4 px-5 pb-2 pt-1 sm:-mx-5">
+      </div>
+      <div className="-mx-4 px-5 pb-2 pt-5 sm:-mx-5">
           <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} onEnter={confirm} />
           <p
             className={cn(
@@ -490,8 +458,7 @@ function AuthenticatorSheet({
               ? `${error} Codes change every 30 seconds — try the one showing now.`
               : `The code rotates every 30 seconds, so send it right after it appears. A correct code switches two-factor on and issues ${CODE_COUNT} backup codes.`}
           </p>
-        </div>
-      )}
+      </div>
     </Sheet>
   );
 }

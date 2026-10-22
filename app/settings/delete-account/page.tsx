@@ -146,9 +146,9 @@ export default function DeleteAccountPage() {
         />
       </PillStack>
 
-      {/* Rendered conditionally so closing it costs nothing: the stage, the
-          code and the countdown are all gone with the sheet, and starting
-          again starts at the warning. */}
+      {/* Rendered conditionally so closing it costs nothing: the code and the
+          countdown are gone with the sheet, and starting again starts at the
+          warning. */}
       {deletionOpen ? (
         <DeletionSheet closeDay={closeDay} onClose={() => setDeletionOpen(false)} />
       ) : null}
@@ -157,17 +157,19 @@ export default function DeleteAccountPage() {
 }
 
 /* ── The last step ────────────────────────────────────────────────
-   Two stages in one sheet. The first is everything the button's one line
-   couldn't hold; the second is the code. Going back is a stage change, not
-   a navigation, and the code that was already sent stays sent — asking for a
-   second one inside the wait is the account's problem, not this sheet's.
+   One sheet. The warning is everything the button's one line couldn't hold,
+   and the code joins it underneath as soon as one has actually been asked
+   for — no second screen, and nothing is deleted by reading. Going back is
+   just closing the sheet; the code that was already sent stays sent — asking
+   for a second one inside the wait is the account's problem, not this
+   sheet's.
    ───────────────────────────────────────────────────────────────── */
 
 function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const { guard, reauthDialog } = useReauthGuard();
-  const [stage, setStage] = useState<"warn" | "proof">("warn");
+  const [sent, setSent] = useState(false);
   const [code, setCode] = useState<string[]>(BLANK_CODE);
   const [againIn, setAgainIn] = useState(0);
   /** The masked address the account said it mailed, once it has mailed one.
@@ -209,6 +211,7 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
       const reply = await apiRequestDeletionCode();
       if (!live.current) return false;
       setSentTo(reply.email || null);
+      setSent(true);
       setAgainIn(CODE_SECONDS);
       trackEvent("settings.deletion_code_requested");
       toast.info(reply.message);
@@ -274,83 +277,55 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
 
   return (
     <Sheet
-      title={stage === "warn" ? "Before you go" : "Confirm it’s really you"}
-      description={
-        stage === "warn"
-          ? "Nothing is deleted by opening this, and nothing is deleted by the button at the bottom of it. Read these three lines first."
-          : sentTo
-            ? "Enter the 6-digit code and the window starts. Until you do, the account is open and unchanged."
-            : "The code goes to your sign-in address."
-      }
+      title="Before you go"
+      description="Nothing is deleted by opening this, and nothing is deleted by the button at the bottom of it. Read these three lines first."
       onClose={onClose}
       footer={
-        stage === "warn" ? (
-          <SheetActions
-            onCancel={onClose}
-            onConfirm={() => {
+        <SheetActions
+          cancelLabel="Not now"
+          onCancel={onClose}
+          onConfirm={() => {
+            if (sent) void verify();
+            else {
               haptic("heavy");
-              void request().then((ok) => {
-                if (ok) setStage("proof");
-              });
-            }}
-            confirmLabel={busy ? "Sending the code…" : "Email me the code"}
-            confirmVariant="danger"
-            loading={busy}
-          />
-        ) : (
-          <SheetActions
-            cancelLabel="Back"
-            onCancel={() => {
-              setError(null);
-              setStage("warn");
-            }}
-            onConfirm={verify}
-            confirmLabel={busy ? "Checking the code…" : "Yes, delete my account"}
-            confirmVariant="danger"
-            disabled={!codeFull}
-            loading={busy}
-          />
-        )
+              void request();
+            }
+          }}
+          confirmLabel={
+            busy
+              ? sent
+                ? "Checking the code…"
+                : "Sending the code…"
+              : sent
+                ? "Yes, delete my account"
+                : "Email me the code"
+          }
+          confirmVariant="danger"
+          disabled={sent && !codeFull}
+          loading={busy}
+        />
       }
     >
-      {stage === "warn" ? (
-        <SheetGroup>
-          <StaticRow
-            title="What is removed"
-            sub="Your profile, your details and everything saved to the account. Every device is signed out, including this one."
-          />
-          <StaticRow
-            title="When it becomes final"
-            sub={`About ${formatDate(closeDay)} — ${GRACE_DAYS} days from the moment the code is spent. Cancel inside that window and the account comes back exactly as it was.`}
-          />
-          <StaticRow
-            title="After that"
-            sub="Nothing can be restored — not by you, not by support. If you want a copy of anything, close this and download your data first."
-          />
-        </SheetGroup>
-      ) : (
-        <>
-          <div className="mt-5 flex flex-col items-center">
-            {/* Six fixed boxes are wider than a phone sheet, so they share the
-                room evenly and stop at their full size once there is space. */}
-            <div className="w-full [&>div]:w-full [&_input]:min-w-0 [&_input]:max-w-12 [&_input]:flex-1">
-              <OtpInput value={code} onChange={setCode} onEnter={verify} />
-            </div>
-            <Button
-              variant="link"
-              className="mt-4"
-              onClick={() => void request()}
-              disabled={againIn > 0 || busy}
-            >
-              {busy
-                ? "Sending…"
-                : againIn > 0
-                  ? `Resend code in ${againIn}s`
-                  : "Didn't get it? Resend code"}
-            </Button>
-          </div>
+      <SheetGroup>
+        <StaticRow
+          title="What is removed"
+          sub="Your profile, your details and everything saved to the account. Every device is signed out, including this one."
+        />
+        <StaticRow
+          title="When it becomes final"
+          sub={`About ${formatDate(closeDay)} — ${GRACE_DAYS} days from the moment the code is spent. Cancel inside that window and the account comes back exactly as it was.`}
+        />
+        <StaticRow
+          title="After that"
+          sub="Nothing can be restored — not by you, not by support. If you want a copy of anything, close this and download your data first."
+        />
+      </SheetGroup>
 
-          <Helper className="mt-1">
+      {/* The code joins the same surface once the account has actually mailed
+          one, so the whole job happens on one sheet instead of two screens. */}
+      {sent ? (
+        <div className="-mx-4 mt-2 border-t border-divider px-5 pb-2 pt-5 sm:-mx-5">
+          <Helper>
             {sentTo ? (
               <>
                 We sent a code to <span className="font-semibold text-fg">{sentTo}</span>. It works
@@ -360,8 +335,23 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
               "We sent a 6-digit code to the address you sign in with. It works once."
             )}
           </Helper>
-        </>
-      )}
+          <div className="mt-4 [&>div]:w-full [&_input]:min-w-0 [&_input]:max-w-12 [&_input]:flex-1">
+            <OtpInput value={code} onChange={setCode} onEnter={verify} />
+          </div>
+          <Button
+            variant="link"
+            className="mt-3"
+            onClick={() => void request()}
+            disabled={againIn > 0 || busy}
+          >
+            {busy
+              ? "Sending…"
+              : againIn > 0
+                ? `Resend code in ${againIn}s`
+                : "Didn't get it? Resend code"}
+          </Button>
+        </div>
+      ) : null}
 
       {error ? <Helper tone="danger">{error}</Helper> : null}
 
