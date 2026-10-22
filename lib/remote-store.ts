@@ -118,6 +118,26 @@ export function reloadSettings(): Promise<Bag> {
   return ensureSettings();
 }
 
+/**
+ * Forget the bag entirely — the sign-out door.
+ *
+ * `loaded` is per *browser session*, and the bag is one account's choices, so
+ * a module that keeps both after a sign-out hands the next person the previous
+ * one's switches: the screens render them, and a toggle they move writes an
+ * account that isn't theirs. Clearing localStorage isn't enough, because this
+ * copy never re-reads it while `loaded` stands. The next `ensureSettings`
+ * starts from the mirror of whoever is signed in now — which sign-out has
+ * already wiped.
+ */
+export function forgetSettings(): void {
+  bag = null;
+  confirmed = null;
+  loaded = false;
+  loading = null;
+  failed.clear();
+  pending.clear();
+}
+
 /** The current value for a store — server bag, then the legacy per-store slot
     (for pre-sync data / first paint), then the caller's default. */
 export function getStored<T>(key: string, fallback: T): T {

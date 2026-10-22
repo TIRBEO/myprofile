@@ -1,6 +1,7 @@
 "use client";
 
 import { ACCOUNT_EVENT, forgetAccountState } from "@/lib/account-lifecycle";
+import { forgetSettings } from "@/lib/remote-store";
 
 /* ═══════════════════════════════════════════════════════════════════
    One account's traces, gone when the account is
@@ -75,6 +76,9 @@ export function clearAccountTraces(): void {
   }
   // In-memory copies of the same data, held by the modules that read them.
   forgetAccountState();
+  // …including the settings bag, which is cached per *browser session* and
+  // would otherwise answer for the account that just left.
+  forgetSettings();
   for (const name of [ACCOUNT_EVENT, "tirbeo:profile", "tirbeo:session"]) {
     try {
       window.dispatchEvent(new Event(name));

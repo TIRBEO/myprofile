@@ -68,9 +68,13 @@ const APPEAL_TONE = {
 type RequestRow = {
   id: string;
   kind: string;
+  ref: string;
   title: string;
   detail: string | null;
   status: string | null;
+  answeredAt: string | null;
+  subject: string | null;
+  answer: { at: string; detail: string | null; title: string; text?: string | null } | null;
   at: string;
 };
 
@@ -85,12 +89,16 @@ const REQUEST_WORDS: Record<string, string> = {
   "appeal.filed": "Appeal filed",
   "account.merge": "Accounts merged",
   "data.download": "Data download",
+  "support.request": "Message to the team",
+  "support.reply": "Reply from the team",
 };
 
 const REQUEST_STATUS: Record<string, { word: string; cls: string }> = {
   pending: { word: "Building…", cls: "text-warn-text" },
   ready: { word: "Ready", cls: "text-success-text" },
   failed: { word: "Failed", cls: "text-danger-text" },
+  open: { word: "Waiting on us", cls: "text-warn-text" },
+  answered: { word: "Answered", cls: "text-success-text" },
 };
 
 function requestWords(row: RequestRow): { title: string; sub: string; right: string | null } {
@@ -104,6 +112,24 @@ function requestWords(row: RequestRow): { title: string; sub: string; right: str
       sub: [row.detail || (row.status === "pending" ? "Being prepared" : "Archive"), when]
         .filter(Boolean)
         .join(" — "),
+      right: st?.word ?? null,
+    };
+  }
+  /* A message to staff is the one row here with a two-sided life: it waits on
+     somebody else, and it has a code to quote. Both belong on the row — the
+     code because it is the only thing that survives the mail being forwarded,
+     the wait because "I sent it and never heard" is the reason this list
+     exists. */
+  if (row.kind === "support.request" || row.kind === "support.reply") {
+    const st = row.status ? REQUEST_STATUS[row.status] : null;
+    /* The words somebody wrote, not the ledger's summary of them. "Answered
+       xxxx-… by mail" is a line for the audit table; a person reading their own
+       record wants the sentence they were sent. */
+    const said = row.answer?.text?.trim();
+    const quoted = said ? `They said: ${said.length > 140 ? `${said.slice(0, 140)}…` : said}` : null;
+    return {
+      title: row.subject || row.title || title,
+      sub: [row.detail, quoted, row.ref, when].filter(Boolean).join(" — "),
       right: st?.word ?? null,
     };
   }
