@@ -13,7 +13,7 @@ import {
   SettingsPage,
   ToggleRow,
 } from "@/components/settings-shell";
-import { useTwoFactorState } from "@/lib/two-factor";
+import { isBackupCodeFull, formatBackupCode, useTwoFactorState } from "@/lib/two-factor";
 import { readKeys } from "@/lib/passkeys";
 import { ApiError } from "@/lib/api";
 import {
@@ -339,7 +339,7 @@ function ChangePasswordSheet({
   const tooShort = form.next.length > 0 && form.next.length < MIN;
   const mismatch = form.confirm.length > 0 && form.confirm !== form.next;
   const codeFull = code.every((d) => d !== "");
-  const factorReady = !needs2FA || (useBackup ? backup.trim().length > 0 : codeFull);
+  const factorReady = !needs2FA || (useBackup ? isBackupCodeFull(backup) : codeFull);
   const valid =
     (!hasPassword || form.current.length > 0) &&
     !tooShort &&
@@ -517,7 +517,7 @@ function ChangePasswordSheet({
                 value={backup}
                 onChange={(e) => {
                   setError(null);
-                  setBackup(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+                  setBackup(formatBackupCode(e.target.value));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -525,10 +525,11 @@ function ChangePasswordSheet({
                     submit();
                   }
                 }}
-                placeholder="8-character backup code"
+                placeholder="a9cc-b08c-9939-bdaa"
                 autoComplete="one-time-code"
-                maxLength={8}
-                className="font-mono tracking-[0.15em]"
+                spellCheck={false}
+                maxLength={19}
+                className="font-mono tracking-[0.12em]"
               />
             ) : (
               <OtpInput

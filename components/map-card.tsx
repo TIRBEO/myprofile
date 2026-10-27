@@ -95,7 +95,10 @@ export function MapCard({ coords, label }: { coords: [number, number]; label: st
             src={tiles}
             title={`Map showing ${label}`}
             loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
+            // The page URL carries the username, and both sides are https, so
+            // `no-referrer-when-downgrade` was handing openstreetmap.org a list
+            // of whose profile was being viewed.
+            referrerPolicy="no-referrer"
             className="map-tiles absolute inset-x-0 top-0 block w-full border-0"
             style={{ height: "calc(100% + 44px)" }}
           />

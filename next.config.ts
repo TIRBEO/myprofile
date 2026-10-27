@@ -17,6 +17,48 @@ const nextConfig: NextConfig = {
      /login is *not* redirected here — the page itself is a server-side
      redirect straight to the accounts app's sign-in (see app/login/page.tsx);
      the old interstitial screen is gone. */
+  async headers() {
+    /* The account app is where a session cookie lives, so its documents get the
+       header set. `script-src` keeps 'unsafe-inline' because the App Router
+       streams its payload through inline `__next_f` scripts and a CSP without
+       per-response nonces must allow them; the rest is written tight. `img-src`
+       and `connect-src` are wide on purpose — this screen shows avatars from
+       whoever the person connected their account to, and translates text
+       through third-party APIs, and a guessed-narrow list breaks the page
+       before it breaks the attack. */
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https://api.tirbeo.com https://*.tirbeo.com wss://*.tirbeo.com https://*.pusher.com wss://*.pusher.com https://challenges.cloudflare.com https://api.mymemory.translated.net https://translate.googleapis.com",
+      "frame-src https://www.openstreetmap.org https://challenges.cloudflare.com",
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self' https://api.tirbeo.com https://accounts.tirbeo.com",
+      "upgrade-insecure-requests",
+    ].join('; ');
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Content-Security-Policy', value: csp },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=(self), payment=(), usb=(), interest-cohort=(), autoplay=(), display-capture=()',
+          },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       { source: "/", destination: "/settings", permanent: false },

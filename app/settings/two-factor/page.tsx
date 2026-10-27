@@ -23,6 +23,8 @@ import {
   type TwoFactorState,
   confirmSetup,
   disableAuthenticator,
+  formatBackupCode,
+  isBackupCodeFull,
   startSetup,
   useTwoFactorState,
 } from "@/lib/two-factor";
@@ -263,7 +265,7 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { guard, reauthDialog } = useReauthGuard();
-  const ready = useBackup ? backup.trim().length > 0 : code.every((d) => d !== "");
+  const ready = useBackup ? isBackupCodeFull(backup) : code.every((d) => d !== "");
 
   async function confirm() {
     if (!ready || busy) return;
@@ -338,13 +340,14 @@ function TurnOffSheet({ onConfirm, onClose }: { onConfirm: () => void; onClose: 
                 value={backup}
                 onChange={(e) => {
                   setError(null);
-                  setBackup(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+                  setBackup(formatBackupCode(e.target.value));
                 }}
                 onKeyDown={(e) => e.key === "Enter" && confirm()}
-                placeholder="8-character backup code"
+                placeholder="a9cc-b08c-9939-bdaa"
                 autoComplete="one-time-code"
-                maxLength={8}
-                className="font-mono tracking-[0.15em]"
+                spellCheck={false}
+                maxLength={19}
+                className="font-mono tracking-[0.12em]"
               />
             ) : (
               <OtpInput value={code} onChange={(next) => { setError(null); setCode(next); }} onEnter={confirm} />

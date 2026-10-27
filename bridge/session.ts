@@ -5,9 +5,10 @@
  * would let anyone read or write someone else's profile by typing an id. So
  * identity comes from a credential, and only two kinds are accepted:
  *
- *   1. `Authorization: Bearer <jwt>` — verified here, locally, with the shared
- *      HS256 secret. No network call at all, which is the whole point of the
- *      split: the main server does not see these requests.
+ *   1. `Authorization: Bearer <jwt>` — the session JWT, signature-checked here
+ *      with the shared HS256 secret, then resolved through the same liveness
+ *      lookup as a cookie. Its `sid` can be signed out, and a signature alone
+ *      would keep honouring it after that.
  *   2. The `__session` cookie — opaque, and only the main server can say
  *      whether it is live. Resolved once and cached for a short window, so a
  *      page that makes four profile calls costs one hop to the main server
@@ -29,11 +30,6 @@ const COOKIE_IDENTITY_TTL_MS = 30_000;
 const COOKIE_CACHE_MAX = 500;
 
 const cookieCache = new Map<string, { userId: string; expiresAt: number }>();
-
-async function verifyBearer(token: string): Promise<string | null> {
-  const claims = await verifySessionJwt(token);
-  return claims?.sub ?? null;
-}
 
 /**
  * Proof that a `__session` cookie was signed by the account service.
@@ -80,24 +76,22 @@ async function digest(token: string): Promise<string> {
 export type CookieLookup = (cookieValue: string) => Promise<string | null>;
 
 export function createIdentityResolver(lookupCookie: CookieLookup) {
-  return async function resolveIdentity(headers: Headers): Promise<Identity | null> {
-    const header = headers.get("authorization");
-    if (header?.startsWith("Bearer ")) {
-      const userId = await verifyBearer(header.slice(7).trim());
-      /* A token that verifies but is not issued for this app is still a
-         verified identity — the signature is the proof. No fallback to the
-         cookie, or a bad bearer header silently escalates to a second subject. */
-      return userId ? { userId, via: "jwt" } : null;
-    }
+  /** Resolve either spelling of the same credential. A bearer token is the
+      session JWT, so it carries a `sid` that can be signed out — a local
+      signature check alone would keep honouring a revoked one until it
+      expired. The signature is checked first so garbage never reaches the
+      lookup, then the answer is cached exactly as a cookie's is. */
+  async function resolveCredential(
+    token: string,
+    via: Identity["via"],
+  ): Promise<Identity | null> {
+    if (!token || !(await verifySessionJwt(token))) return null;
 
-    const cookie = readCookie(headers.get("cookie"), COOKIE_NAME);
-    if (!cookie) return null;
-
-    const key = await digest(cookie);
+    const key = await digest(token);
     const hit = cookieCache.get(key);
-    if (hit && hit.expiresAt > Date.now()) return { userId: hit.userId, via: "cookie" };
+    if (hit && hit.expiresAt > Date.now()) return { userId: hit.userId, via };
 
-    const userId = await lookupCookie(cookie);
+    const userId = await lookupCookie(token);
     if (!userId) {
       cookieCache.delete(key);
       return null;
@@ -116,7 +110,21 @@ export function createIdentityResolver(lookupCookie: CookieLookup) {
       }
     }
     cookieCache.set(key, { userId, expiresAt: Date.now() + COOKIE_IDENTITY_TTL_MS });
-    return { userId, via: "cookie" };
+    return { userId, via };
+  }
+
+  return async function resolveIdentity(headers: Headers): Promise<Identity | null> {
+    const header = headers.get("authorization");
+    if (header?.startsWith("Bearer ")) {
+      /* A token that verifies but is not issued for this app is still a
+         verified identity — the signature is the proof. No fallback to the
+         cookie, or a bad bearer header silently escalates to a second subject. */
+      return resolveCredential(header.slice(7).trim(), "jwt");
+    }
+
+    const cookie = readCookie(headers.get("cookie"), COOKIE_NAME);
+    if (!cookie) return null;
+    return resolveCredential(cookie, "cookie");
   };
 }
 

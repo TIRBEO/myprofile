@@ -33,6 +33,9 @@ export type ReauthProof = {
   password?: string;
   /** 6 digits from the authenticator app — the field the service has always read. */
   code?: string;
+  /** One of the codes saved at 2FA setup, which the service accepts in place of
+      an app code — single-use, and spent by the check itself. */
+  backupCode?: string;
   /** 6 digits emailed to the sign-in address. Its own field: `code` means TOTP. */
   reauthCode?: string;
 };

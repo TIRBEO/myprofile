@@ -14,6 +14,12 @@
    ledger, a copy in their inbox, and a copy for the people on the other end,
    all three quoting the same reference. The mail-app route stays, underneath —
    some days a mailbox with the thread in it is what someone wants.
+
+   Pressing Send a second time is not a second request. While an answer is
+   outstanding the desk keeps one open record per account, so the note joins the
+   thread that exists, and words already on it are not written again. The sheet
+   says which of those happened and hands over the link to the thread, rather
+   than minting a reference nobody filed.
    ═══════════════════════════════════════════════════════════════════ */
 
 import { useState } from "react";
@@ -54,6 +60,18 @@ function factsOf(lines: (string | null | undefined | false)[], ref?: string | nu
 const asText = (facts: Fact[]): string[] =>
   facts.map((fact) => (fact.label ? `${fact.label}: ${fact.value}` : fact.value));
 
+/* The sheet promises "the rest travels with the message", so the record's facts
+   are filed with the note instead of being decoration above it. The reference is
+   the one line left out of what travels: the request is written against the
+   account, and a panel that already knows which account is asking for a code to
+   find it. The mail-app route below keeps it — there is no record behind that
+   one. */
+function filedMessage(note: string, lines: (string | null | undefined | false)[]): string {
+  const facts = asText(factsOf(lines)).filter((line) => !/^reference:\s/i.test(line));
+  if (!facts.length) return note;
+  return `${note}\n\nAbout this record\n${facts.join('\n')}`.slice(0, MAX_MESSAGE);
+}
+
 export function supportMailto(
   subject: string,
   lines: (string | null | undefined | false)[],
@@ -77,6 +95,54 @@ export function supportMailto(
     ...(note ? ["", note] : []),
   ].join("\n");
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+/** What the desk answered with: the reference, and which of the three things
+    the send actually was. `apiJson` throws on a non-2xx, so a filing that
+    reaches this shape went somewhere real. */
+type Filing = {
+  ref: string;
+  /** The note joined the thread that was already open on the account. */
+  intoThread?: boolean;
+  /** Those exact words are already the last thing on that thread, so nothing
+      was written — the send was a second press, not a second message. */
+  alreadyOnRecord?: boolean;
+};
+
+/** The toast, in the words that answer the question the person actually has:
+    did the desk get it, and do they need to press the button again? */
+function outcomeOf(filing: Filing): string {
+  if (filing.alreadyOnRecord) return `Those words are already on ${filing.ref} — it is still open.`;
+  if (filing.intoThread) return `Sent onto your open record ${filing.ref}.`;
+  return `Sent — quote ${filing.ref} if you write again`;
+}
+
+/** The same three answers, in the sentence the panel leaves up after the toast
+    has gone. */
+function sentenceOf(filing: Filing) {
+  const code = <span className="font-mono text-[14px] text-fg">{filing.ref}</span>;
+  if (filing.alreadyOnRecord) {
+    return (
+      <>
+        Nothing was added — those words are already the last thing on record {code}, and that
+        record is still open. Write something new when there is something new to say.
+      </>
+    );
+  }
+  if (filing.intoThread) {
+    return (
+      <>
+        It joined your open record {code} — the same one your first message went into, so whoever
+        reads it sees the whole conversation rather than two of them.
+      </>
+    );
+  }
+  return (
+    <>
+      Quote {code} if you write again — it opens the same record this message went into, and a
+      second message goes onto it rather than starting a new one.
+    </>
+  );
 }
 
 /** The text-pill every blocked/status page carries.
@@ -104,7 +170,7 @@ export function SupportPill({
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const [ref, setRef] = useState<string | null>(null);
+  const [filing, setFiling] = useState<Filing | null>(null);
   /** The filing did not go through. Not a dead end — the note is still here,
       and the one door that cannot fail is the mail app on this device. */
   const [unfiled, setUnfiled] = useState(false);
@@ -124,14 +190,16 @@ export function SupportPill({
   async function send() {
     setSending(true);
     try {
-      const filed = await apiJson<{ ok: boolean; ref: string }>("/api/support/request", {
+      const filed = await apiJson<Filing>("/api/support/request", {
         method: "POST",
-        body: JSON.stringify({ subject, message: trimmed }),
+        body: JSON.stringify({ subject, message: filedMessage(trimmed, lines) }),
       });
-      setRef(filed.ref);
+      setFiling(filed);
       setUnfiled(false);
+      // The record holds these words now, whatever the thread did with them.
+      setMessage("");
       haptic("success");
-      toast.success(`Sent — quote ${filed.ref} if you write again`);
+      toast.success(outcomeOf(filed));
     } catch (err) {
       haptic("error");
       trackError("support.send", err);
@@ -146,7 +214,7 @@ export function SupportPill({
 
   const close = () => {
     setOpen(false);
-    setRef(null);
+    setFiling(null);
   };
 
   return (
@@ -156,15 +224,15 @@ export function SupportPill({
       </button>
       {open && (
         <Sheet
-          title={ref ? "Sent" : "Email support"}
+          title={filing ? "On the record" : "Email support"}
           description={
-            ref
+            filing
               ? "A person reads these in the order they arrive, and the answer comes to the address on your account."
               : "Only the box below is yours to write — the rest travels with the message."
           }
           onClose={close}
           footer={
-            ref ? (
+            filing ? (
               <Button variant="primary" className="btn flex-1 max-sm:w-full" onClick={close}>
                 Done
               </Button>
@@ -180,11 +248,16 @@ export function SupportPill({
             )
           }
         >
-          {ref ? (
-            <p className="text-[15px] leading-relaxed text-text-2">
-              Quote <span className="font-mono text-[14px] text-fg">{ref}</span> if you write
-              again — it opens the same record this message went into.
-            </p>
+          {filing ? (
+            <div className="space-y-3">
+              <p className="text-[15px] leading-relaxed text-text-2">{sentenceOf(filing)}</p>
+              <a
+                href={`/support/thread/${encodeURIComponent(filing.ref)}`}
+                className="btn btn-secondary max-sm:w-full"
+              >
+                Open the conversation
+              </a>
+            </div>
           ) : (
             <>
               <div className="-mx-4 sm:-mx-5">

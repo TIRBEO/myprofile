@@ -27,6 +27,7 @@ import { AvatarEditor } from "@/components/avatar-editor";
 import { ProviderGlyph } from "@/components/provider-glyph";
 import { Skeleton, Spinner } from "@/components/ig-ui";
 import { haptic } from "@/lib/haptics";
+import { safeRedirectTarget } from "@/lib/redirect-target";
 import { emailDomain, trackError, trackEvent, withRef } from "@/lib/telemetry";
 
 function cn(...parts: (string | false | null | undefined)[]) {
@@ -680,8 +681,10 @@ function LegalModal({kind, onClose}: {kind: LegalKind; onClose: () => void}) {
 
 function Complete() {
   const params = useSearchParams();
-  const signupToken = params.get("signup");
-  const consentToken = params.get("consent");
+  /* Read once, on the first render. The URL is then cleared below, and these
+     closures keep the values the flow was actually started with. */
+  const [signupToken] = useState(() => params.get("signup"));
+  const [consentToken] = useState(() => params.get("consent"));
   const finishing = params.get("finish") === "1";
   const redirectTo = params.get("redirect_to");
 
@@ -699,6 +702,19 @@ function Complete() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
+
+  /* A signup/consent token in the address bar is that token living in four
+     places at once: browser history, the Referrer of whatever page opens next,
+     every extension that can read a URL, and the shoulder of anyone looking at
+     the screen. The page has the value in state from the first render, so the
+     address stops carrying it. */
+  useEffect(() => {
+    if (!signupToken && !consentToken) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("signup");
+    url.searchParams.delete("consent");
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, [signupToken, consentToken]);
 
   /* The handle is checked against the live account table the moment the typing
      stops, so a taken name is caught here rather than after the person has
@@ -798,7 +814,7 @@ function Complete() {
     };
   }, [signupToken, username]);
 
-  const finishTarget = redirectTo || "/settings";
+  const finishTarget = safeRedirectTarget(redirectTo, "/settings");
   const providerName = PROVIDER_LABELS[pending?.provider ?? ""] ?? "your provider";
 
   function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -908,7 +924,7 @@ function Complete() {
         detail: signupToken ? "signup" : "consent",
         metadata: authMeta(),
       });
-      window.location.href = d.redirect_to || finishTarget;
+      window.location.href = safeRedirectTarget(d.redirect_to, finishTarget);
     } catch (err) {
       trackError("oauth-complete.submit", err);
       trackEvent("auth.login_failed", {
@@ -1080,7 +1096,7 @@ function Complete() {
               className="mt-4"
               onClick={() => {
                 haptic("medium");
-                window.location.href = pending.mergeUrl!;
+                window.location.href = safeRedirectTarget(pending.mergeUrl, finishTarget);
               }}
             >
               Merge {providerName} into this account

@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SignJWT } from "jose";
 
-import { verifySessionJwt } from "./session";
+import { SESSION_COOKIE_NAME } from "./config";
+import { createIdentityResolver, verifySessionJwt } from "./session";
 
 const SECRET = "unit-test-secret-not-a-real-one";
 
@@ -60,5 +61,54 @@ describe("verifySessionJwt", () => {
     delete process.env.JWT_SECRET;
     expect(await verifySessionJwt(token)).toBeNull();
     if (had !== undefined) process.env.JWT_SECRET = had;
+  });
+});
+
+/* A bearer token here is the session JWT, so it carries a `sid` somebody can
+   sign out. Checking only the signature would keep honouring it after that. */
+describe("createIdentityResolver", () => {
+  function headers(init: Record<string, string>) {
+    return new Headers(init);
+  }
+
+  it("refuses a bearer whose session no longer exists", async () => {
+    process.env.JWT_SECRET = SECRET;
+    const revoked = await sign({ sub: "user-1", sid: "sid-revoked" });
+    const resolve = createIdentityResolver(vi.fn(async () => null));
+    expect(await resolve(headers({ authorization: `Bearer ${revoked}` }))).toBeNull();
+  });
+
+  it("names the subject a live bearer resolves to", async () => {
+    process.env.JWT_SECRET = SECRET;
+    const token = await sign({ sub: "user-2", sid: "sid-live" });
+    const resolve = createIdentityResolver(vi.fn(async () => "user-2"));
+    expect(await resolve(headers({ authorization: `Bearer ${token}` }))).toEqual({
+      userId: "user-2",
+      via: "jwt",
+    });
+  });
+
+  it("does not spend a lookup on a token that fails the signature", async () => {
+    process.env.JWT_SECRET = SECRET;
+    const lookup = vi.fn(async () => "someone");
+    const resolve = createIdentityResolver(lookup);
+    const forged = await sign({ sub: "user-3", sid: "sid-forged" }, "not-the-secret");
+    expect(await resolve(headers({ authorization: `Bearer ${forged}` }))).toBeNull();
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it("resolves the same credential through the cookie header", async () => {
+    process.env.JWT_SECRET = SECRET;
+    const token = await sign({ sub: "user-4", sid: "sid-cookie" });
+    const resolve = createIdentityResolver(vi.fn(async () => "user-4"));
+    expect(
+      await resolve(headers({ cookie: `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}` })),
+    ).toEqual({ userId: "user-4", via: "cookie" });
+  });
+
+  it("ignores a header the browser claims about who it is", async () => {
+    process.env.JWT_SECRET = SECRET;
+    const resolve = createIdentityResolver(vi.fn(async () => null));
+    expect(await resolve(headers({ "x-user-id": "user-5" }))).toBeNull();
   });
 });

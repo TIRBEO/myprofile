@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { OtpInput } from "@/components/otp-input";
 import { Button, Sheet, SheetActions } from "@/components/ig-ui";
-import { Group, Helper, PageSkeleton, PillButton, PillStack, SettingsPage, SheetGroup, StaticRow } from "@/components/settings-shell";
+import { Group, Helper, PageSkeleton, PillButton, PillStack, SettingsPage, StaticRow } from "@/components/settings-shell";
 import { GRACE_DAYS, countdownLabel } from "@/lib/delete-account";
 import { apiCancelDeletion, apiRequestDeletionCode, apiVerifyDeletion, useAccountState } from "@/lib/account-lifecycle";
 import { useReauthGuard } from "@/components/reauth-sheet";
@@ -18,9 +18,10 @@ import { haptic } from "@/lib/haptics";
 /* ═══════════════════════════════════════════════════════════════════
    Delete account
 
-   Four short sentences about what deleting means, the date it becomes
-   final, and one red button. The button doesn't delete anything — it opens
-   the last step, which is the emailed code, as a sheet on top of this page.
+   Three sentences about what deleting means, the date it becomes final, and
+   one red button. The button doesn't delete anything — it opens the last two
+   steps, the warning and then the emailed code, as a sheet on top of this
+   page.
 
    It used to be a page of its own, and that was wrong twice over. An address
    whose meaning depends on a step you may not have taken can be typed cold,
@@ -113,23 +114,19 @@ export default function DeleteAccountPage() {
       <Helper lead>
         Deleting your account is permanent. Your profile, your details and everything saved to it
         are removed, and every device is signed out. You&apos;ll have {GRACE_DAYS} days to change
-        your mind — after {formatDate(closeDay)}, nothing can be restored, not even by support.
-      </Helper>
-
-      <Helper className="mt-4">
-        Only want a break? Deactivating keeps everything and you can come back any time. Taking a
-        copy first is easy too:{" "}
+        your mind — after {formatDate(closeDay)}, nothing can be restored, not even by support. If
+        you want a copy of anything,{' '}
         <Link href="/settings/download-data" className="font-semibold underline">
           download your data
-        </Link>
-        .
+        </Link>{" "}
+        first.
       </Helper>
 
       <PillStack>
         <PillButton
           tone="danger"
           label="Delete my account"
-          sub={`Starts the ${GRACE_DAYS}-day window. The last steps are a code to your sign-in email and a confirmation it's you.`}
+          sub={`Starts the ${GRACE_DAYS}-day window. The last step is a code to your sign-in email.`}
           onClick={() => {
             haptic("heavy");
             setDeletionOpen(true);
@@ -156,19 +153,24 @@ export default function DeleteAccountPage() {
   );
 }
 
-/* ── The last step ────────────────────────────────────────────────
-   One sheet. The warning is everything the button's one line couldn't hold,
-   and the code joins it underneath as soon as one has actually been asked
-   for — no second screen, and nothing is deleted by reading. Going back is
-   just closing the sheet; the code that was already sent stays sent — asking
-   for a second one inside the wait is the account's problem, not this
-   sheet's.
+/* ── The last two steps ───────────────────────────────────────────
+   One sheet, two screens. The first is the warning and nothing else; the
+   second is the code, and it only exists once the account has actually
+   mailed one. Showing the boxes beside the warning meant six empty squares
+   for digits that were still in nobody's inbox, and a page of text repeated
+   behind a scrim where it had just been read.
+
+   Going back is the Back button, or closing the sheet; the code that was
+   already sent stays sent — asking for a second one inside the wait is the
+   account's problem, not this sheet's.
    ───────────────────────────────────────────────────────────────── */
 
 function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const { guard, reauthDialog } = useReauthGuard();
+  /** Which of the sheet's two screens is up. */
+  const [stage, setStage] = useState<"warn" | "code">("warn");
   const [sent, setSent] = useState(false);
   const [code, setCode] = useState<string[]>(BLANK_CODE);
   const [againIn, setAgainIn] = useState(0);
@@ -212,6 +214,7 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
       if (!live.current) return false;
       setSentTo(reply.email || null);
       setSent(true);
+      setStage("code");
       setAgainIn(CODE_SECONDS);
       trackEvent("settings.deletion_code_requested");
       toast.info(reply.message);
@@ -275,67 +278,61 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
     }
   }
 
+  const onCode = stage === "code";
+  const confirmLabel = busy
+    ? onCode
+      ? "Checking the code…"
+      : "Sending the code…"
+    : onCode
+      ? "Yes, delete my account"
+      : sent
+        ? "Continue"
+        : "Email me the code";
+
   return (
     <Sheet
-      title="Before you go"
-      description="Nothing is deleted by opening this, and nothing is deleted by the button at the bottom of it. Read these three lines first."
+      title={onCode ? "Enter the code" : "Before you go"}
+      description={
+        onCode ? (
+          sentTo ? (
+            <>
+              We sent a 6-digit code to{" "}
+              <span className="font-semibold text-fg">{sentTo}</span>. It works once.
+            </>
+          ) : (
+            "We sent a 6-digit code to the address you sign in with. It works once."
+          )
+        ) : (
+          "Nothing is deleted by opening this, or by the button at the bottom of it."
+        )
+      }
       onClose={onClose}
       footer={
         <SheetActions
-          cancelLabel="Not now"
-          onCancel={onClose}
+          cancelLabel={onCode ? "Back" : "Not now"}
+          onCancel={() => (onCode ? setStage("warn") : onClose())}
           onConfirm={() => {
-            if (sent) void verify();
-            else {
-              haptic("heavy");
-              void request();
+            if (onCode) {
+              void verify();
+              return;
             }
+            if (sent) {
+              setStage("code");
+              return;
+            }
+            haptic("heavy");
+            void request();
           }}
-          confirmLabel={
-            busy
-              ? sent
-                ? "Checking the code…"
-                : "Sending the code…"
-              : sent
-                ? "Yes, delete my account"
-                : "Email me the code"
-          }
+          confirmLabel={confirmLabel}
           confirmVariant="danger"
-          disabled={sent && !codeFull}
+          disabled={onCode && !codeFull}
           loading={busy}
         />
       }
     >
-      <SheetGroup>
-        <StaticRow
-          title="What is removed"
-          sub="Your profile, your details and everything saved to the account. Every device is signed out, including this one."
-        />
-        <StaticRow
-          title="When it becomes final"
-          sub={`About ${formatDate(closeDay)} — ${GRACE_DAYS} days from the moment the code is spent. Cancel inside that window and the account comes back exactly as it was.`}
-        />
-        <StaticRow
-          title="After that"
-          sub="Nothing can be restored — not by you, not by support. If you want a copy of anything, close this and download your data first."
-        />
-      </SheetGroup>
-
-      {/* The code joins the same surface once the account has actually mailed
-          one, so the whole job happens on one sheet instead of two screens. */}
-      {sent ? (
-        <div className="-mx-4 mt-2 border-t border-divider px-5 pb-2 pt-5 sm:-mx-5">
-          <Helper>
-            {sentTo ? (
-              <>
-                We sent a code to <span className="font-semibold text-fg">{sentTo}</span>. It works
-                once.
-              </>
-            ) : (
-              "We sent a 6-digit code to the address you sign in with. It works once."
-            )}
-          </Helper>
-          <div className="mt-4 [&>div]:w-full [&_input]:min-w-0 [&_input]:max-w-12 [&_input]:flex-1">
+      {onCode ? (
+        <>
+          <div className="[&>div]:w-full [&_input]:min-w-0 [&_input]:max-w-12 [&_input]:flex-1">
             <OtpInput value={code} onChange={setCode} onEnter={verify} />
           </div>
           <Button
@@ -350,8 +347,19 @@ function DeletionSheet({ closeDay, onClose }: { closeDay: number; onClose: () =>
                 ? `Resend code in ${againIn}s`
                 : "Didn't get it? Resend code"}
           </Button>
-        </div>
-      ) : null}
+        </>
+      ) : (
+        <Group>
+          <StaticRow
+            title="What is removed"
+            sub="Your profile, your details and everything saved to the account. Every device is signed out, including this one."
+          />
+          <StaticRow
+            title="When it becomes final"
+            sub={`About ${formatDate(closeDay)} — ${GRACE_DAYS} days from the moment the code is spent. Cancel inside that window and the account comes back exactly as it was; after it, nothing can be restored, not by support.`}
+          />
+        </Group>
+      )}
 
       {error ? <Helper tone="danger">{error}</Helper> : null}
 

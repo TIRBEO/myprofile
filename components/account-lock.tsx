@@ -371,7 +371,7 @@ function Deactivated({ lock }: { lock: Lock }) {
           secondary={[
             <SupportPill
               refCode={getAccountState()?.refCode}
-              subject={`Paused account — ref ${getAccountState()?.refCode ?? "none"}`}
+              subject="Paused account"
               lines={[
                 "Account state: paused (self-deactivated)",
                 record ? `Paused on: ${formatStamp(record.at)}` : null,
@@ -471,7 +471,7 @@ function Deletion({ lock }: { lock: Lock }) {
       actions={
         <StatementActions
           primary={<Full label={busy ? "Cancelling…" : "Keep my account"} busy={busy} onClick={keepIt} />}
-          secondary={[<SupportPill key="support" refCode={refCode} subject={`Scheduled deletion — ref ${refCode ?? "none"}`} lines={supportLines} />]}
+          secondary={[<SupportPill key="support" refCode={refCode} subject="Scheduled deletion" lines={supportLines} />]}
           quiet={<SignOutPill />}
         />
       }
@@ -583,7 +583,7 @@ function Restricted({ lock }: { lock: Lock }) {
               ),
               <SupportPill
                 refCode={getAccountState()?.refCode}
-                subject={`Account decision — ref ${getAccountState()?.refCode ?? "none"}`}
+                subject="Account decision"
                 lines={[
                   `Decision: ${item.title}`,
                   item.guideline ? `Rule applied: ${item.guideline}` : null,
@@ -713,7 +713,7 @@ function Blocked({ lock }: { lock: Lock }) {
               ) : null
             }
             secondary={[
-              <SupportPill key="support" refCode={refCode} subject={`Closed account — ref ${refCode ?? "none"}`} lines={supportLines} />,
+              <SupportPill key="support" refCode={refCode} subject="Closed account" lines={supportLines} />,
             ]}
             quiet={<SignOutPill />}
           />

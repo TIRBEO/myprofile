@@ -24,6 +24,18 @@ import { type ReauthProof } from "@/lib/reauth";
 
 export const CODE_COUNT = 8;
 
+/** A backup code as the account service mints it: sixteen hex characters in four
+ *  groups, `a9cc-b08c-9939-bdaa`. The service lowercases a code and drops its
+ *  dashes before hashing it, so the groups exist only to be read and copied —
+ *  and a field that refused them cut a code to its first four characters and
+ *  then reported a good code as invalid. */
+export const formatBackupCode = (raw: string): string =>
+  raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16).replace(/(.{4})(?=.)/g, "$1-");
+
+/** Ready to send: sixteen characters, however the dashes fell out. */
+export const isBackupCodeFull = (value: string): boolean =>
+  value.replace(/[^A-Z0-9]/gi, "").length === 16;
+
 /** What the account service allows: see backupCodesRegenerateHandler. */
 export const MINTS_PER_HOUR = 3;
 

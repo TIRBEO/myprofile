@@ -18,6 +18,7 @@
 
 import { NextResponse } from "next/server";
 import { loadConfig } from "@/bridge/config";
+import { refuseCrossSiteWrite } from "@/lib/same-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,12 @@ async function forward(
   const { path } = await context.params;
   const slug = (path ?? []).filter(Boolean);
   if (slug.length === 0 || !permitted(slug)) return notFound();
+
+  // Writes only leave this origin when this app's own screens asked for them.
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    const refusal = refuseCrossSiteWrite(request);
+    if (refusal) return refusal;
+  }
 
   /* /api/profile is served locally (direct Redis/DB read + token write, ETag
      304s), not forwarded to the brain — it lives in this module so the whole

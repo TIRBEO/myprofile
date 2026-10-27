@@ -256,17 +256,17 @@ export default function EmailPreferencesPage() {
           label="Account and security emails"
         />
         <ToggleRow
-          title="Product updates"
-          sub="New features, improvements and tips to get the most out of Tirbeo."
+          title="Product updates — email"
+          sub="Emails about new features, improvements and tips. This switch is the mail only — notices in your bell arrive either way."
           on={prefs.productEmail}
           disabled={pending || paused}
           busy={pending}
           blockedHint={rowBlocked()}
           onChange={async (next) => {
             if (await save({ productEmail: next }))
-              toast.toggled(next ? "Product updates on" : "Product updates off", next);
+              toast.toggled(next ? "Product update emails on" : "Product update emails off", next);
           }}
-          label="Product updates"
+          label="Product updates — email"
         />
         <ToggleRow
           title="Offers and promotions"
