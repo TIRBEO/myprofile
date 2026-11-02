@@ -1,15 +1,16 @@
 "use client";
+import { ChevronRight, LogOut, SearchX } from '@tirbeo/design-tokens';
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, SearchX } from "lucide-react";
-import { Button, SearchField, Spinner } from "@/components/ig-ui";
+
+import { Button, SearchField, Spinner, cn } from "@/components/ig-ui";
 import { SignOutSheet } from "@/components/settings-layout";
 import { ActionRow, Group, Helper, LinkRow, SettingsPage } from "@/components/settings-shell";
 import { ProfilePicture } from "@/components/profile-picture";
 import { RowsSkeleton } from "@/components/page-loading";
-import { NAV_GROUPS, searchNav } from "@/lib/nav";
+import { NAV_GROUPS, searchNav, tintFor } from "@/lib/nav";
 import { LANGUAGE_KEY, useLanguage } from "@/lib/language";
 import { THEME_KEY } from "@/lib/theme";
 import { englishFor, useT } from "@/lib/i18n";
@@ -88,6 +89,16 @@ export default function SettingsIndex() {
      is the store's own; the banner is its voice. */
   const [stuck, setStuck] = useState<string[] | null>(null);
   const [retrying, setRetrying] = useState(false);
+  /* The compact title only earns its place once the large one has scrolled
+     under the bar — the same handoff the rest of the settings pages make. */
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setCollapsed(window.scrollY > 20);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia(WIDE_QUERY);
@@ -177,18 +188,29 @@ export default function SettingsIndex() {
   return (
     <SettingsPage>
       <div className="-mx-4 sm:-mx-6">
-        <div className="glass-bar sticky top-0 z-30 -mt-4 border-b border-hairline py-2.5 sm:-mt-9">
-          <h1 className="text-center text-[16px] font-semibold tracking-[-0.01em]">{t("Settings")}</h1>
+        <div className="glass-bar sticky top-0 z-30 -mt-3 border-b border-hairline py-2.5 sm:-mt-8">
+          <span
+            aria-hidden
+            className={cn(
+              "block text-center text-[17px] font-semibold tracking-[-0.02em] transition-opacity duration-200 motion-reduce:transition-none",
+              collapsed ? "opacity-100" : "opacity-0",
+            )}
+          >
+            {t("Settings")}
+          </span>
+        </div>
+
+        <div className="px-4 pt-1 sm:px-6">
+          <h1 className="hig-large-title px-1 pb-4">{t("Settings")}</h1>
         </div>
 
         {/* Your account, first — the settings screen belongs to somebody, and
             which somebody is the first thing a phone app says. */}
         <AccountHeader profile={profile} />
 
-        <div className="px-4 pt-3.5 pb-1 sm:px-6">
-          {/* The same pill the rest of the app searches from, at the height a
-              thumb actually aims at. */}
-          <div className="[&_input]:h-12 [&_input]:rounded-full [&_input]:border-border [&_input]:bg-field">
+        <div className="px-4 pt-3 pb-1 sm:px-6">
+          {/* HIG search field: a quiet inset fill, not a floating pill. */}
+          <div className="[&_input]:h-11 [&_input]:rounded-[10px] [&_input]:border-transparent [&_input]:bg-fill">
             <SearchField value={query} onChange={setQuery} placeholder={t("Search settings")} />
           </div>
         </div>
@@ -247,6 +269,7 @@ export default function SettingsIndex() {
                     key={item.href}
                     href={item.href}
                     compact
+                    tint={tintFor(item.href)}
                     icon={<item.icon strokeWidth={1.9} />}
                     title={t(item.label)}
                     sub={item.description}
@@ -279,6 +302,7 @@ export default function SettingsIndex() {
                         key={item.href}
                         href={item.href}
                         compact
+                        tint={tintFor(item.href)}
                         icon={<item.icon strokeWidth={1.9} />}
                         title={t(item.label)}
                         sub={item.description}
@@ -318,11 +342,12 @@ function AccountHeader({ profile }: { profile: ReturnType<typeof useProfile> }) 
   const t = useT();
   if (!profile) {
     return (
-      <div className="mx-4 mt-4 flex items-center gap-3.5 rounded-xl border border-border bg-card px-4 py-4 sm:mx-6" aria-busy="true">
-        <span className="skeleton size-[58px] shrink-0 rounded-full" />
+      <div className="mx-4 mt-3 flex items-center gap-4 rounded-[16px] bg-card px-5 py-5 sm:mx-6" aria-busy="true">
+        <span className="skeleton size-[62px] shrink-0 rounded-full" />
         <span className="min-w-0 flex-1 space-y-2">
-          <span className="skeleton block h-[16px] w-[46%] rounded-full" />
-          <span className="skeleton block h-[13px] w-[30%] rounded-full" />
+          <span className="skeleton block h-[11px] w-[32%] rounded-full" />
+          <span className="skeleton block h-[19px] w-[52%] rounded-full" />
+          <span className="skeleton block h-[13px] w-[40%] rounded-full" />
         </span>
       </div>
     );
@@ -332,18 +357,21 @@ function AccountHeader({ profile }: { profile: ReturnType<typeof useProfile> }) 
     <Link
       href="/settings/edit-profile"
       onClick={() => haptic("light")}
-      className="mx-4 mt-4 flex items-center gap-3.5 rounded-xl border border-border bg-card px-4 py-4 outline-none transition-colors hover:border-border-strong hover:bg-field-focus active:bg-field-focus sm:mx-6"
+      className="mx-4 mt-3 flex items-center gap-4 rounded-[16px] bg-card px-5 py-5 outline-none transition-colors hover:bg-hover active:bg-field-focus sm:mx-6"
     >
-      <ProfilePicture photo={profile.photo} seed={profile.username || profile.email} name={name} size={58} />
+      <ProfilePicture photo={profile.photo} seed={profile.username || profile.email} name={name} size={62} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[16px] font-semibold tracking-[-0.01em]">{name}</span>
-        {profile.username ? (
-          <span className="mt-0.5 block truncate text-[13.5px] text-muted">@{profile.username}</span>
-        ) : (
-          <span className="mt-0.5 block truncate text-[13.5px] text-muted">{profile.email}</span>
-        )}
+        <span className="block truncate text-[13px] font-medium tracking-[-0.004em] text-text-3">
+          {t("Tirbeo Account")}
+        </span>
+        <span className="mt-0.5 block truncate text-[20px] leading-[1.2] font-semibold tracking-[-0.02em]">
+          {name}
+        </span>
+        <span className="mt-0.5 block truncate text-[15px] leading-snug text-text-3">
+          {profile.username ? `@${profile.username}` : profile.email}
+        </span>
       </span>
-      <span className="shrink-0 text-[13px] font-semibold text-accent-text">{t("Edit")}</span>
+      <ChevronRight className="size-5 shrink-0 text-text-4" strokeWidth={2} />
     </Link>
   );
 }

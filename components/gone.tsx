@@ -1,4 +1,5 @@
 "use client";
+import { Compass } from '@tirbeo/design-tokens';
 
 /* ═══════════════════════════════════════════════════════════════════
    An address that isn't a page
@@ -14,7 +15,7 @@
    answer to a wrong address in that state.
    ═══════════════════════════════════════════════════════════════════ */
 
-import { Compass } from "lucide-react";
+
 import { PillButton, PillStack, SettingsPage } from "@/components/settings-shell";
 import { Prose, StatementHead, StatementMark } from "@/components/statement";
 

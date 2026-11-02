@@ -1,4 +1,5 @@
 "use client";
+import { Download, Eye, EyeOff } from '@tirbeo/design-tokens';
 
 import { useCallback, useEffect, useState } from "react";
 import { Button, IconButton, Input, Sheet, SheetActions, cn } from "@/components/ig-ui";
@@ -28,7 +29,7 @@ import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
 import { getStaySignedIn, setStaySignedIn } from "@/lib/session";
 import { ensureSettings, subscribeSettings } from "@/lib/remote-store";
-import { Download, Eye, EyeOff } from "lucide-react";
+
 
 /* ═══════════════════════════════════════════════════════════════════
    Password and security — the hub for the rest of the section.

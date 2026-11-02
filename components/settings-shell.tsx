@@ -1,4 +1,5 @@
 "use client";
+import { ChevronLeft, ChevronRight, Lock } from '@tirbeo/design-tokens';
 
 /* ═══════════════════════════════════════════════════════════════════
    Settings shell
@@ -14,9 +15,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
-import { cn, PILL_BASE, PILL_DISABLED, PILL_FILL, Spinner } from "@/components/ig-ui";
+import { useEffect, useState, type ReactNode } from "react";
+
+import { cn, GlyphTile, PILL_BASE, PILL_DISABLED, PILL_FILL, Spinner } from "@/components/ig-ui";
 import { navItem, parentHref, titleFor } from "@/lib/nav";
 import { guidesFor } from "@/lib/docs-links";
 import { useT } from "@/lib/i18n";
@@ -27,13 +28,14 @@ import { haptic } from "@/lib/haptics";
     Tall on purpose: a row is a title and its explanation, and the line has to
     have room for both without the control at the end crowding the words. */
 export const ROW =
- "flex min-h-[48px] w-full items-center gap-4 px-4 py-[15px] text-left outline-none transition-colors sm:px-5 sm:py-[17px]";
+ "flex min-h-[52px] w-full items-center gap-4 px-4 py-[13px] text-left outline-none transition-colors sm:px-5 sm:py-[15px]";
 export const LIVE = "hover:bg-hover active:bg-field-focus";
-/** The landing's row anatomy: the glyph sits in a 30px tinted rounded square,
-    so a list reads as a column of icons rather than a column of loose marks.
-    The tint is `systemFill`; the glyph's own colour is chosen per row (muted,
-    accent, danger) by the row primitives below. */
-export const CHIP = "flex size-[30px] shrink-0 items-center justify-center rounded-[8px] bg-fill text-text-4 [&_svg]:size-[17px]";
+/** The HIG row anatomy: the glyph sits in a 29px rounded square, so a list
+    reads as a column of destinations rather than a column of loose marks.
+    `tint` gives it a system colour with a white glyph, the way Settings does;
+    without one it stays `systemFill`, and the glyph's own colour is chosen
+    per row (muted, accent, danger) by the row primitives below. */
+export const CHIP = "flex size-[29px] shrink-0 items-center justify-center rounded-[7px] bg-fill text-text-4 [&_svg]:size-[17px]";
 /** The row's own line: 17px, Apple's body and headline size, and the one size
     every row shares — a title is a title whether it opens a page, holds a
     switch or just reports a fact. It wraps rather than clipping, because the
@@ -82,10 +84,21 @@ export function SettingsPage({
      arrangement at every width. */
   const inBar = Boolean(title) && !crumb;
 
+  /* iOS keeps the large title at the top of the page and fades the compact
+     one into the navigation bar once the page starts moving. The page heading
+     below stays the real <h1>; the bar copy is a visual echo. */
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setCollapsed(window.scrollY > 20);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [pathname]);
+
   return (
     <div
       className={cn(
-        "mx-auto w-full px-4 pt-4 pb-16 sm:px-6 sm:pt-9",
+        "mx-auto w-full px-4 pt-3 pb-16 sm:px-6 sm:pt-8",
         wide ? "max-w-[1040px]" : "max-w-[720px]",
       )}
     >
@@ -115,9 +128,15 @@ export function SettingsPage({
           ) : (
             <span aria-hidden className="size-10 shrink-0" />
           )}
-          <h1 className="min-w-0 flex-1 truncate text-center text-[16px] font-semibold tracking-[-0.01em]">
+          <span
+            aria-hidden
+            className={cn(
+              "min-w-0 flex-1 truncate text-center text-[17px] font-semibold tracking-[-0.02em] transition-opacity duration-200 motion-reduce:transition-none",
+              collapsed ? "opacity-100" : "opacity-0",
+            )}
+          >
             {t(title!)}
-          </h1>
+          </span>
           <span aria-hidden className="size-10 shrink-0" />
         </div>
       ) : null}
@@ -125,9 +144,8 @@ export function SettingsPage({
       {title ? (
         <h1
           className={cn(
-            "mb-5 text-[30px] leading-[1.12] font-bold tracking-[-0.03em] sm:mb-6 sm:text-[34px]",
-            inBar && "hidden lg:block",
-            !crumb && back && "mt-1.5",
+            "hig-large-title mb-5 sm:mb-6",
+            !crumb && back && "mt-1",
           )}
         >
           {t(title)}
@@ -398,6 +416,7 @@ export function SwitchVisual({ on }: { on: boolean }) {
 
 export function ToggleRow({
   icon,
+  tint,
   title,
   sub,
   on,
@@ -409,6 +428,7 @@ export function ToggleRow({
   busy,
 }: {
   icon?: ReactNode;
+  tint?: string;
   title: string;
   sub: string;
   on: boolean;
@@ -440,7 +460,7 @@ export function ToggleRow({
       }}
       className={cn(ROW, disabled ? "cursor-not-allowed opacity-55" : LIVE)}
     >
-      {icon ? <span className={CHIP}>{icon}</span> : null}
+      {icon ? <GlyphTile tint={tint}>{icon}</GlyphTile> : null}
       <span className="min-w-0 flex-1">
         {/* Same 17px line as TITLE. A switch row whose label sits two points
             smaller than the link row above it is the kind of drift that only
@@ -501,6 +521,7 @@ export function Panel({
 export function LinkRow({
   href,
   icon,
+  tint,
   title,
   sub,
   right,
@@ -512,6 +533,7 @@ export function LinkRow({
 }: {
   href: string;
   icon?: ReactNode;
+  tint?: string;
   title: string;
   sub?: string;
   /** Short value shown before the chevron — a count, a name, a date. */
@@ -530,7 +552,12 @@ export function LinkRow({
   const inner = (
     <>
       {icon ? (
-        <span className={cn(CHIP, danger && "text-danger-text", accent && !danger && "text-accent-text")}>{icon}</span>
+        <GlyphTile
+          tint={tint}
+          className={cn(!tint && danger && "text-danger-text", !tint && accent && !danger && "text-accent-text")}
+        >
+          {icon}
+        </GlyphTile>
       ) : null}
       <span className="min-w-0 flex-1">
         {/* Compact means tighter padding, not smaller words: `cn` is plain
@@ -574,6 +601,7 @@ export function LinkRow({
     before you read the sub-line. */
 export function ActionRow({
   icon,
+  tint,
   title,
   sub,
   onClick,
@@ -585,6 +613,7 @@ export function ActionRow({
   opens,
 }: {
   icon?: ReactNode;
+  tint?: string;
   title: string;
   sub?: string;
   onClick: () => void;
@@ -610,9 +639,12 @@ export function ActionRow({
       )}
     >
       {icon ? (
-        <span className={cn(CHIP, danger && "text-danger-text", accent && !danger && "text-accent-text")}>
+        <GlyphTile
+          tint={tint}
+          className={cn(!tint && danger && "text-danger-text", !tint && accent && !danger && "text-accent-text")}
+        >
           {icon}
-        </span>
+        </GlyphTile>
       ) : null}
       <span className="min-w-0 flex-1">
         <span className={cn(TITLE, danger && "text-danger-text", accent && !danger && "text-accent-text")}>

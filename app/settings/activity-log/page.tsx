@@ -1,8 +1,9 @@
 "use client";
+import { Check, MapPin } from '@tirbeo/design-tokens';
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, MapPin } from "lucide-react";
+
 import { cn } from "@/components/ig-ui";
 import { Group, Helper, LinkRow, PageSkeleton, SettingsPage } from "@/components/settings-shell";
 import { LoadFailed } from "@/components/page-loading";

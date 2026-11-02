@@ -1,23 +1,5 @@
-import type { LucideIcon } from "lucide-react";
+import { LucideIcon, Activity, CircleAlert, CircleHelp, Download, Fingerprint, Globe, History, KeyRound, Mail, Monitor, Palette, Plug, ShieldCheck, SlidersHorizontal, Trash2, UserRound } from '@tirbeo/design-tokens';
 import { ARTICLES } from "@/lib/docs";
-import {
-  Activity,
-  CircleAlert,
-  CircleHelp,
-  Download,
-  Fingerprint,
-  Globe,
-  History,
-  KeyRound,
-  Mail,
-  Monitor,
-  Palette,
-  Plug,
-  ShieldCheck,
-  SlidersHorizontal,
-  Trash2,
-  UserRound,
-} from "lucide-react";
 
 /* ── Navigation model ────────────────────────────────────────────
    Single source of truth for the app shell: the desktop rail, the
@@ -200,6 +182,14 @@ export const NAV_GROUPS: NavGroup[] = [
 ];
 
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
+
+/** Icons are monochrome: every destination shares one neutral tile so the rail
+    reads as a system surface, not a palette. The per-destination tint map is gone;
+    `tintFor` now always returns undefined and GlyphTile falls back to its neutral
+    fill. Kept as a function so existing call sites stay valid. */
+export function tintFor(_href: string): string | undefined {
+  return undefined;
+}
 
 const BY_HREF = new Map(NAV_ITEMS.map((i) => [i.href, i]));
 

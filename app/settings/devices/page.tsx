@@ -1,4 +1,5 @@
 "use client";
+import { LogOut } from '@tirbeo/design-tokens';
 
 import { useEffect, useState } from "react";
 import {
@@ -16,7 +17,7 @@ import { type Device, type SessionEvent, readDevices, readLog } from "@/lib/devi
 import { ago, formatStamp } from "@/lib/dates";
 import { trackError } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
-import { LogOut } from "lucide-react";
+
 
 /* ═══════════════════════════════════════════════════════════════════
    Devices and sessions — modelled on Instagram's login activity.

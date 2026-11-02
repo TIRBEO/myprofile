@@ -1,4 +1,5 @@
 "use client";
+import { Fingerprint, KeyRound, LogIn, LogOut, ShieldAlert, ShieldCheck } from '@tirbeo/design-tokens';
 
 /* ═══════════════════════════════════════════════════════════════════
    The pictures a sign-in is known by
@@ -11,7 +12,7 @@
 
 import type { ReactNode } from "react";
 import type { EventKind } from "@/lib/login-activity";
-import { Fingerprint, KeyRound, LogIn, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
+
 
 export const EVENT_ICONS: Record<EventKind, ReactNode> = {
   signin: <LogIn className="size-[18px]" strokeWidth={1.8} />,

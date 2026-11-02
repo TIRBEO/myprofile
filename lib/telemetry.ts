@@ -15,7 +15,7 @@
    • The API origin follows the same rule as the rest of the monorepo (see
      apps/accounts/src/lib/api.ts): NEXT_PUBLIC_API_URL wins, but a
      loopback URL baked into a production build by a dirty .env.local is
-     dropped rather than shipped — prod falls back to api.tirbeo.com.
+     dropped rather than shipped — prod falls back to tirbeo.com (one domain).
 
    `errorRef`/`withRef` live here too: the account service answers a 500
    with a typed event id (body `eventId`), and a failure the person can't
@@ -36,7 +36,7 @@ const configuredApiUrl = dropLoopbackInProd(process.env.NEXT_PUBLIC_API_URL);
     (avatar upload, support links) doesn't re-derive it a fourth way. */
 export const API_BASE_URL =
   configuredApiUrl?.replace(/\/+$/, "") ||
-  (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://api.tirbeo.com");
+  (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://tirbeo.com");
 
 /* ── Analytics consent ────────────────────────────────────────────
    The "Analytics cookies" row on Data and permissions is the person's

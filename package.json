@@ -13,13 +13,13 @@
     "@simplewebauthn/browser": "^13.3.0",
     "ioredis": "6.0.0",
     "jose": "^6.2.6",
-    "lucide-react": "^0.544.0",
     "mapbox-gl": "^3.32.0",
     "next": "16.4.2",
     "pg": "^8.22.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "@tirbeo/design-tokens": "file:../../packages/design-tokens"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

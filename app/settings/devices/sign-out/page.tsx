@@ -1,4 +1,5 @@
 "use client";
+import { Check } from '@tirbeo/design-tokens';
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -14,7 +15,7 @@ import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { usePageRefresh } from "@/lib/page-refresh";
-import { Check } from "lucide-react";
+
 
 /* ═══════════════════════════════════════════════════════════════════
    End several sessions at once

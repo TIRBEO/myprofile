@@ -1,4 +1,5 @@
 "use client";
+import { Check } from '@tirbeo/design-tokens';
 
 /* ═══════════════════════════════════════════════════════════════════
    The screen a locked account sees
@@ -23,7 +24,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+
 import { Button, Field, PILL_BASE, PILL_FILL, Sheet, SheetActions, Spinner, Textarea, cn } from "@/components/ig-ui";
 import { ProfilePicture } from "@/components/profile-picture";
 import { Prose, StatementActions, StatementScreen } from "@/components/statement";

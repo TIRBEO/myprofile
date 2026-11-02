@@ -101,7 +101,7 @@ function apiBaseUrl(): string {
   }
   return process.env.NODE_ENV === "development"
     ? "http://localhost:3000"
-    : "https://api.tirbeo.com";
+    : "https://tirbeo.com";
 }
 
 /**

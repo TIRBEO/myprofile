@@ -1,4 +1,5 @@
 "use client";
+import { ExternalLink } from '@tirbeo/design-tokens';
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -34,7 +35,7 @@ import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { usePageRefresh } from "@/lib/page-refresh";
 import { LoadFailed } from "@/components/page-loading";
-import { ExternalLink } from "lucide-react";
+
 
 /* ═══════════════════════════════════════════════════════════════════
    One machine, in full — one short line per fact.

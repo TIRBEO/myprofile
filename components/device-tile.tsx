@@ -1,8 +1,9 @@
 "use client";
+import { ChevronRight, Monitor, Smartphone, Tablet } from '@tirbeo/design-tokens';
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ChevronRight, Monitor, Smartphone, Tablet } from "lucide-react";
+
 import { cn } from "@/components/ig-ui";
 import { LIVE, ROW } from "@/components/settings-shell";
 import type { DeviceKind } from "@/lib/device";

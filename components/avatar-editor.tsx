@@ -1,9 +1,10 @@
 "use client";
+import { RotateCcw, RotateCw } from '@tirbeo/design-tokens';
 
 import { useEffect, useRef, useState } from "react";
 import { Button, IconButton, Sheet, SheetActions, cn } from "@/components/ig-ui";
 import { trackError, trackEvent } from "@/lib/telemetry";
-import { RotateCcw, RotateCw } from "lucide-react";
+
 
 /* ═══════════════════════════════════════════════════════════════════
    The face you sign up with

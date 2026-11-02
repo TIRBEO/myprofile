@@ -1,4 +1,5 @@
 "use client";
+import { Check, Copy } from '@tirbeo/design-tokens';
 
 import { useState } from "react";
 import { Button, Input, Sheet, SheetActions, cn } from "@/components/ig-ui";
@@ -35,7 +36,7 @@ import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { trackError, trackEvent, withRef } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
-import { Check, Copy } from "lucide-react";
+
 
 /* ═══════════════════════════════════════════════════════════════════
    Two-factor authentication.

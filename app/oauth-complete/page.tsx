@@ -1,4 +1,5 @@
 "use client";
+import { Camera, Check, Eye, EyeOff, FileText, ShieldCheck, TriangleAlert, X } from '@tirbeo/design-tokens';
 
 /* ════════════════════════════════════════════════════════════════════
    OAuth completion screen — the Accounts app's sign-in surface
@@ -20,7 +21,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Camera, Check, X, Eye, EyeOff, FileText, ShieldCheck, TriangleAlert } from "lucide-react";
+
 import { createPortal } from "react-dom";
 import { ProfilePicture } from "@/components/profile-picture";
 import { AvatarEditor } from "@/components/avatar-editor";
@@ -42,7 +43,7 @@ function apiBase(): string {
   return process.env.NEXT_PUBLIC_API_URL ||
     (process.env.NODE_ENV === "development"
       ? "http://localhost:3000"
-      : "https://api.tirbeo.com");
+      : "https://tirbeo.com");
 }
 
 /** The picked file has to survive the same round trip the account does — a

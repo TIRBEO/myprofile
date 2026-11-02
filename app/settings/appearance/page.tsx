@@ -1,6 +1,7 @@
 "use client";
+import { Check } from '@tirbeo/design-tokens';
 
-import { Check } from "lucide-react";
+
 import { useEffect, useState } from "react";
 
 import { cn } from "@/components/ig-ui";

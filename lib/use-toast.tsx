@@ -1,8 +1,9 @@
 "use client";
+import { Check, CircleAlert, Info, X } from '@tirbeo/design-tokens';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, CircleAlert, Info, X } from "lucide-react";
+
 import { haptic } from "@/lib/haptics";
 
 /* ── Toasts ───────────────────────────────────────────────────────

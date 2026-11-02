@@ -1,8 +1,9 @@
 "use client";
+import { Loader2, RefreshCw, Send, XCircle } from '@tirbeo/design-tokens';
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, RefreshCw, Send, XCircle } from "lucide-react";
+
 
 import { Button, Textarea, cn } from "@/components/ig-ui";
 import { useReauthGuard } from "@/components/reauth-sheet";

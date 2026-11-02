@@ -1,4 +1,5 @@
 "use client";
+import { CircleAlert, Clock, ShieldQuestion } from '@tirbeo/design-tokens';
 
 import { useCallback, useEffect, useState } from "react";
 import { Field, Sheet, SheetActions, Textarea, cn } from "@/components/ig-ui";
@@ -18,7 +19,7 @@ import { ago, formatDate } from "@/lib/dates";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { trackError, withRef } from "@/lib/telemetry";
-import { CircleAlert, Clock, ShieldQuestion } from "lucide-react";
+
 
 /* ═══════════════════════════════════════════════════════════════════
    One decision, and the one action on it

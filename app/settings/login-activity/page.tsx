@@ -1,8 +1,9 @@
 "use client";
+import { Check } from '@tirbeo/design-tokens';
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
+
 import { cn } from "@/components/ig-ui";
 import {
   Group,

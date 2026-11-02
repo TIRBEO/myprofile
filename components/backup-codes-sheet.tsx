@@ -1,4 +1,5 @@
 "use client";
+import { Check, Copy, Download } from '@tirbeo/design-tokens';
 
 import { useState } from "react";
 import { cn, PILL_BASE, PILL_FILL, Sheet } from "@/components/ig-ui";
@@ -7,7 +8,7 @@ import type { RevealedCodes } from "@/lib/two-factor";
 import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { trackError, trackEvent } from "@/lib/telemetry";
-import { Check, Copy, Download } from "lucide-react";
+
 
 /* ═══════════════════════════════════════════════════════════════════
    Backup codes reveal sheet

@@ -63,7 +63,7 @@ export function loadConfig(): ApiConfig {
       process.env.API_INTERNAL_BASE_URL ||
       (process.env.NODE_ENV === "development"
         ? "http://localhost:3000"
-        : "https://api.tirbeo.com")
+        : "https://tirbeo.com")
     ).replace(/\/+$/, ""),
     internalToken,
     readCacheTtlMs: int("PROFILE_CACHE_TTL_MS", 15_000),

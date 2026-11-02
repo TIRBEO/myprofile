@@ -1,9 +1,10 @@
 "use client";
+import { AudioLines, ChevronRight, ImageIcon, Pause, Play, Rewind, Square, X } from '@tirbeo/design-tokens';
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { AudioLines, ChevronRight, ImageIcon, Pause, Play, Rewind, Square, X } from "lucide-react";
+
 import {
   Button,
   Chip,

@@ -1,11 +1,12 @@
 "use client";
+import { LogOut, SearchX, WifiOff } from '@tirbeo/design-tokens';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, SearchX, WifiOff } from "lucide-react";
-import { Button, EmptyState, SearchField, Sheet, SheetActions, cn } from "@/components/ig-ui";
-import { NAV_GROUPS, searchNav, titleFor, type NavGroup } from "@/lib/nav";
+
+import { Button, EmptyState, GlyphTile, SearchField, Sheet, SheetActions, cn } from "@/components/ig-ui";
+import { NAV_GROUPS, searchNav, tintFor, titleFor, type NavGroup } from "@/lib/nav";
 import { haptic } from "@/lib/haptics";
 import { SERVICE_DOWN } from "@/lib/service-events";
 import { englishFor, useT } from "@/lib/i18n";
@@ -372,7 +373,7 @@ function SideRail({
           value={query}
           onChange={onQuery}
           placeholder={t("Search")}
-          className="[&_input]:rounded-full [&_input]:border-transparent"
+          className="[&_input]:rounded-[10px] [&_input]:border-transparent [&_input]:bg-fill"
         />
       </div>
 
@@ -545,7 +546,7 @@ function NavGroups({ query, onNavigate }: { query: string; onNavigate?: () => vo
     <>
       {groups.map((group) => (
         <div key={group.id} className="mb-8 last:mb-0">
-          <p className="px-3.5 pt-2 pb-2 text-[13px] font-semibold text-muted">
+          <p className="px-3 pt-2 pb-2 text-[13px] font-semibold tracking-[-0.004em] text-text-3">
             {t(group.title)}
           </p>
           <div className="flex flex-col gap-0.5">
@@ -562,15 +563,16 @@ function NavGroups({ query, onNavigate }: { query: string; onNavigate?: () => vo
                   }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex min-h-10 items-center gap-3 rounded-full px-3.5 text-[14.5px] outline-none transition-colors",
+                    "flex min-h-[46px] items-center gap-3.5 rounded-[10px] px-3 text-[15px] outline-none transition-colors",
                     active
-                      ? "bg-fill font-semibold text-accent-text"
+                      ? "bg-fill font-semibold text-fg"
                       : "font-medium text-text-2 hover:bg-fill hover:text-fg active:bg-fill-press",
                   )}
                 >
                   <Icon
-                    className={cn("size-5 shrink-0", active ? "text-fg" : "text-text-4")}
-                    strokeWidth={active ? 2.2 : 1.8}
+                    aria-hidden
+                    strokeWidth={active ? 2.1 : 1.8}
+                    className={cn("size-[21px] shrink-0", active ? "text-fg" : "text-text-3")}
                   />
                   <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>
                 </Link>

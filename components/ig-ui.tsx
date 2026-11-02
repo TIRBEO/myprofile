@@ -1,4 +1,5 @@
 "use client";
+import { ChevronDown, Eye, EyeOff, Search, X } from '@tirbeo/design-tokens';
 
 import type {
   ButtonHTMLAttributes,
@@ -24,7 +25,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Eye, EyeOff, Search, X } from "lucide-react";
+
 import { haptic } from "@/lib/haptics";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -46,6 +47,38 @@ import { haptic } from "@/lib/haptics";
 
 export function cn(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
+}
+
+/** The rounded colour square Settings puts in front of a destination. Tinted
+    squares carry a white glyph; the neutral one is the old systemFill chip,
+    so lists that have no colour language still line up on the same grid. */
+export function GlyphTile({
+  tint,
+  size = "md",
+  children,
+  className,
+}: {
+  tint?: string;
+  size?: "sm" | "md" | "lg";
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex shrink-0 items-center justify-center",
+        size === "sm" && "size-[26px] rounded-[7px] [&_svg]:size-[15px]",
+        size === "md" && "size-[29px] rounded-[7px] [&_svg]:size-[17px]",
+        size === "lg" && "size-10 rounded-[10px] [&_svg]:size-5",
+        tint ? "text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.16)]" : "bg-fill text-text-4",
+        className,
+      )}
+      style={tint ? { backgroundColor: tint } : undefined}
+    >
+      {children}
+    </span>
+  );
 }
 
 /* ── Buttons ────────────────────────────────────────────────────── */
@@ -191,7 +224,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className={cn("flex gap-1 rounded-full border border-border bg-surface-2 p-1", block && "w-full")}
+      className={cn("flex gap-1 rounded-[10px] border border-border bg-surface-2 p-1", block && "w-full")}
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -206,9 +239,9 @@ export function Segmented<T extends string>({
               onChange(opt.value);
             }}
             className={cn(
-              "flex-1 rounded-full text-center font-semibold whitespace-nowrap",
+              "flex-1 rounded-[7px] text-center font-semibold whitespace-nowrap",
               "transition-all duration-150",
-              size === "sm" ? "h-8 text-[13px]" : "h-9 text-[14px]",
+              size === "sm" ? "h-8 text-[13px]" : "h-9 text-[15px]",
               active
                 ? "bg-card text-fg shadow-[var(--shadow-ambient)]"
                 : "bg-transparent text-text-3 hover:text-fg",
@@ -229,7 +262,7 @@ export function Segmented<T extends string>({
    the 14px field corner, so a control inside a 17px plate is the same family
    rather than a slightly rounder rectangle dropped on top. */
 const CONTROL =
-  "w-full rounded-lg border border-border bg-field px-4 text-[16px] text-fg outline-none " +
+  "w-full rounded-lg border border-border bg-field px-4 text-[17px] text-fg outline-none " +
   "placeholder:text-placeholder " +
   "transition-[border-color,box-shadow,background-color] duration-150 " +
   "hover:border-border-strong hover:bg-field-hover " +
@@ -523,7 +556,7 @@ export function SearchField({
         aria-label={placeholder}
         className={cn(
           CONTROL,
-          "h-10 rounded-full bg-field pr-10 pl-10",
+          "h-11 rounded-[10px] !border-transparent !bg-fill pr-10 pl-10",
           "[&::-webkit-search-cancel-button]:hidden",
         )}
       />
@@ -834,12 +867,12 @@ export function Sheet({
               >
                 <div className="min-w-0 flex-1">
                   {title ? (
-                    <h2 className="text-[20px] leading-snug font-semibold tracking-[-0.02em] text-balance">
+                    <h2 className="hig-title2 text-balance">
                       {title}
                     </h2>
                   ) : null}
                   {description ? (
-                    <p className="mt-1.5 max-w-[44ch] text-[13.5px] leading-relaxed text-muted">
+                    <p className="mt-1.5 max-w-[44ch] text-[15px] leading-relaxed text-muted">
                       {description}
                     </p>
                   ) : null}

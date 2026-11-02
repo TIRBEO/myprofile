@@ -16,10 +16,12 @@
    some days a mailbox with the thread in it is what someone wants.
 
    Pressing Send a second time is not a second request. While an answer is
-   outstanding the desk keeps one open record per account, so the note joins the
-   thread that exists, and words already on it are not written again. The sheet
-   says which of those happened and hands over the link to the thread, rather
-   than minting a reference nobody filed.
+   outstanding the desk keeps one open record per issue, so a note about the same
+   subject joins the thread that exists, and words already on it are not written
+   again. A note about something else opens its own thread, so an answer to the
+   first problem never reads as an answer to the second. The sheet says which of
+   those happened and hands over the link to the thread, rather than minting a
+   reference nobody filed.
    ═══════════════════════════════════════════════════════════════════ */
 
 import { useState } from "react";
@@ -113,7 +115,7 @@ type Filing = {
     did the desk get it, and do they need to press the button again? */
 function outcomeOf(filing: Filing): string {
   if (filing.alreadyOnRecord) return `Those words are already on ${filing.ref} — it is still open.`;
-  if (filing.intoThread) return `Sent onto your open record ${filing.ref}.`;
+  if (filing.intoThread) return `Sent onto your open record for this issue — ${filing.ref}.`;
   return `Sent — quote ${filing.ref} if you write again`;
 }
 
@@ -132,15 +134,16 @@ function sentenceOf(filing: Filing) {
   if (filing.intoThread) {
     return (
       <>
-        It joined your open record {code} — the same one your first message went into, so whoever
-        reads it sees the whole conversation rather than two of them.
+        It joined your open record {code} for this subject — the same one your earlier message went
+        into, so whoever reads it sees the whole conversation rather than two of them.
       </>
     );
   }
   return (
     <>
-      Quote {code} if you write again — it opens the same record this message went into, and a
-      second message goes onto it rather than starting a new one.
+      Quote {code} if you write again about this issue — it opens the same record this message went
+      into, and another message about this subject goes onto it. A different issue starts its own
+      record.
     </>
   );
 }

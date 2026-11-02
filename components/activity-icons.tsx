@@ -1,4 +1,5 @@
 "use client";
+import { AtSign, Download, Fingerprint, KeyRound, Languages, LifeBuoy, Link2, Lock, Mail, Pencil, Phone, ShieldCheck, UserRound } from '@tirbeo/design-tokens';
 
 /* ═══════════════════════════════════════════════════════════════════
    The pictures a change is known by
@@ -15,21 +16,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 import type { ReactNode } from "react";
-import {
-  AtSign,
-  Download,
-  Fingerprint,
-  KeyRound,
-  Languages,
-  LifeBuoy,
-  Link2,
-  Lock,
-  Mail,
-  Pencil,
-  Phone,
-  ShieldCheck,
-  UserRound,
-} from "lucide-react";
+
 
 const ICONS: [match: RegExp, icon: ReactNode][] = [
   [/password/i, <KeyRound className="size-[18px]" strokeWidth={1.8} />],

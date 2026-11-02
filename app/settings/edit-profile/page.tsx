@@ -1,4 +1,5 @@
 "use client";
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Image, Pencil, RotateCcw, RotateCw, SfCalendar, SfPhoto } from '@tirbeo/design-tokens';
 
 import type { ChangeEvent, KeyboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -38,16 +39,7 @@ import { useToast } from "@/lib/use-toast";
 import { haptic } from "@/lib/haptics";
 import { trackError, trackEvent } from "@/lib/telemetry";
 import { usePageRefresh } from "@/lib/page-refresh";
-import {
-  Calendar as CalendarIcon,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Image as ImageIcon,
-  Pencil,
-  RotateCcw,
-  RotateCw,
-} from "lucide-react";
+
 
 /* ═══════════════════════════════════════════════════════════════════
    Edit profile — same pattern as Personal details.
@@ -479,7 +471,7 @@ export default function EditProfilePage() {
                     <img src={draft.banner} alt="" className="size-full object-cover" />
                   ) : (
                     <span className="flex size-full items-center justify-center gap-1.5 pb-9 text-[13px] font-medium text-muted">
-                      <ImageIcon className="size-4" />
+                      <SfPhoto className="size-4" />
                       Tap to add a banner
                     </span>
                   )}
@@ -591,7 +583,7 @@ export default function EditProfilePage() {
                 value={prettyDate(draft.dob ?? "")}
                 placeholder="Not set"
                 invalid={attempted && missing.includes("dob")}
-                icon={<CalendarIcon className="size-4 shrink-0 text-muted" />}
+                icon={<SfCalendar className="size-4 shrink-0 text-muted" />}
                 onClick={() => setSub("dob")}
               />
 
